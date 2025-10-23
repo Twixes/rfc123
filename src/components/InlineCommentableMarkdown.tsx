@@ -6,6 +6,8 @@ import rehypeHighlight from "rehype-highlight"
 import remarkGfm from "remark-gfm"
 import type { Comment } from "@/lib/github"
 import { rehypeLineMarkers } from "@/lib/rehype-line-markers"
+import { LineCommentBox } from "@/components/LineCommentBox"
+import { ExistingLineComments } from "@/components/ExistingLineComments"
 
 interface InlineCommentableMarkdownProps {
     content: string
@@ -586,201 +588,54 @@ export function InlineCommentableMarkdown({
 
             {/* Comments sidebar */}
             <div className="relative">
-                {/* Active comment form */}
                 {activeLineIndex !== null && (
-                    <div
-                        ref={(el) => {
+                    <LineCommentBox
+                        lineNumber={activeLineIndex + 1}
+                        commentText={commentText}
+                        isSubmitting={isSubmitting}
+                        position={commentPositions.get(-1) || lineOffsets.get(activeLineIndex + 1) || 0}
+                        onCommentTextChange={setCommentText}
+                        onClose={() => {
+                            setActiveLineIndex(null)
+                            setCommentText("")
+                            setSelectedText("")
+                        }}
+                        onSubmit={() => handleSubmit(activeLineIndex)}
+                        commentBoxRef={(el) => {
                             if (el) {
                                 commentBoxRefs.current.set(-1, el)
                             }
                         }}
-                        className="absolute animate-in fade-in slide-in-from-right-2 border-2 bg-white p-4"
-                        style={{
-                            top: `${commentPositions.get(-1) || lineOffsets.get(activeLineIndex + 1) || 0}px`,
-                            width: "400px",
-                            borderColor: "var(--cyan)",
-                        }}
-                    >
-                        <div className="mb-3 flex items-center justify-between">
-                            <span className="font-mono text-xs font-bold tracking-wide text-gray-50">
-                                Line {activeLineIndex + 1}
-                            </span>
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setActiveLineIndex(null)
-                                    setCommentText("")
-                                    setSelectedText("")
-                                }}
-                                className="border-[1.5px] border-black bg-white p-1 transition-all hover:bg-black hover:text-white"
-                            >
-                                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <title>Close</title>
-                                    <path
-                                        strokeLinecap="square"
-                                        strokeLinejoin="miter"
-                                        strokeWidth={3}
-                                        d="M6 18L18 6M6 6l12 12"
-                                    />
-                                </svg>
-                            </button>
-                        </div>
-                        <textarea
-                            value={commentText}
-                            onChange={(e) => setCommentText(e.target.value)}
-                            placeholder="Add a comment..."
-                            className="w-full resize-none border-2 border-black bg-white px-3 py-2 text-sm font-medium text-black placeholder-gray-50 focus:outline-none"
-                            rows={4}
-                            autoFocus
-                            disabled={isSubmitting}
-                            onKeyDown={(e) => {
-                                if (e.key === "Escape") {
-                                    setActiveLineIndex(null)
-                                    setCommentText("")
-                                    setSelectedText("")
-                                }
-                                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                                    handleSubmit(activeLineIndex)
-                                }
-                            }}
-                        />
-                        <div className="mt-3 flex items-center justify-between">
-                            <span className="text-xs font-medium text-gray-50">⌘+Enter to submit</span>
-                            <div className="flex gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setActiveLineIndex(null)
-                                        setCommentText("")
-                                        setSelectedText("")
-                                    }}
-                                    disabled={isSubmitting}
-                                    className="border-2 border-black bg-white px-3 py-1.5 text-xs font-bold tracking-wide text-black transition-all hover:bg-black hover:text-white disabled:opacity-30"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => handleSubmit(activeLineIndex)}
-                                    disabled={!commentText.trim() || isSubmitting}
-                                    className="border-2 border-black bg-black px-3 py-1.5 text-xs font-bold tracking-wide text-white transition-all hover:bg-white hover:text-black disabled:cursor-not-allowed disabled:opacity-30"
-                                >
-                                    {isSubmitting ? "Posting..." : "Comment"}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
+                    />
                 )}
 
-                {/* Existing comments organized by line */}
                 {Array.from(commentsByLine.entries())
                     .sort(([a], [b]) => a - b)
                     .map(([lineNumber, lineComments]) => (
-                        <div
+                        <ExistingLineComments
                             key={lineNumber}
-                            ref={(el) => {
+                            lineNumber={lineNumber}
+                            comments={lineComments}
+                            position={getCommentPosition(lineNumber)}
+                            isReplying={replyingToLine === lineNumber}
+                            replyText={replyText}
+                            isSubmitting={isSubmitting}
+                            onReplyTextChange={setReplyText}
+                            onStartReply={() => {
+                                setReplyingToLine(lineNumber)
+                                setReplyText("")
+                            }}
+                            onCancelReply={() => {
+                                setReplyingToLine(null)
+                                setReplyText("")
+                            }}
+                            onSubmitReply={() => handleReplySubmit(lineNumber)}
+                            commentBoxRef={(el) => {
                                 if (el) {
                                     commentBoxRefs.current.set(lineNumber, el)
                                 }
                             }}
-                            className="absolute border-2 border-black bg-white p-4"
-                            style={{
-                                top: `${getCommentPosition(lineNumber)}px`,
-                                width: "400px",
-                            }}
-                        >
-                            <a
-                                href={`#line-${lineNumber}`}
-                                className="mb-3 block font-mono text-xs font-bold tracking-wide transition-opacity hover:opacity-70"
-                                style={{ color: "var(--magenta)" }}
-                            >
-                                Line {lineNumber}
-                            </a>
-                            <div className="space-y-3">
-                                {lineComments.map((comment) => (
-                                    <div
-                                        key={comment.id}
-                                        className="border-l-[3px] pl-3"
-                                        style={{ borderLeftColor: "var(--magenta)" }}
-                                    >
-                                        <div className="mb-2 flex items-center gap-2">
-                                            <div className="h-4 w-4 border-[1.5px] border-black">
-                                                <img
-                                                    src={comment.userAvatar}
-                                                    alt={comment.user}
-                                                    className="h-full w-full"
-                                                />
-                                            </div>
-                                            <span className="text-xs font-bold text-black">{comment.user}</span>
-                                            <span className="text-xs font-medium text-gray-50">
-                                                {new Date(comment.createdAt).toLocaleDateString("en-US", {
-                                                    month: "short",
-                                                    day: "numeric",
-                                                })}
-                                            </span>
-                                        </div>
-                                        <div className="text-sm leading-relaxed text-gray-90">{comment.body}</div>
-                                    </div>
-                                ))}
-                            </div>
-                            {replyingToLine === lineNumber ? (
-                                <div className="mt-4">
-                                    <textarea
-                                        value={replyText}
-                                        onChange={(e) => setReplyText(e.target.value)}
-                                        placeholder="Add a comment..."
-                                        className="w-full resize-none border-2 border-black bg-white px-3 py-2 text-sm font-medium text-black placeholder-gray-50 focus:outline-none"
-                                        rows={4}
-                                        autoFocus
-                                        disabled={isSubmitting}
-                                        onKeyDown={(e) => {
-                                            if (e.key === "Escape") {
-                                                setReplyingToLine(null)
-                                                setReplyText("")
-                                            }
-                                            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                                                handleReplySubmit(lineNumber)
-                                            }
-                                        }}
-                                    />
-                                    <div className="mt-3 flex items-center justify-between">
-                                        <span className="text-xs font-medium text-gray-50">⌘+Enter to submit</span>
-                                        <div className="flex gap-2">
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setReplyingToLine(null)
-                                                    setReplyText("")
-                                                }}
-                                                disabled={isSubmitting}
-                                                className="border-2 border-black bg-white px-3 py-1.5 text-xs font-bold tracking-wide text-black transition-all hover:bg-black hover:text-white disabled:opacity-30"
-                                            >
-                                                Cancel
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => handleReplySubmit(lineNumber)}
-                                                disabled={!replyText.trim() || isSubmitting}
-                                                className="border-2 border-black bg-black px-3 py-1.5 text-xs font-bold tracking-wide text-white transition-all hover:bg-white hover:text-black disabled:cursor-not-allowed disabled:opacity-30"
-                                            >
-                                                {isSubmitting ? "Posting..." : "Comment"}
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            ) : (
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setReplyingToLine(lineNumber)
-                                        setReplyText("")
-                                    }}
-                                    className="mt-4 w-full border-[1.5px] border-black bg-white px-3 py-1.5 text-xs font-bold tracking-wide text-black transition-all hover:bg-black hover:text-white"
-                                >
-                                    Add comment
-                                </button>
-                            )}
-                        </div>
+                        />
                     ))}
 
                 {/* Empty state */}

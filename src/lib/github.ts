@@ -21,7 +21,7 @@ export interface RFCDetail extends RFC {
   body: string;
   markdownContent: string;
   markdownFilePath: string | null;
-  reviewers: Array<{ login: string; avatar: string }>;
+  reviewers: Array<{ login: string; avatar: string, yetToReview: boolean }>;
   comments: Comment[];
 }
 
@@ -194,23 +194,27 @@ export async function getRFCDetail(
     pull_number: prNumber,
   });
 
-  const reviewers = [
-    ...requestedReviewers.users.map((u) => ({
-      login: u.login,
-      avatar: u.avatar_url,
-    })),
-    ...reviews
-      .filter((r) => r.user)
-      .map((r) => ({
-        login: r.user!.login,
-        avatar: r.user!.avatar_url,
-      })),
-  ];
-
-  // Deduplicate reviewers
-  const uniqueReviewers = Array.from(
-    new Map(reviewers.map((r) => [r.login, r])).values(),
-  );
+  const reviewersAlreadyAccountedFor: Set<string> = new Set();
+  const reviewers:RFCDetail['reviewers'] = []
+  for (const review of reviews) {
+    if (review.user && !reviewersAlreadyAccountedFor.has(review.user.login)) {
+      reviewers.push({
+        login: review.user.login,
+        avatar: review.user.avatar_url,
+        yetToReview: false,
+      });
+      reviewersAlreadyAccountedFor.add(review.user.login);
+    }
+  }
+  for (const requestedReviewer of requestedReviewers.users) {
+    if (!reviewersAlreadyAccountedFor.has(requestedReviewer.login)) {
+      reviewers.push({
+        login: requestedReviewer.login,
+        avatar: requestedReviewer.avatar_url,
+        yetToReview: true,
+      });
+    }
+  }
 
   const comments: Comment[] = [
     ...reviewComments.map((c) => ({
@@ -247,7 +251,7 @@ export async function getRFCDetail(
     body: pr.body || "",
     markdownContent,
     markdownFilePath: markdownFile?.filename || null,
-    reviewers: uniqueReviewers,
+    reviewers,
     comments: comments.sort(
       (a, b) =>
         new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),

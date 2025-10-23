@@ -20,7 +20,7 @@ export default async function Home() {
       <header className="mb-12 flex items-start justify-between">
         <div>
           <h1 className="text-5xl font-bold uppercase tracking-tight text-black">
-            RFC123
+            <Link href="/" className="hover:underline">RFC123</Link>
           </h1>
           <p className="mt-3 text-sm font-medium tracking-wide text-gray-50">
             {process.env.GITHUB_ORG}/{process.env.GITHUB_REPO} Pull Requests

@@ -1,3 +1,4 @@
+import { CommentMarkdown } from "@/components/CommentMarkdown"
 import type { Comment } from "@/lib/github"
 
 interface ExistingLineCommentsProps {
@@ -66,7 +67,7 @@ export function ExistingLineComments({
                 })}
               </span>
             </div>
-            <div className="text-sm leading-relaxed text-gray-90">{comment.body}</div>
+            <CommentMarkdown content={comment.body} />
           </div>
         ))}
       </div>

@@ -1,4 +1,5 @@
 import { CommentBox } from "@/components/CommentBox"
+import { CommentMarkdown } from "@/components/CommentMarkdown"
 import type { Comment } from "@/lib/github"
 
 interface GeneralCommentsSectionProps {
@@ -41,9 +42,7 @@ export function GeneralCommentsSection({
                 })}
               </span>
             </div>
-            <div className="text-sm leading-relaxed text-gray-90">
-              {comment.body}
-            </div>
+            <CommentMarkdown content={comment.body} />
           </div>
         ))}
         <div className="border-2 border-black bg-white p-6">

@@ -16,7 +16,7 @@ export default async function Home() {
 
   console.log(rfcs);
   return (
-    <div className="mx-auto min-h-screen max-w-6xl px-8 py-12">
+    <div className="mx-auto min-h-screen max-w-240 px-8 py-12">
       <header className="mb-12 flex items-start justify-between">
         <div>
           <h1 className="text-5xl font-bold uppercase tracking-tight text-black">

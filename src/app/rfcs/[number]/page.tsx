@@ -46,7 +46,7 @@ export default async function RFCPage({ params }: PageProps) {
   }
 
   return (
-    <div className="mx-auto min-h-screen px-8 py-12">
+    <div className="mx-auto max-w-360 min-h-screen px-8 py-12">
       <nav className="mb-6">
         <Link
           href="/rfcs"

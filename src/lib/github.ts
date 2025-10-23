@@ -40,6 +40,10 @@ export async function getOctokit(accessToken: string) {
   return new Octokit({ auth: accessToken });
 }
 
+function cleanTitle(title: string) {
+  return title.replace(/(^RFC:? |^Add RFC for |^\[RFC\] | RFC$)/i, "");
+}
+
 export async function listRFCs(accessToken: string): Promise<RFC[]> {
   const octokit = await getOctokit(accessToken);
 
@@ -104,7 +108,7 @@ export async function listRFCs(accessToken: string): Promise<RFC[]> {
 
   return sortedPulls.map((pr) => ({
     number: pr.number,
-    title: pr.title,
+    title:  cleanTitle(pr.title),
     author: pr.user?.login || "unknown",
     authorAvatar: pr.user?.avatar_url || "",
     status: pr.merged_at ? "merged" : (pr.state as "open" | "closed"),
@@ -238,7 +242,7 @@ export async function getRFCDetail(
 
   return {
     number: pr.number,
-    title: pr.title,
+    title: cleanTitle(pr.title),
     author: pr.user?.login || "unknown",
     authorAvatar: pr.user?.avatar_url || "",
     status: pr.merged_at ? "merged" : (pr.state as "open" | "closed"),

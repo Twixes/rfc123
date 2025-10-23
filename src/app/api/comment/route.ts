@@ -6,7 +6,7 @@ import { postComment } from "@/lib/github";
 export async function POST(request: NextRequest) {
   const session = await auth();
 
-  if (!session?.accessToken) {
+  if (!(session as { accessToken?: string })?.accessToken) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
 
   try {
     await postComment(
-      session.accessToken as string,
+      (session as unknown as { accessToken: string }).accessToken,
       prNumber,
       body,
       path,

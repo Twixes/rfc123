@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { CommentBox } from "@/components/CommentBox";
 import { InlineCommentableMarkdown } from "@/components/InlineCommentableMarkdown";
 import { getRFCDetail, postComment } from "@/lib/github";
 
@@ -12,11 +13,14 @@ export default async function RFCPage({ params }: PageProps) {
   const session = await auth();
   const { number } = await params;
 
-  if (!session?.accessToken) {
+  if (!(session as { accessToken?: string })?.accessToken) {
     redirect("/api/auth/signin");
   }
 
-  const rfc = await getRFCDetail(session.accessToken as string, Number(number));
+  const rfc = await getRFCDetail(
+    (session as unknown as { accessToken: string }).accessToken,
+    Number(number),
+  );
 
   // Filter comments to show only those not associated with specific lines in the main comments section
   const generalComments = rfc.comments.filter((c) => !c.line);
@@ -25,218 +29,203 @@ export default async function RFCPage({ params }: PageProps) {
   async function handleInlineComment(line: number, body: string) {
     "use server";
     const session = await auth();
-    if (!session?.accessToken || !rfc.markdownFilePath) return;
+    if (
+      !(session as { accessToken?: string })?.accessToken ||
+      !rfc.markdownFilePath
+    )
+      return;
 
     await postComment(
-      session.accessToken as string,
+      (session as unknown as { accessToken: string }).accessToken,
       rfc.number,
       body,
       rfc.markdownFilePath,
-      line
+      line,
     );
   }
 
   return (
-    <div className="mx-auto min-h-screen px-6 py-12">
-      <nav className="mb-8">
+    <div className="mx-auto min-h-screen px-8 py-12">
+      <nav className="mb-6">
         <Link
           href="/"
-          className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50"
+          className="border-2 border-black bg-white px-4 py-2 text-sm font-bold uppercase tracking-wide text-black transition-all hover:bg-black hover:text-white"
         >
           ← Back to RFCs
         </Link>
       </nav>
 
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_300px]">
-        {/* Main content */}
-        <div>
-          <header className="mb-8">
-            <div className="mb-4 flex items-center gap-3">
-              <h1 className="text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-                {rfc.title}
-              </h1>
-              <span
-                className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${
+      {/* Metadata header section */}
+      <div className="mb-4 border-2 border-black bg-white p-8">
+        <div className="mb-2 flex items-start justify-between gap-4">
+          <div className="flex items-baseline gap-4">
+            <span className="font-mono text-sm font-bold tracking-wide text-gray-50">
+              RFC {rfc.number}
+            </span>
+            <span
+              className="border-2 px-3 py-1 text-xs font-bold uppercase tracking-wider"
+              style={{
+                borderColor:
                   rfc.status === "open"
-                    ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                    ? "var(--cyan)"
                     : rfc.status === "merged"
-                      ? "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400"
-                      : "bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-400"
-                }`}
-              >
-                {rfc.status}
-              </span>
-            </div>
-            <div className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
-              <img
-                src={rfc.authorAvatar}
-                alt={rfc.author}
-                className="h-6 w-6 rounded-full"
-              />
-              <span>
-                <span className="font-medium text-zinc-900 dark:text-zinc-50">
-                  {rfc.author}
-                </span>{" "}
-                opened #{rfc.number} on{" "}
-                {new Date(rfc.createdAt).toLocaleDateString("en-US", {
-                  month: "long",
-                  day: "numeric",
-                  year: "numeric",
-                })}
-              </span>
-            </div>
-          </header>
-
-          <div className="rounded-lg border border-zinc-200 bg-white p-8 dark:border-zinc-800 dark:bg-zinc-900">
-            <InlineCommentableMarkdown
-              content={rfc.markdownContent}
-              prNumber={rfc.number}
-              comments={lineComments}
-              onCommentSubmit={handleInlineComment}
-            />
+                      ? "var(--yellow)"
+                      : "var(--gray-30)",
+                backgroundColor:
+                  rfc.status === "open"
+                    ? "var(--cyan)"
+                    : rfc.status === "merged"
+                      ? "var(--yellow)"
+                      : "var(--gray-10)",
+                color: "black",
+              }}
+            >
+              {rfc.status}
+            </span>
           </div>
-
-          {/* General comments section (not tied to specific lines) */}
-          {generalComments.length > 0 && (
-            <div className="mt-8">
-              <h2 className="mb-4 text-xl font-semibold text-zinc-900 dark:text-zinc-50">
-                General Comments
-              </h2>
-              <div className="space-y-4">
-                {generalComments.map((comment) => (
-                  <div
-                    key={comment.id}
-                    className="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900"
-                  >
-                    <div className="mb-3 flex items-center gap-2">
-                      <img
-                        src={comment.userAvatar}
-                        alt={comment.user}
-                        className="h-6 w-6 rounded-full"
-                      />
-                      <span className="font-medium text-zinc-900 dark:text-zinc-50">
-                        {comment.user}
-                      </span>
-                      <span className="text-sm text-zinc-600 dark:text-zinc-400">
-                        commented on{" "}
-                        {new Date(comment.createdAt).toLocaleDateString(
-                          "en-US",
-                          {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          }
-                        )}
-                      </span>
-                    </div>
-                    <div className="text-sm text-zinc-700 dark:text-zinc-300">
-                      {comment.body}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          <a
+            href={rfc.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 border-2 border-black bg-white px-4 py-2 text-sm font-bold uppercase tracking-wide text-black transition-all hover:bg-black hover:text-white"
+          >
+            View on GitHub
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path
+                strokeLinecap="square"
+                strokeLinejoin="miter"
+                strokeWidth={3}
+                d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+              />
+            </svg>
+          </a>
         </div>
 
-        {/* Sidebar */}
-        <aside className="space-y-6">
-          <div className="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
-            <h3 className="mb-4 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-              Metadata
-            </h3>
-            <dl className="space-y-3 text-sm">
-              <div>
-                <dt className="text-zinc-600 dark:text-zinc-400">Author</dt>
-                <dd className="mt-1 flex items-center gap-2">
-                  <img
-                    src={rfc.authorAvatar}
-                    alt={rfc.author}
-                    className="h-5 w-5 rounded-full"
-                  />
-                  <span className="font-medium text-zinc-900 dark:text-zinc-50">
-                    {rfc.author}
-                  </span>
-                </dd>
+        <h1 className="mb-6 text-4xl font-bold tracking-tight text-black">
+          {rfc.title}
+        </h1>
+
+        <div className="grid grid-cols-1 gap-x-8 gap-y-6 border-t-2 border-black pt-6 sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <dt className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-50">
+              Author
+            </dt>
+            <dd className="flex items-center gap-2">
+              <div className="h-6 w-6 border-2 border-black">
+                <img
+                  src={rfc.authorAvatar}
+                  alt={rfc.author}
+                  className="h-full w-full"
+                />
               </div>
-              <div>
-                <dt className="text-zinc-600 dark:text-zinc-400">Created</dt>
-                <dd className="mt-1 text-zinc-900 dark:text-zinc-50">
-                  {new Date(rfc.createdAt).toLocaleDateString("en-US", {
-                    month: "long",
-                    day: "numeric",
-                    year: "numeric",
-                  })}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-zinc-600 dark:text-zinc-400">
-                  Last updated
-                </dt>
-                <dd className="mt-1 text-zinc-900 dark:text-zinc-50">
-                  {new Date(rfc.updatedAt).toLocaleDateString("en-US", {
-                    month: "long",
-                    day: "numeric",
-                    year: "numeric",
-                  })}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-zinc-600 dark:text-zinc-400">Comments</dt>
-                <dd className="mt-1 text-zinc-900 dark:text-zinc-50">
-                  {rfc.commentCount}
-                </dd>
-              </div>
-            </dl>
+              <span className="text-sm font-medium text-black">
+                {rfc.author}
+              </span>
+            </dd>
           </div>
 
           {rfc.reviewers.length > 0 && (
-            <div className="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
-              <h3 className="mb-4 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+            <div>
+              <dt className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-50">
                 Reviewers
-              </h3>
-              <div className="space-y-2">
+              </dt>
+              <dd className="flex items-center gap-2">
                 {rfc.reviewers.map((reviewer) => (
-                  <div key={reviewer.login} className="flex items-center gap-2">
+                  <div
+                    key={reviewer.login}
+                    className="h-6 w-6 border-2 border-black"
+                    title={reviewer.login}
+                  >
                     <img
                       src={reviewer.avatar}
                       alt={reviewer.login}
-                      className="h-6 w-6 rounded-full"
+                      className="h-full w-full"
                     />
-                    <span className="text-sm text-zinc-900 dark:text-zinc-50">
-                      {reviewer.login}
-                    </span>
                   </div>
                 ))}
-              </div>
+              </dd>
             </div>
           )}
 
-          <div className="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
-            <a
-              href={rfc.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 text-sm font-medium text-zinc-900 hover:text-zinc-700 dark:text-zinc-50 dark:hover:text-zinc-300"
-            >
-              View on GitHub
-              <svg
-                className="h-4 w-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-                />
-              </svg>
-            </a>
+          <div>
+            <dt className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-50">
+              Updated
+            </dt>
+            <dd className="text-sm font-medium text-black">
+              {new Date(rfc.updatedAt).toLocaleDateString("en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              })}
+            </dd>
           </div>
-        </aside>
+
+          <div>
+            <dt className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-50">
+              Comments
+            </dt>
+            <dd className="font-mono text-sm font-bold text-black">
+              {rfc.commentCount}
+            </dd>
+          </div>
+        </div>
+      </div>
+
+      <div className="border-2 border-black bg-white p-8">
+        <InlineCommentableMarkdown
+          content={rfc.markdownContent}
+          prNumber={rfc.number}
+          comments={lineComments}
+          onCommentSubmit={handleInlineComment}
+        />
+      </div>
+
+      {/* General comments section (not tied to specific lines) */}
+      <div className="mt-8">
+        <h2 className="mb-4 border-b-[3px] border-black pb-2 text-2xl font-bold text-black">
+          General Comments
+        </h2>
+        <div className="space-y-0">
+          {generalComments.map((comment) => (
+            <div
+              key={comment.id}
+              className="border-b-2 border-black bg-white p-6"
+            >
+              <div className="mb-3 flex items-center gap-2">
+                <div className="h-6 w-6 border-2 border-black">
+                  <img
+                    src={comment.userAvatar}
+                    alt={comment.user}
+                    className="h-full w-full"
+                  />
+                </div>
+                <span className="text-sm font-bold text-black">
+                  {comment.user}
+                </span>
+                <span className="text-xs font-medium uppercase tracking-wide text-gray-50">
+                  commented on{" "}
+                  {new Date(comment.createdAt).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
+                </span>
+              </div>
+              <div className="text-sm leading-relaxed text-gray-90">
+                {comment.body}
+              </div>
+            </div>
+          ))}
+          <div className="border-2 border-black bg-white p-6">
+            <CommentBox prNumber={rfc.number} />
+          </div>
+        </div>
       </div>
     </div>
   );

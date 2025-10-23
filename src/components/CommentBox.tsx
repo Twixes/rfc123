@@ -49,24 +49,24 @@ export function CommentBox({ prNumber, onCancel }: CommentBoxProps) {
         value={comment}
         onChange={(e) => setComment(e.target.value)}
         placeholder="Add a comment..."
-        className="w-full rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 placeholder-zinc-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50 dark:placeholder-zinc-400"
+        className="w-full border-2 border-black bg-white px-3 py-2 text-sm font-medium text-black placeholder-gray-50 focus:outline-none"
         rows={4}
         disabled={isSubmitting}
       />
-      <div className="flex gap-2">
+      <div className="flex gap-3">
         <button
           type="submit"
           disabled={!comment.trim() || isSubmitting}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className="border-2 border-black bg-black px-4 py-2 text-sm font-bold uppercase tracking-wide text-white transition-all hover:bg-white hover:text-black disabled:cursor-not-allowed disabled:opacity-30"
         >
-          {isSubmitting ? "Posting..." : "Post comment"}
+          {isSubmitting ? "Posting..." : "Post general comment"}
         </button>
         {onCancel && (
           <button
             type="button"
             onClick={onCancel}
             disabled={isSubmitting}
-            className="rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50 dark:hover:bg-zinc-800"
+            className="border-2 border-black bg-white px-4 py-2 text-sm font-bold uppercase tracking-wide text-black transition-all hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
           >
             Cancel
           </button>

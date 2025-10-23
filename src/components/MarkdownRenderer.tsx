@@ -11,35 +11,34 @@ interface MarkdownRendererProps {
 
 export function MarkdownRenderer({ content }: MarkdownRendererProps) {
   return (
-    <div className="prose prose-zinc dark:prose-invert max-w-none">
+    <div className="prose prose-zinc max-w-none">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeRaw, rehypeHighlight]}
         components={{
           h1: ({ children }) => (
-            <h1 className="mb-6 mt-8 text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+            <h1 className="mb-2 mt-6 text-3xl font-bold uppercase tracking-tight text-black">
               {children}
             </h1>
           ),
           h2: ({ children }) => (
-            <h2 className="mb-4 mt-8 text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+            <h2 className="mb-2 mt-5 text-2xl font-bold uppercase tracking-tight text-black">
               {children}
             </h2>
           ),
           h3: ({ children }) => (
-            <h3 className="mb-3 mt-6 text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+            <h3 className="mb-1 mt-4 text-xl font-bold uppercase tracking-tight text-black">
               {children}
             </h3>
           ),
           p: ({ children }) => (
-            <p className="my-4 leading-7 text-zinc-700 dark:text-zinc-300">
-              {children}
-            </p>
+            <p className="my-2 leading-relaxed text-gray-90">{children}</p>
           ),
           a: ({ href, children }) => (
             <a
               href={href}
-              className="font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+              className="border-b-2 font-bold text-black transition-all hover:border-black"
+              style={{ borderBottomColor: "var(--cyan)" }}
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -47,22 +46,22 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
             </a>
           ),
           ul: ({ children }) => (
-            <ul className="my-4 ml-6 list-disc space-y-2 text-zinc-700 dark:text-zinc-300">
+            <ul className="my-2 ml-6 list-square space-y-1 text-gray-90">
               {children}
             </ul>
           ),
           ol: ({ children }) => (
-            <ol className="my-4 ml-6 list-decimal space-y-2 text-zinc-700 dark:text-zinc-300">
+            <ol className="my-2 ml-6 list-decimal space-y-1 text-gray-90">
               {children}
             </ol>
           ),
-          li: ({ children }) => <li className="leading-7">{children}</li>,
+          li: ({ children }) => <li className="leading-relaxed">{children}</li>,
           code: ({ className, children, ...props }) => {
             const isInline = !className;
             if (isInline) {
               return (
                 <code
-                  className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-sm text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100"
+                  className="border border-black bg-gray-10 px-1.5 py-0.5 font-mono text-sm font-bold text-black"
                   {...props}
                 >
                   {children}
@@ -76,29 +75,39 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
             );
           },
           pre: ({ children }) => (
-            <pre className="my-4 overflow-x-auto rounded-lg bg-zinc-900 p-4 dark:bg-zinc-950">
+            <pre className="my-4 overflow-x-auto border-2 border-black bg-black p-4">
               {children}
             </pre>
           ),
           blockquote: ({ children }) => (
-            <blockquote className="my-4 border-l-4 border-zinc-300 pl-4 italic text-zinc-700 dark:border-zinc-700 dark:text-zinc-300">
+            <blockquote
+              className="my-4 border-l-[3px] bg-gray-10 py-2 pl-4 pr-4 font-medium italic text-gray-90"
+              style={{ borderLeftColor: "var(--magenta)" }}
+            >
               {children}
             </blockquote>
           ),
           table: ({ children }) => (
             <div className="my-4 overflow-x-auto">
-              <table className="min-w-full divide-y divide-zinc-200 dark:divide-zinc-800">
+              <table className="min-w-full border-2 border-black">
                 {children}
               </table>
             </div>
           ),
+          thead: ({ children }) => (
+            <thead className="bg-black text-white">{children}</thead>
+          ),
+          tbody: ({ children }) => (
+            <tbody className="divide-y divide-black bg-white">{children}</tbody>
+          ),
+          tr: ({ children }) => <tr className="border-black">{children}</tr>,
           th: ({ children }) => (
-            <th className="bg-zinc-50 px-4 py-2 text-left text-sm font-semibold text-zinc-900 dark:bg-zinc-900 dark:text-zinc-50">
+            <th className="border border-black px-4 py-2 text-left text-sm font-bold uppercase tracking-wide text-white">
               {children}
             </th>
           ),
           td: ({ children }) => (
-            <td className="px-4 py-2 text-sm text-zinc-700 dark:text-zinc-300">
+            <td className="border border-black px-4 py-2 text-sm text-gray-90">
               {children}
             </td>
           ),

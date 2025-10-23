@@ -41,6 +41,9 @@ importers:
       remark-gfm:
         specifier: ^4.0.1
         version: 4.0.1
+      unist-util-visit:
+        specifier: ^5.0.0
+        version: 5.0.0
     devDependencies:
       '@biomejs/biome':
         specifier: 2.2.0
@@ -48,6 +51,9 @@ importers:
       '@tailwindcss/postcss':
         specifier: ^4
         version: 4.1.16
+      '@types/hast':
+        specifier: ^3.0.4
+        version: 3.0.4
       '@types/node':
         specifier: ^20
         version: 20.19.23

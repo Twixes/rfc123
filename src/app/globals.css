@@ -1,27 +1,126 @@
 @import "tailwindcss";
 @import "highlight.js/styles/github-dark.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@supports (color: color(display-p3 1 1 1)) {
+  :root {
+    /* Black & White base - pure print aesthetic */
+    --background: color(display-p3 1 1 1);
+    --foreground: color(display-p3 0 0 0);
+    --surface: color(display-p3 1 1 1);
+
+    /* CMYK-inspired P3 accent colors - maximum vibrancy */
+    --cyan: color(display-p3 0 0.9 1);
+    --magenta: color(display-p3 1 0 0.9);
+    --yellow: color(display-p3 1 0.95 0);
+    --key-black: color(display-p3 0 0 0);
+
+    /* Grayscale for depth - print tones */
+    --gray-10: color(display-p3 0.95 0.95 0.95);
+    --gray-20: color(display-p3 0.9 0.9 0.9);
+    --gray-30: color(display-p3 0.8 0.8 0.8);
+    --gray-50: color(display-p3 0.5 0.5 0.5);
+    --gray-70: color(display-p3 0.3 0.3 0.3);
+    --gray-90: color(display-p3 0.1 0.1 0.1);
+
+    /* Blocky borders - crisp print lines */
+    --border-thick: 3px;
+    --border-thin: 1px;
+    --border-color: color(display-p3 0 0 0);
+    --border-light: color(display-p3 0.85 0.85 0.85);
+  }
+}
+
+/* Fallback for non-P3 displays */
+@supports not (color: color(display-p3 1 1 1)) {
+  :root {
+    --background: #ffffff;
+    --foreground: #000000;
+    --surface: #ffffff;
+    --cyan: #00d4ff;
+    --magenta: #ff00e5;
+    --yellow: #ffeb00;
+    --key-black: #000000;
+    --gray-10: #f2f2f2;
+    --gray-20: #e6e6e6;
+    --gray-30: #cccccc;
+    --gray-50: #808080;
+    --gray-70: #4d4d4d;
+    --gray-90: #1a1a1a;
+    --border-thick: 3px;
+    --border-thin: 1px;
+    --border-color: #000000;
+    --border-light: #d9d9d9;
+  }
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-cyan: var(--cyan);
+  --color-magenta: var(--magenta);
+  --color-yellow: var(--yellow);
+  --color-key-black: var(--key-black);
+  --color-gray-10: var(--gray-10);
+  --color-gray-20: var(--gray-20);
+  --color-gray-30: var(--gray-30);
+  --color-gray-50: var(--gray-50);
+  --color-gray-70: var(--gray-70);
+  --color-gray-90: var(--gray-90);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), -apple-system, system-ui, sans-serif;
+  font-feature-settings:
+    "kern" 1,
+    "liga" 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Print-inspired typography */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+/* Blocky, sharp UI elements */
+button,
+input,
+textarea,
+select {
+  border-radius: 0;
+}
+
+/* Clean focus states - high contrast */
+*:focus-visible {
+  outline: var(--border-thick) solid var(--foreground);
+  outline-offset: 2px;
+}
+
+/* Selection styling - CMYK accent */
+::selection {
+  background: var(--cyan);
+  color: var(--key-black);
+}
+
+/* Code blocks - inverted for contrast */
+pre {
+  background: var(--foreground) !important;
+  border: var(--border-thin) solid var(--border-color);
+}
+
+pre code {
+  color: var(--background) !important;
 }

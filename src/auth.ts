@@ -24,5 +24,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       (session as any).accessToken = token.accessToken;
       return session;
     },
+    async redirect({ baseUrl }) {
+      return `${baseUrl}/rfcs`;
+    },
   },
 });

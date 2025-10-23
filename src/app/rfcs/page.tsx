@@ -40,7 +40,7 @@ export default async function Home() {
             action={async () => {
               "use server";
               const { signOut } = await import("@/auth");
-              await signOut();
+              await signOut({ redirectTo: "/" });
             }}
           >
             <button

@@ -60,7 +60,7 @@ export default async function LandingPage() {
               <form
                 action={async () => {
                   "use server";
-                  await signOut();
+                  await signOut({ redirectTo: "/" });
                 }}
               >
                 <button

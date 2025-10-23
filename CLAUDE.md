@@ -57,8 +57,9 @@ Key interfaces:
 
 ### Routing Structure
 
-- `/` - Homepage listing all RFCs (src/app/page.tsx)
-- `/rfc/[number]` - Individual RFC detail page (src/app/rfc/[number]/page.tsx)
+- `/` - Landing page (src/app/page.tsx)
+- `/rfcs` - Homepage listing all RFCs (src/app/rfcs/page.tsx)
+- `/rfcs/[number]` - Individual RFC detail page (src/app/rfcs/[number]/page.tsx)
 - `/api/auth/[...nextauth]` - NextAuth authentication endpoints
 - `/api/comment` - POST endpoint for submitting comments (currently unused, replaced by server actions)
 
@@ -97,7 +98,7 @@ The core feature is line-by-line commenting on RFC markdown files. This is imple
 ### Server Actions
 
 The app uses Next.js server actions for mutations (defined inline in page components):
-- `handleInlineComment()` in src/app/rfc/[number]/page.tsx - Posts line comments
+- `handleInlineComment()` in src/app/rfcs/[number]/page.tsx - Posts line comments
 - Sign out action in src/app/page.tsx - Handles user logout
 
 ### Styling

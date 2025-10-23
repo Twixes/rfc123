@@ -1,129 +1,92 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { auth } from "@/auth";
-import { listRFCs } from "@/lib/github";
+import { auth, signIn, signOut } from "@/auth";
 
-export default async function Home() {
+export default async function LandingPage() {
   const session = await auth();
 
-  if (!(session as { accessToken?: string })?.accessToken) {
-    redirect("/api/auth/signin");
-  }
-
-  const rfcs = await listRFCs(
-    (session as unknown as { accessToken: string }).accessToken,
-  );
-
-  console.log(rfcs);
   return (
-    <div className="mx-auto min-h-screen max-w-6xl px-8 py-12">
-      <header className="mb-12 flex items-start justify-between">
-        <div>
-          <h1 className="text-5xl font-bold uppercase tracking-tight text-black">
+    <div className="flex min-h-screen items-center justify-center px-8">
+      <div className="w-full max-w-4xl">
+        <div className="border-4 border-black bg-white p-12">
+          <h1 className="text-7xl font-bold uppercase tracking-tighter text-black">
             RFC123
           </h1>
-          <p className="mt-3 text-sm font-medium tracking-wide text-gray-50">
-            {process.env.GITHUB_ORG}/{process.env.GITHUB_REPO} Pull Requests
-          </p>
-        </div>
-        <div className="flex items-center gap-4">
-          {session?.user?.image && (
-            <div className="h-10 w-10 border-2 border-black">
-              <img
-                src={session.user.image}
-                alt={session.user.name || "User"}
-                className="h-full w-full"
-              />
-            </div>
-          )}
-          <form
-            action={async () => {
-              "use server";
-              const { signOut } = await import("@/auth");
-              await signOut();
-            }}
-          >
-            <button
-              type="submit"
-              className="border-2 border-black bg-white px-4 py-2 text-sm font-bold uppercase tracking-wide text-black transition-all hover:bg-black hover:text-white"
-            >
-              Sign out
-            </button>
-          </form>
-        </div>
-      </header>
 
-      <div className="space-y-0">
-        {rfcs.map((rfc, index) => (
-          <Link
-            key={rfc.number}
-            href={`/rfc/${rfc.number}`}
-            className="group block border-b-2 border-black bg-white px-6 py-5 transition-all hover:bg-gray-10"
-            style={{
-              borderTop: index === 0 ? "2px solid black" : "none",
-            }}
-          >
-            <div className="flex items-start justify-between gap-6">
-              <div className="flex-1">
-                <div className="mb-2 flex items-baseline gap-3">
-                  <h2 className="text-xl font-bold tracking-tight text-black">
-                    {rfc.title}
-                  </h2>
-                  <span
-                    className="border-2 px-2 py-0.5 text-xs font-bold uppercase tracking-wider"
-                    style={{
-                      borderColor:
-                        rfc.status === "open"
-                          ? "var(--cyan)"
-                          : rfc.status === "merged"
-                            ? "var(--yellow)"
-                            : "var(--gray-30)",
-                      backgroundColor:
-                        rfc.status === "open"
-                          ? "var(--cyan)"
-                          : rfc.status === "merged"
-                            ? "var(--yellow)"
-                            : "var(--gray-10)",
-                      color: "black",
-                    }}
-                  >
-                    {rfc.status}
-                  </span>
-                </div>
-                <div className="flex items-center gap-4 text-xs font-medium tracking-wide text-gray-70">
-                  <div className="flex items-center gap-2">
-                    <div className="h-5 w-5 border-2 border-black">
-                      <img
-                        src={rfc.authorAvatar}
-                        alt={rfc.author}
-                        className="h-full w-full"
-                      />
-                    </div>
-                    <span>{rfc.author}</span>
-                  </div>
-                  <span className="font-mono">#{rfc.number}</span>
-                  <span>
-                    {new Date(rfc.createdAt).toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
-                  </span>
-                  {rfc.inlineCommentCount > 0 && (
-                    <span className="border-l-2 border-gray-30 pl-4">
-                      {rfc.inlineCommentCount} inline
-                    </span>
-                  )}
-                  {rfc.regularCommentCount > 0 && (
-                    <span className="border-l-2 border-gray-30 pl-4">
-                      {rfc.regularCommentCount} general
-                    </span>
-                  )}
-                </div>
-              </div>
+          <p className="mb-10 text-2xl font-medium leading-tight text-black">
+            The RFC platform for teams.
+          </p>
+
+          <div className="mb-10 flex gap-12">
+            <div className="flex-1">
+              <div
+                className="mb-2 h-1 w-12"
+                style={{ backgroundColor: "var(--cyan)" }}
+              />
+              <div className="text-3xl font-bold text-black">1. Draft</div>
+              <p className="mt-2 text-sm font-medium text-gray-70">
+                Write rich RFCs in Markdown
+              </p>
             </div>
-          </Link>
-        ))}
+            <div className="flex-1">
+              <div
+                className="mb-2 h-1 w-12"
+                style={{ backgroundColor: "var(--magenta)" }}
+              />
+              <div className="text-3xl font-bold text-black">2. Discuss</div>
+              <p className="mt-2 text-sm font-medium text-gray-70">
+                Comment line-by-line easily
+              </p>
+            </div>
+            <div className="flex-1">
+              <div
+                className="mb-2 h-1 w-12"
+                style={{ backgroundColor: "var(--yellow)" }}
+              />
+              <div className="text-3xl font-bold text-black">3. Distribute</div>
+              <p className="mt-2 text-sm font-medium text-gray-70">
+                Reach conclusions ASAP
+              </p>
+            </div>
+          </div>
+
+          {session ? (
+            <div className="flex gap-4">
+              <Link
+                href="/rfcs"
+                className="inline-block border-[3px] border-black bg-black px-8 py-4 text-lg font-bold uppercase tracking-wider text-white transition-all hover:bg-white hover:text-black"
+              >
+                View RFCs
+              </Link>
+              <form
+                action={async () => {
+                  "use server";
+                  await signOut();
+                }}
+              >
+                <button
+                  type="submit"
+                  className="inline-block border-[3px] border-black bg-white px-8 py-4 text-lg font-bold uppercase tracking-wider text-black transition-all hover:bg-black hover:text-white"
+                >
+                  Log out
+                </button>
+              </form>
+            </div>
+          ) : (
+            <form
+              action={async () => {
+                "use server";
+                await signIn("github");
+              }}
+            >
+              <button
+                type="submit"
+                className="inline-block border-[3px] border-black bg-black px-8 py-4 text-lg font-bold uppercase tracking-wider text-white transition-all hover:bg-white hover:text-black"
+              >
+                Sign in with GitHub
+              </button>
+            </form>
+          )}
+        </div>
       </div>
     </div>
   );

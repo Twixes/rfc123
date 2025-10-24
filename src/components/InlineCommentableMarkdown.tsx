@@ -196,12 +196,18 @@ export function InlineCommentableMarkdown({
 
       // Update lastBottom for the next iteration
       if (ref) {
-        lastBottom = adjustedOffset + ref.offsetHeight + 8; // 8px gap between boxes
+        // Use the actual rendered height of the box, which accounts for all comments inside
+        const boxHeight = ref.offsetHeight;
+        lastBottom = adjustedOffset + boxHeight + 8; // 8px gap between boxes
+      } else {
+        // If ref isn't available yet, estimate a minimum height to prevent overlap
+        // This happens during initial render before refs are set
+        lastBottom = adjustedOffset + 100; // Minimum estimated height
       }
     }
 
     setCommentPositions(positions);
-  }, [lineOffsets, commentsByLine, activeLineIndex, replyingToLine]);
+  }, [lineOffsets, commentsByLine, activeLineIndex, replyingToLine, replyText, commentText]);
 
   // Helper to get the position for a specific line
   const getCommentPosition = (lineNumber: number): number => {
@@ -317,10 +323,24 @@ export function InlineCommentableMarkdown({
     }
   }
 
+  // Calculate the minimum height needed for the main content area to accommodate all comments
+  const minContentHeight = useMemo(() => {
+    // Find the maximum bottom position among all comment boxes
+    let maxBottom = 0;
+    for (const [key, position] of commentPositions.entries()) {
+      const ref = commentBoxRefs.current.get(key);
+      if (ref) {
+        const bottom = position + ref.offsetHeight;
+        maxBottom = Math.max(maxBottom, bottom);
+      }
+    }
+    return maxBottom;
+  }, [commentPositions]);
+
   return (
-    <div className="relative grid grid-cols-[1fr_400px] gap-12">
+    <div className="relative grid grid-cols-[1fr_400px] gap-12"style={{ minHeight: `${minContentHeight}px` }}>
       {/* Main content */}
-      <div className="relative flex gap-4 -ml-4 min-w-0">
+      <div className="relative flex gap-4 -ml-4 min-w-0" >
         {/* Line numbers column */}
         <div
           className="shrink-0 select-none relative"
@@ -696,6 +716,7 @@ export function InlineCommentableMarkdown({
             {content}
           </ReactMarkdown>
         </div>
+        <hr className="absolute -bottom-3 left-6 right-0 border-t-3 border-dotted" />
       </div>
 
       {/* Comments sidebar */}

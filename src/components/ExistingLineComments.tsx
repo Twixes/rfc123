@@ -48,8 +48,7 @@ export function ExistingLineComments({
         {comments.map((comment) => (
           <div
             key={comment.id}
-            className="border-l-[3px] pl-3"
-            style={{ borderLeftColor: "var(--magenta)" }}
+            className="border-l-2 border-neutral-300 pl-2"
           >
             <div className="mb-2 flex items-center gap-2">
               <div className="h-4 w-4 border-[1.5px] border-black">

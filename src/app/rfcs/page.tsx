@@ -22,7 +22,7 @@ export default async function Home() {
                         </Link>
                     </h1>
                     <p className="mt-3 text-sm font-medium tracking-wide text-gray-50">
-                        {process.env.GITHUB_ORG}/{process.env.GITHUB_REPO} Pull Requests
+                        {process.env.GITHUB_ORG}/{process.env.GITHUB_REPO}
                     </p>
                 </div>
                 <div className="flex items-center gap-4">

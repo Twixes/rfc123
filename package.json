@@ -16,6 +16,8 @@
     "next": "16.0.0",
     "next-auth": "5.0.0-beta.29",
     "octokit": "^5.0.4",
+    "posthog-js": "^1.280.1",
+    "posthog-node": "^5.10.3",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "react-markdown": "^10.1.0",

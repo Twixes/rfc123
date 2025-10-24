@@ -40,7 +40,7 @@ export default async function LandingPage() {
                                 <div>
                                     <p className="text-sm font-medium text-black">
                                         <strong>Create a GitHub repository</strong> with a{" "}
-                                        <code className="rounded bg-gray-10 px-1.5 py-0.5 font-mono text-xs">
+                                        <code className="bg-gray-10 px-1.5 py-0.5 font-mono text-xs">
                                             requests-for-comments/
                                         </code>{" "}
                                         directory. Then create a pull request with a Markdown file in that directory.
@@ -56,7 +56,7 @@ export default async function LandingPage() {
                                     <p className="text-sm font-medium text-black">
                                         <strong>Sign into RFC123</strong> with your GitHub account. RFC123 will discover
                                         all PRs from your repositories containing a{" "}
-                                        <code className="rounded bg-gray-10 px-1.5 py-0.5 font-mono text-xs">
+                                        <code className="bg-gray-10 px-1.5 py-0.5 font-mono text-xs">
                                             requests-for-comments/
                                         </code>{" "}
                                         directory with Markdown files.

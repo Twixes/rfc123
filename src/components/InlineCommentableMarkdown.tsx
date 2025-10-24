@@ -28,6 +28,7 @@ export function InlineCommentableMarkdown({
   const [commentText, setCommentText] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedText, setSelectedText] = useState<string>("");
+  const [collapsedLines, setCollapsedLines] = useState<Set<number>>(new Set());
   const [lineOffsets, setLineOffsets] = useState<Map<number, number>>(
     new Map(),
   );
@@ -225,7 +226,7 @@ export function InlineCommentableMarkdown({
     }
 
     setCommentPositions(positions);
-  }, [lineOffsets, commentsByLine, activeLineIndex, replyingToLine, replyText, commentText]);
+  }, [lineOffsets, commentsByLine, activeLineIndex, replyingToLine, replyText, commentText, collapsedLines]);
 
   // Helper to get the position for a specific line
   const getCommentPosition = (lineNumber: number): number => {
@@ -358,7 +359,7 @@ export function InlineCommentableMarkdown({
   return (
     <div className="relative grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-8 lg:gap-12" style={{ minHeight: `${minContentHeight}px` }}>
       {/* Main content */}
-      <div className="relative flex gap-2 sm:gap-4 -ml-2 sm:-ml-4 min-w-0" >
+      <div className="relative flex gap-2 sm:gap-4 -ml-2 sm:-ml-4 min-w-0 h-fit" >
         {/* Line numbers column */}
         <div
           className="shrink-0 select-none relative"
@@ -773,6 +774,7 @@ export function InlineCommentableMarkdown({
               isReplying={replyingToLine === lineNumber}
               replyText={replyText}
               isSubmitting={isSubmitting}
+              isCollapsed={collapsedLines.has(lineNumber)}
               onReplyTextChange={setReplyText}
               onStartReply={() => {
                 setReplyingToLine(lineNumber);
@@ -783,6 +785,17 @@ export function InlineCommentableMarkdown({
                 setReplyText("");
               }}
               onSubmitReply={() => handleReplySubmit(lineNumber)}
+              onToggleCollapse={() => {
+                setCollapsedLines((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(lineNumber)) {
+                    next.delete(lineNumber);
+                  } else {
+                    next.add(lineNumber);
+                  }
+                  return next;
+                });
+              }}
               commentBoxRef={(el) => {
                 if (el) {
                   commentBoxRefs.current.set(lineNumber, el);

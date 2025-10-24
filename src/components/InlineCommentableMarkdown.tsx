@@ -30,7 +30,7 @@ export function InlineCommentableMarkdown({
     const [lineOffsets, setLineOffsets] = useState<Map<number, number>>(new Map())
     const [replyingToLine, setReplyingToLine] = useState<number | null>(null)
     const [replyText, setReplyText] = useState("")
-    const lineRefs = useRef<Map<number, HTMLDivElement>>(new Map())
+    const lineRefs = useRef<Map<number, HTMLButtonElement>>(new Map())
     const markdownRef = useRef<HTMLDivElement>(null)
     const tooltipRef = useRef<HTMLDivElement>(null)
     const isSelectingRef = useRef(false)
@@ -108,14 +108,26 @@ export function InlineCommentableMarkdown({
     }
 
     // Helper to get hover styles
-    const getHoverStyles = (isHovered: boolean) => {
-        if (!isHovered) return {}
+    const getHoverStyles = (isHovered: boolean, lineNumber?: number) => {
+        // Always show cursor pointer if element has line number (is clickable)
+        const baseStyles = lineNumber ? { cursor: "pointer" } : {}
+
+        if (!isHovered) return baseStyles
+
         return {
+            ...baseStyles,
             backgroundColor: "var(--gray-10)",
-            borderLeft: "3px solid var(--yellow)",
             paddingLeft: "0.5rem",
             marginLeft: "-0.5rem",
         }
+    }
+
+    // Handle clicking on a line in the markdown content
+    const handleLineClick = (lineNumber: number) => {
+        const lineIndex = lineNumber - 1
+        setActiveLineIndex(lineIndex)
+        setCommentText("")
+        setSelectedText("")
     }
 
     // Group comments by line number
@@ -219,7 +231,7 @@ export function InlineCommentableMarkdown({
         tooltipRef.current.style.display = "block"
         tooltipRef.current.style.left = `${e.clientX}px`
         tooltipRef.current.style.top = `${e.clientY - 24}px`
-        tooltipRef.current.textContent = `Release mouse button to comment on selection`
+        tooltipRef.current.textContent = `Release mouse button to cite selection`
     }
 
     // Handle text selection to open comment box
@@ -302,7 +314,7 @@ export function InlineCommentableMarkdown({
     return (
         <div className="relative grid grid-cols-[1fr_400px] gap-12">
             {/* Main content */}
-            <div className="relative flex gap-6 min-w-0">
+            <div className="relative flex gap-2 min-w-0">
                 {/* Line numbers column */}
                 <div className="shrink-0 select-none relative" style={{ width: "50px" }}>
                     {lines.map((line, index) => {
@@ -324,7 +336,7 @@ export function InlineCommentableMarkdown({
                         const hasComments = lineComments.length > 0
 
                         return (
-                            <div
+                            <button
                                 key={index}
                                 id={`line-${lineNumber}`}
                                 ref={(el) => {
@@ -332,24 +344,22 @@ export function InlineCommentableMarkdown({
                                         lineRefs.current.set(lineNumber, el)
                                     }
                                 }}
-                                className="group flex items-center gap-2 pr-2 absolute"
+                                type="button"
+                                onClick={() => {
+                                    setActiveLineIndex(index)
+                                    setCommentText("")
+                                    setSelectedText("")
+                                }}
+                                className="group flex items-center gap-2 pr-2 absolute cursor-pointer"
                                 style={{
                                     top: `${lineOffset}px`,
                                     height: "1.5rem",
                                 }}
                                 onMouseEnter={() => setHoveredLineIndex(index)}
                                 onMouseLeave={() => setHoveredLineIndex(null)}
+                                aria-label={`Add comment to line ${lineNumber}`}
                             >
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setActiveLineIndex(index)
-                                        setCommentText("")
-                                        setSelectedText("")
-                                    }}
-                                    className="flex h-5 w-5 items-center justify-center border-[1.5px] border-black bg-white opacity-0 transition-all group-hover:opacity-100 hover:bg-black hover:text-white"
-                                    aria-label="Add comment"
-                                >
+                                <div className="flex h-5 w-5 items-center justify-center border-[1.5px] border-black bg-white opacity-0 transition-all group-hover:opacity-100 group-hover:bg-black group-hover:text-white">
                                     <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <title>Add comment</title>
                                         <path
@@ -359,7 +369,7 @@ export function InlineCommentableMarkdown({
                                             d="M12 4v16m8-8H4"
                                         />
                                     </svg>
-                                </button>
+                                </div>
                                 <span
                                     className="font-mono text-xs font-bold transition-opacity"
                                     style={{
@@ -368,7 +378,7 @@ export function InlineCommentableMarkdown({
                                 >
                                     {lineNumber}
                                 </span>
-                            </div>
+                            </button>
                         )
                     })}
                 </div>
@@ -388,10 +398,14 @@ export function InlineCommentableMarkdown({
                         components={{
                             h1: ({ children, ...props }) => {
                                 const hovered = isLineHovered(props as any)
+                                const lineNumber = (props as any)["data-line-element"]
                                 return (
                                     <h1
                                         className="mb-2 mt-6 text-3xl font-bold tracking-tight text-black"
-                                        style={getHoverStyles(hovered)}
+                                        style={getHoverStyles(hovered, lineNumber)}
+                                        onClick={() => lineNumber && handleLineClick(lineNumber)}
+                                        onMouseEnter={() => lineNumber && setHoveredLineIndex(lineNumber - 1)}
+                                        onMouseLeave={() => setHoveredLineIndex(null)}
                                         {...props}
                                     >
                                         {children}
@@ -400,10 +414,14 @@ export function InlineCommentableMarkdown({
                             },
                             h2: ({ children, ...props }) => {
                                 const hovered = isLineHovered(props as any)
+                                const lineNumber = (props as any)["data-line-element"]
                                 return (
                                     <h2
                                         className="mb-2 mt-5 text-2xl font-bold tracking-tight text-black"
-                                        style={getHoverStyles(hovered)}
+                                        style={getHoverStyles(hovered, lineNumber)}
+                                        onClick={() => lineNumber && handleLineClick(lineNumber)}
+                                        onMouseEnter={() => lineNumber && setHoveredLineIndex(lineNumber - 1)}
+                                        onMouseLeave={() => setHoveredLineIndex(null)}
                                         {...props}
                                     >
                                         {children}
@@ -412,10 +430,14 @@ export function InlineCommentableMarkdown({
                             },
                             h3: ({ children, ...props }) => {
                                 const hovered = isLineHovered(props as any)
+                                const lineNumber = (props as any)["data-line-element"]
                                 return (
                                     <h3
                                         className="mb-1 mt-4 text-xl font-bold tracking-tight text-black"
-                                        style={getHoverStyles(hovered)}
+                                        style={getHoverStyles(hovered, lineNumber)}
+                                        onClick={() => lineNumber && handleLineClick(lineNumber)}
+                                        onMouseEnter={() => lineNumber && setHoveredLineIndex(lineNumber - 1)}
+                                        onMouseLeave={() => setHoveredLineIndex(null)}
                                         {...props}
                                     >
                                         {children}
@@ -424,8 +446,16 @@ export function InlineCommentableMarkdown({
                             },
                             p: ({ children, ...props }) => {
                                 const hovered = isLineHovered(props as any)
+                                const lineNumber = (props as any)["data-line-element"]
                                 return (
-                                    <p className="my-2 leading-relaxed" style={getHoverStyles(hovered)} {...props}>
+                                    <p
+                                        className="my-2 leading-relaxed"
+                                        style={getHoverStyles(hovered, lineNumber)}
+                                        onClick={() => lineNumber && handleLineClick(lineNumber)}
+                                        onMouseEnter={() => lineNumber && setHoveredLineIndex(lineNumber - 1)}
+                                        onMouseLeave={() => setHoveredLineIndex(null)}
+                                        {...props}
+                                    >
                                         {children}
                                     </p>
                                 )
@@ -443,10 +473,14 @@ export function InlineCommentableMarkdown({
                             ),
                             ul: ({ children, ...props }) => {
                                 const hovered = isLineHovered(props as any)
+                                const lineNumber = (props as any)["data-line-element"]
                                 return (
                                     <ul
                                         className="my-2 ml-6 list-disc space-y-1 text-gray-90"
-                                        style={getHoverStyles(hovered)}
+                                        style={getHoverStyles(hovered, lineNumber)}
+                                        onClick={() => lineNumber && handleLineClick(lineNumber)}
+                                        onMouseEnter={() => lineNumber && setHoveredLineIndex(lineNumber - 1)}
+                                        onMouseLeave={() => setHoveredLineIndex(null)}
                                         {...props}
                                     >
                                         {children}
@@ -455,10 +489,14 @@ export function InlineCommentableMarkdown({
                             },
                             ol: ({ children, ...props }) => {
                                 const hovered = isLineHovered(props as any)
+                                const lineNumber = (props as any)["data-line-element"]
                                 return (
                                     <ol
                                         className="my-2 ml-6 list-decimal space-y-1 text-gray-90"
-                                        style={getHoverStyles(hovered)}
+                                        style={getHoverStyles(hovered, lineNumber)}
+                                        onClick={() => lineNumber && handleLineClick(lineNumber)}
+                                        onMouseEnter={() => lineNumber && setHoveredLineIndex(lineNumber - 1)}
+                                        onMouseLeave={() => setHoveredLineIndex(null)}
                                         {...props}
                                     >
                                         {children}
@@ -467,10 +505,14 @@ export function InlineCommentableMarkdown({
                             },
                             li: ({ children, ...props }) => {
                                 const hovered = isLineHovered(props as any)
+                                const lineNumber = (props as any)["data-line-element"]
                                 return (
                                     <li
                                         className="leading-relaxed text-gray-90"
-                                        style={getHoverStyles(hovered)}
+                                        style={getHoverStyles(hovered, lineNumber)}
+                                        onClick={() => lineNumber && handleLineClick(lineNumber)}
+                                        onMouseEnter={() => lineNumber && setHoveredLineIndex(lineNumber - 1)}
+                                        onMouseLeave={() => setHoveredLineIndex(null)}
                                         {...props}
                                     >
                                         {children}
@@ -497,10 +539,14 @@ export function InlineCommentableMarkdown({
                             },
                             pre: ({ children, ...props }) => {
                                 const hovered = isLineHovered(props as any)
+                                const lineNumber = (props as any)["data-line-element"]
                                 return (
                                     <pre
                                         className="my-4 max-w-full overflow-x-auto border-2 whitespace-pre-wrap border-black bg-black p-4"
-                                        style={getHoverStyles(hovered)}
+                                        style={getHoverStyles(hovered, lineNumber)}
+                                        onClick={() => lineNumber && handleLineClick(lineNumber)}
+                                        onMouseEnter={() => lineNumber && setHoveredLineIndex(lineNumber - 1)}
+                                        onMouseLeave={() => setHoveredLineIndex(null)}
                                         {...props}
                                     >
                                         {children}
@@ -509,7 +555,8 @@ export function InlineCommentableMarkdown({
                             },
                             blockquote: ({ children, ...props }) => {
                                 const hovered = isLineHovered(props as any)
-                                const hoverStyles = getHoverStyles(hovered)
+                                const lineNumber = (props as any)["data-line-element"]
+                                const hoverStyles = getHoverStyles(hovered, lineNumber)
                                 return (
                                     <blockquote
                                         className="my-4 border-l-[3px] bg-gray-10 py-2 pl-4 pr-4 font-medium italic text-gray-90"
@@ -517,6 +564,9 @@ export function InlineCommentableMarkdown({
                                             borderLeftColor: hovered ? "var(--yellow)" : "var(--magenta)",
                                             ...hoverStyles,
                                         }}
+                                        onClick={() => lineNumber && handleLineClick(lineNumber)}
+                                        onMouseEnter={() => lineNumber && setHoveredLineIndex(lineNumber - 1)}
+                                        onMouseLeave={() => setHoveredLineIndex(null)}
                                         {...props}
                                     >
                                         {children}
@@ -525,11 +575,15 @@ export function InlineCommentableMarkdown({
                             },
                             table: ({ children, ...props }) => {
                                 const hovered = isLineHovered(props as any)
+                                const lineNumber = (props as any)["data-line-element"]
                                 return (
                                     <div className="my-4 overflow-x-auto">
                                         <table
                                             className="min-w-full border-2 border-black"
-                                            style={getHoverStyles(hovered)}
+                                            style={getHoverStyles(hovered, lineNumber)}
+                                            onClick={() => lineNumber && handleLineClick(lineNumber)}
+                                            onMouseEnter={() => lineNumber && setHoveredLineIndex(lineNumber - 1)}
+                                            onMouseLeave={() => setHoveredLineIndex(null)}
                                             {...props}
                                         >
                                             {children}
@@ -549,18 +603,30 @@ export function InlineCommentableMarkdown({
                             ),
                             tr: ({ children, ...props }) => {
                                 const hovered = isLineHovered(props as any)
+                                const lineNumber = (props as any)["data-line-element"]
                                 return (
-                                    <tr className="border-black" style={getHoverStyles(hovered)} {...props}>
+                                    <tr
+                                        className="border-black"
+                                        style={getHoverStyles(hovered, lineNumber)}
+                                        onClick={() => lineNumber && handleLineClick(lineNumber)}
+                                        onMouseEnter={() => lineNumber && setHoveredLineIndex(lineNumber - 1)}
+                                        onMouseLeave={() => setHoveredLineIndex(null)}
+                                        {...props}
+                                    >
                                         {children}
                                     </tr>
                                 )
                             },
                             th: ({ children, ...props }) => {
                                 const hovered = isLineHovered(props as any)
+                                const lineNumber = (props as any)["data-line-element"]
                                 return (
                                     <th
                                         className="border border-black px-4 py-2 text-left text-sm font-bold tracking-wide text-white"
-                                        style={getHoverStyles(hovered)}
+                                        style={getHoverStyles(hovered, lineNumber)}
+                                        onClick={() => lineNumber && handleLineClick(lineNumber)}
+                                        onMouseEnter={() => lineNumber && setHoveredLineIndex(lineNumber - 1)}
+                                        onMouseLeave={() => setHoveredLineIndex(null)}
                                         {...props}
                                     >
                                         {children}
@@ -569,10 +635,14 @@ export function InlineCommentableMarkdown({
                             },
                             td: ({ children, ...props }) => {
                                 const hovered = isLineHovered(props as any)
+                                const lineNumber = (props as any)["data-line-element"]
                                 return (
                                     <td
                                         className="border border-black px-4 py-2 text-sm text-gray-90"
-                                        style={getHoverStyles(hovered)}
+                                        style={getHoverStyles(hovered, lineNumber)}
+                                        onClick={() => lineNumber && handleLineClick(lineNumber)}
+                                        onMouseEnter={() => lineNumber && setHoveredLineIndex(lineNumber - 1)}
+                                        onMouseLeave={() => setHoveredLineIndex(null)}
                                         {...props}
                                     >
                                         {children}

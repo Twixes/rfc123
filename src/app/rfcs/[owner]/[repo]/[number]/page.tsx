@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { getCurrentUserLogin, getOctokit } from "@/lib/github";
 import RFCDetailClient from "./RFCDetailClient";
@@ -11,10 +10,7 @@ export default async function RFCPage({ params }: PageProps) {
   const session = await auth();
   const { owner, repo, number } = await params;
 
-  if (!(session as { accessToken?: string })?.accessToken) {
-    redirect("/api/auth/signin");
-  }
-
+  // Middleware handles auth redirect, so we can safely assert session exists here
   const accessToken = (session as unknown as { accessToken: string }).accessToken;
   const currentUserLogin = await getCurrentUserLogin(accessToken);
 

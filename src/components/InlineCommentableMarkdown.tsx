@@ -314,7 +314,7 @@ export function InlineCommentableMarkdown({
     return (
         <div className="relative grid grid-cols-[1fr_400px] gap-12">
             {/* Main content */}
-            <div className="relative flex gap-2 min-w-0">
+            <div className="relative flex gap-4 -ml-4 min-w-0">
                 {/* Line numbers column */}
                 <div className="shrink-0 select-none relative" style={{ width: "50px" }}>
                     {lines.map((line, index) => {

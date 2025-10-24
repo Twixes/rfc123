@@ -1,12 +1,12 @@
 interface LineCommentBoxProps {
-  lineNumber: number
-  commentText: string
-  isSubmitting: boolean
-  position: number
-  onCommentTextChange: (text: string) => void
-  onClose: () => void
-  onSubmit: () => void
-  commentBoxRef: (el: HTMLDivElement | null) => void
+  lineNumber: number;
+  commentText: string;
+  isSubmitting: boolean;
+  position: number;
+  onCommentTextChange: (text: string) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+  commentBoxRef: (el: HTMLDivElement | null) => void;
 }
 
 export function LineCommentBox({
@@ -38,7 +38,12 @@ export function LineCommentBox({
           onClick={onClose}
           className="border-[1.5px] border-black bg-white p-1 transition-all hover:bg-black hover:text-white"
         >
-          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg
+            className="h-3 w-3"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
             <title>Close</title>
             <path
               strokeLinecap="square"
@@ -59,15 +64,17 @@ export function LineCommentBox({
         disabled={isSubmitting}
         onKeyDown={(e) => {
           if (e.key === "Escape") {
-            onClose()
+            onClose();
           }
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-            onSubmit()
+            onSubmit();
           }
         }}
       />
       <div className="mt-3 flex items-center justify-between">
-        <span className="text-xs font-medium text-gray-50">⌘+Enter to submit</span>
+        <span className="text-xs font-medium text-gray-50">
+          ⌘+Enter to submit
+        </span>
         <div className="flex gap-2">
           <button
             type="button"
@@ -88,5 +95,5 @@ export function LineCommentBox({
         </div>
       </div>
     </div>
-  )
+  );
 }

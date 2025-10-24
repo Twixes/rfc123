@@ -86,7 +86,10 @@ export default function Loading() {
 
         <div className="space-y-6">
           {[...Array(3)].map((_, index) => (
-            <div key={index} className="border-b-2 border-gray-20 pb-6 last:border-0">
+            <div
+              key={index}
+              className="border-b-2 border-gray-20 pb-6 last:border-0"
+            >
               <div className="mb-4 flex items-start gap-3">
                 <div className="h-8 w-8 animate-pulse border-2 border-black bg-gray-20" />
                 <div className="flex-1">

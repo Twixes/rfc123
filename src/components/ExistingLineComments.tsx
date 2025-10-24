@@ -1,18 +1,18 @@
-import { CommentMarkdown } from "@/components/CommentMarkdown"
-import type { Comment } from "@/lib/github"
+import { CommentMarkdown } from "@/components/CommentMarkdown";
+import type { Comment } from "@/lib/github";
 
 interface ExistingLineCommentsProps {
-  lineNumber: number
-  comments: Comment[]
-  position: number
-  isReplying: boolean
-  replyText: string
-  isSubmitting: boolean
-  onReplyTextChange: (text: string) => void
-  onStartReply: () => void
-  onCancelReply: () => void
-  onSubmitReply: () => void
-  commentBoxRef: (el: HTMLDivElement | null) => void
+  lineNumber: number;
+  comments: Comment[];
+  position: number;
+  isReplying: boolean;
+  replyText: string;
+  isSubmitting: boolean;
+  onReplyTextChange: (text: string) => void;
+  onStartReply: () => void;
+  onCancelReply: () => void;
+  onSubmitReply: () => void;
+  commentBoxRef: (el: HTMLDivElement | null) => void;
 }
 
 export function ExistingLineComments({
@@ -59,7 +59,9 @@ export function ExistingLineComments({
                   className="h-full w-full"
                 />
               </div>
-              <span className="text-xs font-bold text-black">{comment.user}</span>
+              <span className="text-xs font-bold text-black">
+                {comment.user}
+              </span>
               <span className="text-xs font-medium text-gray-50">
                 {new Date(comment.createdAt).toLocaleDateString("en-US", {
                   month: "short",
@@ -83,15 +85,17 @@ export function ExistingLineComments({
             disabled={isSubmitting}
             onKeyDown={(e) => {
               if (e.key === "Escape") {
-                onCancelReply()
+                onCancelReply();
               }
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                onSubmitReply()
+                onSubmitReply();
               }
             }}
           />
           <div className="mt-3 flex items-center justify-between">
-            <span className="text-xs font-medium text-gray-50">⌘+Enter to submit</span>
+            <span className="text-xs font-medium text-gray-50">
+              ⌘+Enter to submit
+            </span>
             <div className="flex gap-2">
               <button
                 type="button"
@@ -122,5 +126,5 @@ export function ExistingLineComments({
         </button>
       )}
     </div>
-  )
+  );
 }

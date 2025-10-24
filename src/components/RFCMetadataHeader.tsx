@@ -1,10 +1,11 @@
-import type { RFCDetail } from "@/lib/github"
+import type { RFCDetail } from "@/lib/github";
 
 interface RFCMetadataHeaderProps {
-  rfc: RFCDetail
+  rfc: RFCDetail;
 }
 
 export function RFCMetadataHeader({ rfc }: RFCMetadataHeaderProps) {
+  console.log('rfc', rfc)
   return (
     <div className="mb-4 border-2 border-black bg-white p-8">
       <div className="mb-2 flex items-start justify-between gap-4">
@@ -12,6 +13,18 @@ export function RFCMetadataHeader({ rfc }: RFCMetadataHeaderProps) {
           <span className="font-mono text-sm font-bold tracking-wide text-gray-50">
             RFC {rfc.number}
           </span>
+          {rfc.reviewRequested && (
+            <span
+              className="border-2 px-3 py-1 text-xs font-bold uppercase tracking-wider"
+              style={{
+                borderColor: "var(--magenta)",
+                backgroundColor: "var(--magenta)",
+                color: "black",
+              }}
+            >
+              Review Requested
+            </span>
+          )}
           <span
             className="border-2 px-3 py-1 text-xs font-bold uppercase tracking-wider"
             style={{
@@ -74,9 +87,7 @@ export function RFCMetadataHeader({ rfc }: RFCMetadataHeaderProps) {
                 className="h-full w-full"
               />
             </div>
-            <span className="text-sm font-medium text-black">
-              {rfc.author}
-            </span>
+            <span className="text-sm font-medium text-black">{rfc.author}</span>
           </dd>
         </div>
 
@@ -85,7 +96,7 @@ export function RFCMetadataHeader({ rfc }: RFCMetadataHeaderProps) {
             <dt className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-50">
               Reviewers
             </dt>
-            <dd className="flex items-center gap-2">
+            <dd className="flex items-center gap-2 flex-wrap">
               {rfc.reviewers.map((reviewer) => (
                 <div
                   key={reviewer.login}
@@ -126,5 +137,5 @@ export function RFCMetadataHeader({ rfc }: RFCMetadataHeaderProps) {
         </div>
       </div>
     </div>
-  )
+  );
 }

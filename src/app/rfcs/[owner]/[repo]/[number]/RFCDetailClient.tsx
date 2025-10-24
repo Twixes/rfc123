@@ -2,30 +2,32 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import type { RFCDetail } from "@/lib/github";
 import { GeneralCommentsSection } from "@/components/GeneralCommentsSection";
 import { InlineCommentableMarkdown } from "@/components/InlineCommentableMarkdown";
 import { RFCMetadataHeader } from "@/components/RFCMetadataHeader";
 
 interface RFCDetailClientProps {
+  owner: string;
+  repo: string;
   prNumber: number;
 }
 
-const REPO_STORAGE_KEY = "selected_repo";
-
-export default function RFCDetailClient({ prNumber }: RFCDetailClientProps) {
+export default function RFCDetailClient({
+  owner,
+  repo,
+  prNumber,
+}: RFCDetailClientProps) {
   const [rfc, setRfc] = useState<RFCDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
 
-  const loadRFC = useCallback(async (owner: string, name: string) => {
+  const loadRFC = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
       const response = await fetch(
-        `/api/rfcs/${prNumber}?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(name)}`,
+        `/api/rfcs/${prNumber}?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}`,
       );
       if (!response.ok) {
         throw new Error("Failed to load RFC");
@@ -38,34 +40,22 @@ export default function RFCDetailClient({ prNumber }: RFCDetailClientProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [prNumber]);
+  }, [owner, repo, prNumber]);
 
   useEffect(() => {
-    const storedRepo = localStorage.getItem(REPO_STORAGE_KEY);
-    if (!storedRepo) {
-      router.push("/rfcs");
-      return;
-    }
-
-    const repo = JSON.parse(storedRepo);
-    loadRFC(repo.owner, repo.name);
-  }, [router, loadRFC]);
+    loadRFC();
+  }, [loadRFC]);
 
   async function handleInlineComment(line: number, body: string) {
     if (!rfc?.markdownFilePath) return;
-
-    const storedRepo = localStorage.getItem(REPO_STORAGE_KEY);
-    if (!storedRepo) return;
-
-    const repo = JSON.parse(storedRepo);
 
     try {
       const response = await fetch("/api/comments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          owner: repo.owner,
-          repo: repo.name,
+          owner,
+          repo,
           prNumber: rfc.number,
           body,
           path: rfc.markdownFilePath,
@@ -78,7 +68,7 @@ export default function RFCDetailClient({ prNumber }: RFCDetailClientProps) {
       }
 
       // Reload the RFC to show the new comment
-      loadRFC(repo.owner, repo.name);
+      loadRFC();
     } catch (error) {
       console.error("Error posting comment:", error);
     }

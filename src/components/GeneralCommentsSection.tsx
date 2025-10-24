@@ -1,10 +1,10 @@
-import { CommentBox } from "@/components/CommentBox"
-import { CommentMarkdown } from "@/components/CommentMarkdown"
-import type { Comment } from "@/lib/github"
+import { CommentBox } from "@/components/CommentBox";
+import { CommentMarkdown } from "@/components/CommentMarkdown";
+import type { Comment } from "@/lib/github";
 
 interface GeneralCommentsSectionProps {
-  comments: Comment[]
-  prNumber: number
+  comments: Comment[];
+  prNumber: number;
 }
 
 export function GeneralCommentsSection({
@@ -50,5 +50,5 @@ export function GeneralCommentsSection({
         </div>
       </div>
     </div>
-  )
+  );
 }

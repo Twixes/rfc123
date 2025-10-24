@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { listRFCs } from "@/lib/github";
+import { listRFCs, listAllRFCs, getOctokit, getCurrentUserLogin } from "@/lib/github";
+import { getCachedJsonData, setCachedJsonData } from "@/lib/cache";
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -13,19 +14,18 @@ export async function GET(request: Request) {
   const owner = searchParams.get("owner");
   const repo = searchParams.get("repo");
 
-  if (!owner || !repo) {
-    return NextResponse.json(
-      { error: "Missing owner or repo parameter" },
-      { status: 400 },
-    );
-  }
-
   try {
-    const rfcs = await listRFCs(
-      (session as unknown as { accessToken: string }).accessToken,
-      owner,
-      repo,
-    );
+    const accessToken = (session as unknown as { accessToken: string })
+      .accessToken;
+    const currentUserLogin = await getCurrentUserLogin(accessToken);
+    // If no owner/repo specified, fetch from all repos
+    if (!owner || !repo) {
+      const rfcs = await listAllRFCs(accessToken, currentUserLogin);
+      return NextResponse.json(rfcs);
+    }
+
+    // Otherwise fetch from specific repo
+    const rfcs = await listRFCs(accessToken, owner, repo, currentUserLogin);
     return NextResponse.json(rfcs);
   } catch (error) {
     console.error("Error fetching RFCs:", error);

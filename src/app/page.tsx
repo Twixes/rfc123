@@ -5,27 +5,27 @@ export default async function LandingPage() {
     const session = await auth()
 
     return (
-        <div className="flex min-h-screen items-center justify-center px-8">
+        <div className="flex min-h-screen items-center justify-center px-4 sm:px-8 py-8 sm:py-0">
             <div className="w-full max-w-4xl">
-                <div className="border-4 border-black bg-white p-8">
-                    <h1 className="text-5xl font-bold uppercase tracking-tighter text-black">RFC123</h1>
+                <div className="border-4 border-black bg-white p-4 sm:p-8">
+                    <h1 className="text-3xl sm:text-5xl font-bold uppercase tracking-tighter text-black">RFC123</h1>
 
-                    <p className="mb-6 text-xl font-medium leading-tight text-black">The RFC platform for teams.</p>
+                    <p className="mb-6 text-lg sm:text-xl font-medium leading-tight text-black">The RFC platform for teams.</p>
 
-                    <div className="mb-6 flex gap-8">
+                    <div className="mb-6 flex flex-col sm:flex-row gap-6 sm:gap-8">
                         <div className="flex-1">
                             <div className="mb-2 h-1 w-12" style={{ backgroundColor: "var(--cyan)" }} />
-                            <div className="text-2xl font-bold text-black">1. Draft<sup className="text-xs ml-0.5">SOON</sup></div>
+                            <div className="text-xl sm:text-2xl font-bold text-black">1. Draft<sup className="text-xs ml-0.5">SOON</sup></div>
                             <p className="mt-1 text-sm font-medium text-gray-70">Write rich RFCs in Markdown,<br/>automatically creating a GitHub PR.</p>
                         </div>
                         <div className="flex-1">
                             <div className="mb-2 h-1 w-12" style={{ backgroundColor: "var(--magenta)" }} />
-                            <div className="text-2xl font-bold text-black">2. Discuss</div>
+                            <div className="text-xl sm:text-2xl font-bold text-black">2. Discuss</div>
                             <p className="mt-1 text-sm font-medium text-gray-70">Comment line-by-line,<br/>Google Docs-style.</p>
                         </div>
                         <div className="flex-1">
                             <div className="mb-2 h-1 w-12" style={{ backgroundColor: "var(--yellow)" }} />
-                            <div className="text-2xl font-bold text-black">3. Decide<sup className="text-xs ml-0.5">SOON</sup></div>
+                            <div className="text-xl sm:text-2xl font-bold text-black">3. Decide<sup className="text-xs ml-0.5">SOON</sup></div>
                             <p className="mt-1 text-sm font-medium text-gray-70">Reach conclusions ASAP<br/>thanks to Slack notifications.</p>
                         </div>
                     </div>
@@ -89,45 +89,47 @@ export default async function LandingPage() {
                         </div>
                     </div>
 
-                    <div className="flex gap-3 items-center">
-                        {session ? (
-                            <>
-                                <Link
-                                    href="/rfcs"
-                                    className="inline-block border-2 border-black bg-black px-4 py-2 text-sm font-bold uppercase tracking-wide text-white transition-all hover:bg-white hover:text-black cursor-pointer"
-                                >
-                                    View RFCs
-                                </Link>
+                    <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+                        <div className="flex gap-3 items-center">
+                            {session ? (
+                                <>
+                                    <Link
+                                        href="/rfcs"
+                                        className="inline-block border-2 border-black bg-black px-4 py-2 text-sm font-bold uppercase tracking-wide text-white transition-all hover:bg-white hover:text-black cursor-pointer"
+                                    >
+                                        View RFCs
+                                    </Link>
+                                    <form
+                                        action={async () => {
+                                            "use server"
+                                            await signOut({ redirectTo: "/" })
+                                        }}
+                                    >
+                                        <button
+                                            type="submit"
+                                            className="inline-block border-2 border-black bg-white px-4 py-2 text-sm font-bold uppercase tracking-wide text-black transition-all hover:bg-black hover:text-white cursor-pointer"
+                                        >
+                                            Log out
+                                        </button>
+                                    </form>
+                                </>
+                            ) : (
                                 <form
                                     action={async () => {
                                         "use server"
-                                        await signOut({ redirectTo: "/" })
+                                        await signIn("github")
                                     }}
                                 >
                                     <button
                                         type="submit"
-                                        className="inline-block border-2 border-black bg-white px-4 py-2 text-sm font-bold uppercase tracking-wide text-black transition-all hover:bg-black hover:text-white cursor-pointer"
+                                        className="inline-block border-2 border-black bg-black px-4 py-2 text-sm font-bold uppercase tracking-wide text-white transition-all hover:bg-white hover:text-black cursor-pointer"
                                     >
-                                        Log out
+                                        Sign in with GitHub
                                     </button>
                                 </form>
-                            </>
-                        ) : (
-                            <form
-                                action={async () => {
-                                    "use server"
-                                    await signIn("github")
-                                }}
-                            >
-                                <button
-                                    type="submit"
-                                    className="inline-block border-2 border-black bg-black px-4 py-2 text-sm font-bold uppercase tracking-wide text-white transition-all hover:bg-white hover:text-black cursor-pointer"
-                                >
-                                    Sign in with GitHub
-                                </button>
-                            </form>
-                        )}
-                        <span className="text-sm font-medium text-gray-70 grow text-right">
+                            )}
+                        </div>
+                        <span className="text-sm font-medium text-gray-70 sm:grow sm:text-right">
                             <a
                                 href="https://github.com/Twixes/rfc123"
                                 target="_blank"

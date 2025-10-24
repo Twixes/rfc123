@@ -7,15 +7,15 @@ interface RFCMetadataHeaderProps {
 export function RFCMetadataHeader({ rfc }: RFCMetadataHeaderProps) {
   console.log('rfc', rfc)
   return (
-    <div className="mb-4 border-2 border-black bg-white p-8">
-      <div className="mb-2 flex items-start justify-between gap-4">
-        <div className="flex items-baseline gap-4">
-          <span className="font-mono text-sm font-bold tracking-wide text-gray-50">
+    <div className="mb-4 border-2 border-black bg-white p-4 sm:p-8">
+      <div className="mb-2 flex flex-col sm:flex-row items-start sm:justify-between gap-3 sm:gap-4">
+        <div className="flex items-baseline gap-2 sm:gap-4 flex-wrap">
+          <span className="font-mono text-xs sm:text-sm font-bold tracking-wide text-gray-50">
             RFC {rfc.number}
           </span>
           {rfc.reviewRequested && (
             <span
-              className="border-2 px-3 py-1 text-xs font-bold uppercase tracking-wider"
+              className="border-2 px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-xs font-bold uppercase tracking-wider"
               style={{
                 borderColor: "var(--magenta)",
                 backgroundColor: "var(--magenta)",
@@ -26,7 +26,7 @@ export function RFCMetadataHeader({ rfc }: RFCMetadataHeaderProps) {
             </span>
           )}
           <span
-            className="border-2 px-3 py-1 text-xs font-bold uppercase tracking-wider"
+            className="border-2 px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-xs font-bold uppercase tracking-wider"
             style={{
               borderColor:
                 rfc.status === "open"
@@ -50,11 +50,11 @@ export function RFCMetadataHeader({ rfc }: RFCMetadataHeaderProps) {
           href={rfc.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-2 border-2 border-black bg-white px-4 py-2 text-sm font-bold uppercase tracking-wide text-black transition-all hover:bg-black hover:text-white"
+          className="flex items-center gap-2 border-2 border-black bg-white px-3 sm:px-4 py-2 text-xs sm:text-sm font-bold uppercase tracking-wide text-black transition-all hover:bg-black hover:text-white w-full sm:w-auto justify-center"
         >
           View on GitHub
           <svg
-            className="h-4 w-4"
+            className="h-3 sm:h-4 w-3 sm:w-4"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -70,7 +70,7 @@ export function RFCMetadataHeader({ rfc }: RFCMetadataHeaderProps) {
         </a>
       </div>
 
-      <h1 className="mb-6 text-4xl font-bold tracking-tight text-black">
+      <h1 className="mb-6 text-2xl sm:text-4xl font-bold tracking-tight text-black">
         {rfc.title}
       </h1>
 

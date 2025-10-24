@@ -26,10 +26,9 @@ export function LineCommentBox({
   return (
     <div
       ref={commentBoxRef}
-      className="absolute animate-in fade-in slide-in-from-right-2 border-2 bg-white p-4"
+      className="lg:absolute static animate-in fade-in slide-in-from-right-2 border-2 bg-white p-3 sm:p-4 w-full lg:w-[400px]"
       style={{
         top: `${position}px`,
-        width: "400px",
         borderColor: "var(--cyan)",
       }}
       onMouseEnter={onMouseEnter}

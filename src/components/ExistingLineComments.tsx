@@ -35,10 +35,9 @@ export function ExistingLineComments({
   return (
     <div
       ref={commentBoxRef}
-      className="absolute border-2 border-black bg-white p-4"
+      className="lg:absolute static border-2 border-black bg-white p-3 sm:p-4 w-full lg:w-[400px] mb-4 lg:mb-0"
       style={{
         top: `${position}px`,
-        width: "400px",
       }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}

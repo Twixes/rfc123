@@ -356,13 +356,13 @@ export function InlineCommentableMarkdown({
   }, [commentPositions]);
 
   return (
-    <div className="relative grid grid-cols-[1fr_400px] gap-12"style={{ minHeight: `${minContentHeight}px` }}>
+    <div className="relative grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-8 lg:gap-12" style={{ minHeight: `${minContentHeight}px` }}>
       {/* Main content */}
-      <div className="relative flex gap-4 -ml-4 min-w-0" >
+      <div className="relative flex gap-2 sm:gap-4 -ml-2 sm:-ml-4 min-w-0" >
         {/* Line numbers column */}
         <div
           className="shrink-0 select-none relative"
-          style={{ width: "50px" }}
+          style={{ width: "40px" }}
         >
           {lines.map((line, index) => {
             const lineNumber = index + 1;
@@ -402,7 +402,7 @@ export function InlineCommentableMarkdown({
                 onMouseLeave={() => setHoveredLineIndex(null)}
                 aria-label={`Add comment to line ${lineNumber}`}
               >
-                <div className="flex h-5 w-5 items-center justify-center border-[1.5px] border-black bg-white opacity-0 transition-all group-hover:opacity-100 group-hover:bg-black group-hover:text-white">
+                <div className="hidden sm:flex h-5 w-5 items-center justify-center border-[1.5px] border-black bg-white opacity-0 transition-all group-hover:opacity-100 group-hover:bg-black group-hover:text-white">
                   <svg
                     className="h-3 w-3"
                     fill="none"
@@ -419,7 +419,7 @@ export function InlineCommentableMarkdown({
                   </svg>
                 </div>
                 <span
-                  className="font-mono text-xs font-bold transition-opacity"
+                  className="font-mono text-[10px] sm:text-xs font-bold transition-opacity"
                   style={{
                     color: hasComments ? "var(--magenta)" : "var(--gray-50)",
                   }}
@@ -733,8 +733,8 @@ export function InlineCommentableMarkdown({
         <hr className="absolute -bottom-3 left-6 right-0 border-t-3 border-dotted" />
       </div>
 
-      {/* Comments sidebar */}
-      <div className="relative">
+      {/* Comments sidebar - full width on mobile, fixed width on desktop */}
+      <div className="relative w-full lg:w-auto">
         {activeLineIndex !== null && (
           <LineCommentBox
             lineNumber={activeLineIndex + 1}
@@ -796,8 +796,7 @@ export function InlineCommentableMarkdown({
         {/* Empty state */}
         {commentsByLine.size === 0 && activeLineIndex === null && (
           <div
-            className="absolute top-0 border-2 border-dashed border-black bg-gray-10 p-6 text-center"
-            style={{ width: "400px" }}
+            className="lg:absolute top-0 border-2 border-dashed border-black bg-gray-10 p-4 sm:p-6 text-center w-full lg:w-[400px]"
           >
             <svg
               className="mx-auto h-8 w-8 text-gray-30"

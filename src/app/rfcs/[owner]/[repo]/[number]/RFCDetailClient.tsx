@@ -136,18 +136,18 @@ export default function RFCDetailClient({
 
   if (isLoading) {
     return (
-      <div className="mx-auto max-w-360 min-h-screen px-8 py-12">
+      <div className="mx-auto max-w-360 min-h-screen px-4 sm:px-8 py-6 sm:py-12">
         <nav className="mb-6">
           <Link
             href="/rfcs"
-            className="border-2 border-black bg-white px-4 py-2 text-sm font-bold uppercase tracking-wide text-black transition-all hover:bg-black hover:text-white"
+            className="border-2 border-black bg-white px-3 sm:px-4 py-2 text-xs sm:text-sm font-bold uppercase tracking-wide text-black transition-all hover:bg-black hover:text-white"
           >
             ← Back to RFCs
           </Link>
         </nav>
 
         {/* RFCMetadataHeader Skeleton */}
-        <div className="mb-4 border-2 border-black bg-white p-8">
+        <div className="mb-4 border-2 border-black bg-white p-4 sm:p-8">
           <div className="mb-2 flex items-start justify-between gap-4">
             <div className="flex items-baseline gap-4">
               <div className="h-5 w-20 animate-pulse bg-gray-20" />
@@ -189,7 +189,7 @@ export default function RFCDetailClient({
         </div>
 
         {/* Markdown Content Skeleton */}
-        <div className="border-2 border-black bg-white p-8">
+        <div className="border-2 border-black bg-white p-4 sm:p-8">
           <div className="space-y-4">
             <div className="h-6 w-full animate-pulse bg-gray-20" />
             <div className="h-6 w-5/6 animate-pulse bg-gray-20" />
@@ -215,7 +215,7 @@ export default function RFCDetailClient({
         </div>
 
         {/* General Comments Section Skeleton */}
-        <div className="mt-8 border-2 border-black bg-white p-8">
+        <div className="mt-8 border-2 border-black bg-white p-4 sm:p-8">
           <div className="mb-6 h-8 w-48 animate-pulse bg-gray-20" />
 
           <div className="space-y-6">
@@ -245,11 +245,11 @@ export default function RFCDetailClient({
 
   if (error || !rfc) {
     return (
-      <div className="mx-auto max-w-360 min-h-screen px-8 py-12">
+      <div className="mx-auto max-w-360 min-h-screen px-4 sm:px-8 py-6 sm:py-12">
         <nav className="mb-6">
           <Link
             href="/rfcs"
-            className="border-2 border-black bg-white px-4 py-2 text-sm font-bold uppercase tracking-wide text-black transition-all hover:bg-black hover:text-white"
+            className="border-2 border-black bg-white px-3 sm:px-4 py-2 text-xs sm:text-sm font-bold uppercase tracking-wide text-black transition-all hover:bg-black hover:text-white"
           >
             ← Back to RFCs
           </Link>
@@ -267,11 +267,11 @@ export default function RFCDetailClient({
   const lineComments = allComments.filter((c) => c.line);
 
   return (
-    <div className="mx-auto max-w-360 min-h-screen px-8 py-12">
+    <div className="mx-auto max-w-360 min-h-screen px-4 sm:px-8 py-6 sm:py-12">
       <nav className="mb-6">
         <Link
           href="/rfcs"
-          className="border-2 border-black bg-white px-4 py-2 text-sm font-bold uppercase tracking-wide text-black transition-all hover:bg-black hover:text-white"
+          className="border-2 border-black bg-white px-3 sm:px-4 py-2 text-xs sm:text-sm font-bold uppercase tracking-wide text-black transition-all hover:bg-black hover:text-white"
         >
           ← Back to RFCs
         </Link>
@@ -279,7 +279,7 @@ export default function RFCDetailClient({
 
       <RFCMetadataHeader rfc={rfc} />
 
-      <div className="border-2 border-black bg-white p-8">
+      <div className="border-2 border-black bg-white p-4 sm:p-8">
         <InlineCommentableMarkdown
           content={rfc.markdownContent}
           prNumber={rfc.number}

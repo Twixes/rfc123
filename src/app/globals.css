@@ -119,8 +119,25 @@ select {
 pre {
   background: var(--foreground) !important;
   border: var(--border-thin) solid var(--border-color);
+  font-family: ui-monospace, "SF Mono", Monaco, "Cascadia Code", "Cascadia Mono", "Roboto Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0, "dlig" 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision;
+  tab-size: 8;
+  letter-spacing: -0.02ch;
+  word-spacing: 0;
+  /* Force uniform character spacing */
+  font-variant-numeric: tabular-nums;
 }
 
 pre code {
   color: var(--background) !important;
+  font-family: inherit;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0, "dlig" 0;
+  letter-spacing: 0;
+  word-spacing: 0;
+  font-variant-numeric: tabular-nums;
 }

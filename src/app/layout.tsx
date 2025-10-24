@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "RFC123",
-  description: "The RFC platform for teams: 1. draft, 2. discuss, 3. distribute.",
+  description: "The RFC platform for teams: 1. draft, 2. discuss, 3. decide.",
 };
 
 export default function RootLayout({

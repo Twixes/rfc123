@@ -15,18 +15,18 @@ export default async function LandingPage() {
                     <div className="mb-6 flex gap-8">
                         <div className="flex-1">
                             <div className="mb-2 h-1 w-12" style={{ backgroundColor: "var(--cyan)" }} />
-                            <div className="text-2xl font-bold text-black">1. Draft</div>
-                            <p className="mt-1 text-sm font-medium text-gray-70">Write rich RFCs in Markdown</p>
+                            <div className="text-2xl font-bold text-black">1. Draft<sup className="text-xs ml-0.5">SOON</sup></div>
+                            <p className="mt-1 text-sm font-medium text-gray-70">Write rich RFCs in Markdown,<br/>automatically creating a GitHub PR.</p>
                         </div>
                         <div className="flex-1">
                             <div className="mb-2 h-1 w-12" style={{ backgroundColor: "var(--magenta)" }} />
                             <div className="text-2xl font-bold text-black">2. Discuss</div>
-                            <p className="mt-1 text-sm font-medium text-gray-70">Comment line-by-line easily</p>
+                            <p className="mt-1 text-sm font-medium text-gray-70">Comment line-by-line,<br/>Google Docs-style.</p>
                         </div>
                         <div className="flex-1">
                             <div className="mb-2 h-1 w-12" style={{ backgroundColor: "var(--yellow)" }} />
-                            <div className="text-2xl font-bold text-black">3. Distribute</div>
-                            <p className="mt-1 text-sm font-medium text-gray-70">Reach the conclusion ASAP</p>
+                            <div className="text-2xl font-bold text-black">3. Decide<sup className="text-xs ml-0.5">SOON</sup></div>
+                            <p className="mt-1 text-sm font-medium text-gray-70">Reach conclusions ASAP<br/>thanks to Slack notifications.</p>
                         </div>
                     </div>
 

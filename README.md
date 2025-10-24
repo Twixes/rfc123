@@ -4,7 +4,7 @@ The RFC platform for teams.
 
 1. Draft
 2. Discuss
-3. Distribute
+3. Decide
 
 RFC123 is a collaborative platform for reviewing GitHub pull requests containing RFCs (Request for Comments). It provides a streamlined interface to view and discuss PR-based RFCs with powerful inline commenting capabilities on Markdown files.
 

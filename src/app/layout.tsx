@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "RFC123 - PostHog RFCs",
-  description: "A beautiful interface for reading and commenting on RFCs",
+  title: "RFC123",
+  description: "The RFC platform for teams: 1. draft, 2. discuss, 3. distribute.",
 };
 
 export default function RootLayout({

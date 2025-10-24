@@ -81,51 +81,63 @@ export default async function LandingPage() {
                                 </div>
                                 <div>
                                     <p className="text-sm font-medium text-black">
-                                        <strong>Iterate and merge</strong>. The RFC author updates their draft based on feedback,
-                                        and finally merges it. The RFC is now official.
+                                        <strong>Iterate and merge</strong>. The RFC author updates their draft based on
+                                        feedback, and finally merges it. The RFC is now official.
                                     </p>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    {session ? (
-                        <div className="flex gap-3">
-                            <Link
-                                href="/rfcs"
-                                className="inline-block border-2 border-black bg-black px-4 py-2 text-sm font-bold uppercase tracking-wide text-white transition-all hover:bg-white hover:text-black cursor-pointer"
-                            >
-                                View RFCs
-                            </Link>
+                    <div className="flex gap-3 items-center">
+                        {session ? (
+                            <>
+                                <Link
+                                    href="/rfcs"
+                                    className="inline-block border-2 border-black bg-black px-4 py-2 text-sm font-bold uppercase tracking-wide text-white transition-all hover:bg-white hover:text-black cursor-pointer"
+                                >
+                                    View RFCs
+                                </Link>
+                                <form
+                                    action={async () => {
+                                        "use server"
+                                        await signOut({ redirectTo: "/" })
+                                    }}
+                                >
+                                    <button
+                                        type="submit"
+                                        className="inline-block border-2 border-black bg-white px-4 py-2 text-sm font-bold uppercase tracking-wide text-black transition-all hover:bg-black hover:text-white cursor-pointer"
+                                    >
+                                        Log out
+                                    </button>
+                                </form>
+                            </>
+                        ) : (
                             <form
                                 action={async () => {
                                     "use server"
-                                    await signOut({ redirectTo: "/" })
+                                    await signIn("github")
                                 }}
                             >
                                 <button
                                     type="submit"
-                                    className="inline-block border-2 border-black bg-white px-4 py-2 text-sm font-bold uppercase tracking-wide text-black transition-all hover:bg-black hover:text-white cursor-pointer"
+                                    className="inline-block border-2 border-black bg-black px-4 py-2 text-sm font-bold uppercase tracking-wide text-white transition-all hover:bg-white hover:text-black cursor-pointer"
                                 >
-                                    Log out
+                                    Sign in with GitHub
                                 </button>
                             </form>
-                        </div>
-                    ) : (
-                        <form
-                            action={async () => {
-                                "use server"
-                                await signIn("github")
-                            }}
-                        >
-                            <button
-                                type="submit"
-                                className="inline-block border-2 border-black bg-black px-4 py-2 text-sm font-bold uppercase tracking-wide text-white transition-all hover:bg-white hover:text-black cursor-pointer"
+                        )}
+                        <span className="text-sm font-medium text-gray-70 grow text-right">
+                            <a
+                                href="https://github.com/Twixes/rfc123"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="underline hover:text-black transition-colors"
                             >
-                                Sign in with GitHub
-                            </button>
-                        </form>
-                    )}
+                                View RFC123 source code
+                            </a>
+                        </span>
+                    </div>
                 </div>
             </div>
         </div>

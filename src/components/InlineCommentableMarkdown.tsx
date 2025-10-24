@@ -444,7 +444,7 @@ export function InlineCommentableMarkdown({
         >
           <ReactMarkdown
             remarkPlugins={[remarkGfm, remarkMentions]}
-            rehypePlugins={[rehypeLineMarkers, rehypeHighlight]}
+            rehypePlugins={[rehypeHighlight, rehypeLineMarkers]}
             components={{
               h1: ({ children, ...props }) => {
                 const hovered = isLineHovered(props as any);

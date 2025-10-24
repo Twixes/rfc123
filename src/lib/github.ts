@@ -47,68 +47,106 @@ function cleanTitle(title: string) {
 export async function listRFCs(accessToken: string): Promise<RFC[]> {
   const octokit = await getOctokit(accessToken);
 
-  const { data: pulls } = await octokit.rest.pulls.list({
+  // GraphQL query to fetch all PRs with files and comment counts in one request
+  const query = `
+    query($owner: String!, $repo: String!) {
+      repository(owner: $owner, name: $repo) {
+        pullRequests(first: 100, orderBy: {field: CREATED_AT, direction: DESC}, states: [OPEN, CLOSED, MERGED]) {
+          nodes {
+            number
+            title
+            state
+            createdAt
+            updatedAt
+            mergedAt
+            url
+            author {
+              login
+              avatarUrl
+            }
+            files(first: 100) {
+              nodes {
+                path
+              }
+            }
+            comments {
+              totalCount
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  const response: any = await octokit.graphql(query, {
     owner: GITHUB_ORG,
     repo: GITHUB_REPO,
-    state: "all",
-    sort: "created",
-    direction: "desc",
-    per_page: 100,
   });
 
+  const pulls = response.repository.pullRequests.nodes;
+
   // Filter PRs that have .md files in /requests-for-comments/ directory
-  // and fetch comment counts
-  const rfcPulls = await Promise.all(
-    pulls.map(async (pr) => {
-      const { data: files } = await octokit.rest.pulls.listFiles({
+  const rfcPulls = pulls.filter((pr: any) =>
+    pr.files.nodes.some(
+      (file: any) =>
+        file.path.startsWith("requests-for-comments/") &&
+        file.path.endsWith(".md"),
+    ),
+  );
+
+  // Fetch review comment counts using HEAD requests (much faster than fetching all comments)
+  const rfcPullsWithCounts = await Promise.all(
+    rfcPulls.map(async (pr: any) => {
+      // Use per_page=1 and check pagination headers for total count
+      const response = await octokit.rest.pulls.listReviewComments({
         owner: GITHUB_ORG,
         repo: GITHUB_REPO,
         pull_number: pr.number,
+        per_page: 1,
       });
 
-      const hasRFCMarkdown = files.some(
-        (file) =>
-          file.filename.startsWith("requests-for-comments/") &&
-          file.filename.endsWith(".md"),
-      );
-
-      if (!hasRFCMarkdown) return null;
-
-      // Fetch actual comment counts
-      const [{ data: reviewComments }, { data: issueComments }] =
-        await Promise.all([
-          octokit.rest.pulls.listReviewComments({
-            owner: GITHUB_ORG,
-            repo: GITHUB_REPO,
-            pull_number: pr.number,
-          }),
-          octokit.rest.issues.listComments({
-            owner: GITHUB_ORG,
-            repo: GITHUB_REPO,
-            issue_number: pr.number,
-          }),
-        ]);
+      // Extract total count from link header or data length
+      let reviewCommentCount = response.data.length;
+      const linkHeader = response.headers.link;
+      if (linkHeader) {
+        const lastPageMatch = linkHeader.match(/page=(\d+)>; rel="last"/);
+        if (lastPageMatch) {
+          reviewCommentCount = Number.parseInt(lastPageMatch[1], 10);
+        }
+      }
 
       return {
-        ...pr,
-        _inlineCommentCount: reviewComments.length,
-        _regularCommentCount: issueComments.length,
+        number: pr.number,
+        title: pr.title,
+        state: pr.state.toLowerCase(),
+        merged_at: pr.mergedAt,
+        created_at: pr.createdAt,
+        updated_at: pr.updatedAt,
+        html_url: pr.url,
+        user: pr.author
+          ? {
+              login: pr.author.login,
+              avatar_url: pr.author.avatarUrl,
+            }
+          : null,
+        _inlineCommentCount: reviewCommentCount,
+        _regularCommentCount: pr.comments.totalCount,
       };
     }),
   );
 
-  const filteredPulls = rfcPulls.filter((pr) => pr !== null);
+  const filteredPulls = rfcPullsWithCounts;
 
   // Sort: open PRs first, then by created date
-  const sortedPulls = filteredPulls.sort((a, b) => {
+  const sortedPulls = filteredPulls.sort((a: any, b: any) => {
     if (a.state === "open" && b.state !== "open") return -1;
     if (a.state !== "open" && b.state === "open") return 1;
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
   });
 
-  return sortedPulls.map((pr) => ({
+  return sortedPulls.map((pr: any) => ({
     number: pr.number,
-    title:  cleanTitle(pr.title),
+    title: cleanTitle(pr.title),
     author: pr.user?.login || "unknown",
     authorAvatar: pr.user?.avatar_url || "",
     status: pr.merged_at ? "merged" : (pr.state as "open" | "closed"),

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import type { RFCDetail } from "@/lib/github";
+import type { RFCDetail, Comment } from "@/lib/github";
 import { GeneralCommentsSection } from "@/components/GeneralCommentsSection";
 import { InlineCommentableMarkdown } from "@/components/InlineCommentableMarkdown";
 import { RFCMetadataHeader } from "@/components/RFCMetadataHeader";
@@ -11,16 +11,38 @@ interface RFCDetailClientProps {
   owner: string;
   repo: string;
   prNumber: number;
+  currentUser: string;
+  currentUserAvatar: string;
 }
 
 export default function RFCDetailClient({
   owner,
   repo,
   prNumber,
+  currentUser,
+  currentUserAvatar,
 }: RFCDetailClientProps) {
   const [rfc, setRfc] = useState<RFCDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [optimisticComments, setOptimisticComments] = useState<Comment[]>([]);
+
+  const loadComments = useCallback(async () => {
+    try {
+      const response = await fetch(
+        `/api/rfcs/${prNumber}/comments?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}`,
+      );
+      if (!response.ok) {
+        throw new Error("Failed to load comments");
+      }
+      const data = await response.json();
+      setComments(data);
+      setOptimisticComments([]); // Clear optimistic comments after loading real ones
+    } catch (error) {
+      console.error("Error loading comments:", error);
+    }
+  }, [owner, repo, prNumber]);
 
   const loadRFC = useCallback(async () => {
     setIsLoading(true);
@@ -34,6 +56,7 @@ export default function RFCDetailClient({
       }
       const data = await response.json();
       setRfc(data);
+      setComments(data.comments); // Set initial comments from RFC data
     } catch (error) {
       console.error("Error loading RFC:", error);
       setError("Failed to load RFC");
@@ -49,8 +72,22 @@ export default function RFCDetailClient({
   async function handleInlineComment(line: number, body: string) {
     if (!rfc?.markdownFilePath) return;
 
+    // Create optimistic comment
+    const optimisticComment: Comment = {
+      id: Date.now(), // Temporary ID
+      user: currentUser,
+      userAvatar: currentUserAvatar,
+      body,
+      createdAt: new Date().toISOString(),
+      path: rfc.markdownFilePath,
+      line,
+    };
+
+    // Add optimistic comment immediately
+    setOptimisticComments((prev) => [...prev, optimisticComment]);
+
     try {
-      const response = await fetch("/api/comments", {
+      const response = await fetch("/api/comment", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -67,11 +104,34 @@ export default function RFCDetailClient({
         throw new Error("Failed to post comment");
       }
 
-      // Reload the RFC to show the new comment
-      loadRFC();
+      // Comment posted successfully - reload only comments in background
+      await loadComments();
     } catch (error) {
       console.error("Error posting comment:", error);
+      // Remove optimistic comment on error
+      setOptimisticComments((prev) =>
+        prev.filter((c) => c.id !== optimisticComment.id),
+      );
+      alert("Failed to post comment");
     }
+  }
+
+  async function handleGeneralComment(body: string) {
+    // Create optimistic comment
+    const optimisticComment: Comment = {
+      id: Date.now(), // Temporary ID
+      user: currentUser,
+      userAvatar: currentUserAvatar,
+      body,
+      createdAt: new Date().toISOString(),
+    };
+
+    // Add optimistic comment immediately
+    setOptimisticComments((prev) => [...prev, optimisticComment]);
+
+    // The actual API call is handled by CommentBox
+    // After successful post, reload only comments
+    await loadComments();
   }
 
   if (isLoading) {
@@ -201,8 +261,10 @@ export default function RFCDetailClient({
     );
   }
 
-  const generalComments = rfc.comments.filter((c) => !c.line);
-  const lineComments = rfc.comments.filter((c) => c.line);
+  // Merge actual comments with optimistic comments
+  const allComments = [...comments, ...optimisticComments];
+  const generalComments = allComments.filter((c) => !c.line);
+  const lineComments = allComments.filter((c) => c.line);
 
   return (
     <div className="mx-auto max-w-360 min-h-screen px-8 py-12">
@@ -227,8 +289,11 @@ export default function RFCDetailClient({
       </div>
 
       <GeneralCommentsSection
+        owner={owner}
+        repo={repo}
         comments={generalComments}
         prNumber={rfc.number}
+        onCommentPosted={handleGeneralComment}
       />
     </div>
   );

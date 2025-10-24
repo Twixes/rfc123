@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { getCurrentUserLogin, getOctokit } from "@/lib/github";
 import RFCDetailClient from "./RFCDetailClient";
 
 interface PageProps {
@@ -14,7 +15,20 @@ export default async function RFCPage({ params }: PageProps) {
     redirect("/api/auth/signin");
   }
 
+  const accessToken = (session as unknown as { accessToken: string }).accessToken;
+  const currentUserLogin = await getCurrentUserLogin(accessToken);
+
+  // Get current user's avatar
+  const octokit = await getOctokit(accessToken);
+  const { data: user } = await octokit.rest.users.getAuthenticated();
+
   return (
-    <RFCDetailClient owner={owner} repo={repo} prNumber={Number(number)} />
+    <RFCDetailClient
+      owner={owner}
+      repo={repo}
+      prNumber={Number(number)}
+      currentUser={currentUserLogin}
+      currentUserAvatar={user.avatar_url}
+    />
   );
 }

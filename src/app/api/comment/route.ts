@@ -10,9 +10,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { prNumber, body, path, line } = await request.json();
+  const { owner, repo, prNumber, body, path, line } = await request.json();
 
-  if (!prNumber || !body) {
+  if (!owner || !repo || !prNumber || !body) {
     return NextResponse.json(
       { error: "Missing required fields" },
       { status: 400 },
@@ -22,6 +22,8 @@ export async function POST(request: NextRequest) {
   try {
     await postComment(
       (session as unknown as { accessToken: string }).accessToken,
+      owner,
+      repo,
       prNumber,
       body,
       path,

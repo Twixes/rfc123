@@ -1,17 +1,24 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 interface CommentBoxProps {
+  owner: string;
+  repo: string;
   prNumber: number;
   onCancel?: () => void;
+  onCommentPosted?: (comment: string) => void;
 }
 
-export function CommentBox({ prNumber, onCancel }: CommentBoxProps) {
+export function CommentBox({
+  owner,
+  repo,
+  prNumber,
+  onCancel,
+  onCommentPosted,
+}: CommentBoxProps) {
   const [comment, setComment] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const router = useRouter();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -23,14 +30,17 @@ export function CommentBox({ prNumber, onCancel }: CommentBoxProps) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          owner,
+          repo,
           prNumber,
           body: comment,
         }),
       });
 
       if (response.ok) {
+        const commentText = comment;
         setComment("");
-        router.refresh();
+        onCommentPosted?.(commentText);
         onCancel?.();
       } else {
         alert("Failed to post comment");

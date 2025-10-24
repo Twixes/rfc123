@@ -3,13 +3,19 @@ import { CommentMarkdown } from "@/components/CommentMarkdown";
 import type { Comment } from "@/lib/github";
 
 interface GeneralCommentsSectionProps {
+  owner: string;
+  repo: string;
   comments: Comment[];
   prNumber: number;
+  onCommentPosted?: (comment: string) => void;
 }
 
 export function GeneralCommentsSection({
+  owner,
+  repo,
   comments,
   prNumber,
+  onCommentPosted,
 }: GeneralCommentsSectionProps) {
   return (
     <div className="mt-8">
@@ -46,7 +52,12 @@ export function GeneralCommentsSection({
           </div>
         ))}
         <div className="border-2 border-black bg-white p-6">
-          <CommentBox prNumber={prNumber} />
+          <CommentBox
+            owner={owner}
+            repo={repo}
+            prNumber={prNumber}
+            onCommentPosted={onCommentPosted}
+          />
         </div>
       </div>
     </div>

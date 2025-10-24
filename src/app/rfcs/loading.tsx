@@ -1,6 +1,14 @@
+import { auth } from '@/auth'
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 
-export default function Loading() {
+export default async function Loading() {
+  const session = await auth()
+
+  if (!(session as { accessToken?: string })?.accessToken) {
+      redirect("/api/auth/signin")
+  }
+
     return (
         <div className="mx-auto min-h-screen max-w-240 px-8 py-12">
             <header className="mb-12 flex items-start justify-between">
@@ -10,11 +18,30 @@ export default function Loading() {
                             RFC123
                         </Link>
                     </h1>
-                    <div className="mt-3 h-4 w-64 animate-pulse bg-gray-20" />
+                    <p className="mt-3 text-sm font-medium tracking-wide text-gray-50">
+                        {process.env.GITHUB_ORG}/{process.env.GITHUB_REPO}
+                    </p>
                 </div>
                 <div className="flex items-center gap-4">
-                    <div className="h-10 w-10 animate-pulse border-2 border-black bg-gray-20" />
-                    <div className="h-10 w-24 animate-pulse border-2 border-black bg-gray-20" />
+                    {session?.user?.image && (
+                        <div className="h-10 w-10 border-2 border-black">
+                            <img src={session.user.image} alt={session.user.name || "User"} className="h-full w-full" />
+                        </div>
+                    )}
+                    <form
+                        action={async () => {
+                            "use server"
+                            const { signOut } = await import("@/auth")
+                            await signOut({ redirectTo: "/" })
+                        }}
+                    >
+                        <button
+                            type="submit"
+                            className="border-2 border-black bg-white px-4 py-2 text-sm font-bold uppercase tracking-wide text-black transition-all hover:bg-black hover:text-white"
+                        >
+                            Sign out
+                        </button>
+                    </form>
                 </div>
             </header>
 

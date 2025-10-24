@@ -44,7 +44,7 @@ export default async function LandingPage() {
               />
               <div className="text-3xl font-bold text-black">3. Distribute</div>
               <p className="mt-2 text-sm font-medium text-gray-70">
-                Reach conclusions ASAP
+                Reach the conclusion ASAP
               </p>
             </div>
           </div>

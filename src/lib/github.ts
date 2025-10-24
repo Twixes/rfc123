@@ -1,7 +1,11 @@
 import { Octokit } from "octokit";
+import { getCachedJsonData, setCachedJsonData } from './cache'
 
-const GITHUB_ORG = process.env.GITHUB_ORG!;
-const GITHUB_REPO = process.env.GITHUB_REPO!;
+export interface RepoOption {
+  owner: string;
+  name: string;
+  fullName: string;
+}
 
 export interface RFC {
   number: number;
@@ -44,7 +48,54 @@ function cleanTitle(title: string) {
   return title.replace(/(^RFC:? |^Add RFC for |^\[RFC\] | RFC$)/i, "");
 }
 
-export async function listRFCs(accessToken: string): Promise<RFC[]> {
+export async function listReposWithRFCs(accessToken: string): Promise<RepoOption[]> {
+  const octokit = await getOctokit(accessToken);
+
+  // Get all repos the user has access to (personal + orgs)
+  const { data: repos } = await octokit.rest.repos.listForAuthenticatedUser({
+    per_page: 100,
+    sort: "updated",
+    affiliation: "owner,organization_member"
+  });
+
+  // Check all repos in parallel for /requests-for-comments/ directory
+  const checks = repos.map(async (repo) => {
+    const isRFCRepo = await getCachedJsonData(`repo_is_rfc:${repo.owner.login}:${repo.name}`);
+    if (isRFCRepo) {
+      return {
+        owner: repo.owner.login,
+        name: repo.name,
+        fullName: repo.full_name,
+      }
+    }
+    try {
+      // Try to get the contents of the requests-for-comments directory
+      await octokit.rest.repos.getContent({
+        owner: repo.owner.login,
+        repo: repo.name,
+        path: "requests-for-comments",
+      });
+      // If successful, this repo has the directory
+      await setCachedJsonData(`repo_is_rfc:${repo.owner.login}:${repo.name}`, true);
+      return {
+        owner: repo.owner.login,
+        name: repo.name,
+        fullName: repo.full_name,
+      };
+    } catch (error) {
+      await setCachedJsonData(`repo_is_rfc:${repo.owner.login}:${repo.name}`, false);
+      // Directory doesn't exist, return null
+      return null;
+    }
+  });
+
+  const results = await Promise.all(checks);
+
+  // Filter out null values (repos without the directory)
+  return results.filter((repo): repo is RepoOption => repo !== null);
+}
+
+export async function listRFCs(accessToken: string, owner: string, repo: string): Promise<RFC[]> {
   const octokit = await getOctokit(accessToken);
 
   // GraphQL query to fetch all PRs with files and comment counts in one request
@@ -79,8 +130,8 @@ export async function listRFCs(accessToken: string): Promise<RFC[]> {
   `;
 
   const response: any = await octokit.graphql(query, {
-    owner: GITHUB_ORG,
-    repo: GITHUB_REPO,
+    owner,
+    repo,
   });
 
   const pulls = response.repository.pullRequests.nodes;
@@ -99,8 +150,8 @@ export async function listRFCs(accessToken: string): Promise<RFC[]> {
     rfcPulls.map(async (pr: any) => {
       // Use per_page=1 and check pagination headers for total count
       const response = await octokit.rest.pulls.listReviewComments({
-        owner: GITHUB_ORG,
-        repo: GITHUB_REPO,
+        owner,
+        repo,
         pull_number: pr.number,
         per_page: 1,
       });
@@ -161,21 +212,23 @@ export async function listRFCs(accessToken: string): Promise<RFC[]> {
 
 export async function getRFCDetail(
   accessToken: string,
+  owner: string,
+  repo: string,
   prNumber: number,
 ): Promise<RFCDetail> {
   const octokit = await getOctokit(accessToken);
 
   // Get PR details
   const { data: pr } = await octokit.rest.pulls.get({
-    owner: GITHUB_ORG,
-    repo: GITHUB_REPO,
+    owner,
+    repo,
     pull_number: prNumber,
   });
 
   // Get PR files to find the first markdown file
   const { data: files } = await octokit.rest.pulls.listFiles({
-    owner: GITHUB_ORG,
-    repo: GITHUB_REPO,
+    owner,
+    repo,
     pull_number: prNumber,
   });
 
@@ -191,8 +244,8 @@ export async function getRFCDetail(
     // Fetch the actual content of the markdown file
     try {
       const { data: fileContent } = await octokit.rest.repos.getContent({
-        owner: GITHUB_ORG,
-        repo: GITHUB_REPO,
+        owner,
+        repo,
         path: markdownFile.filename,
         ref: pr.head.ref,
       });
@@ -209,30 +262,30 @@ export async function getRFCDetail(
 
   // Get review comments
   const { data: reviewComments } = await octokit.rest.pulls.listReviewComments({
-    owner: GITHUB_ORG,
-    repo: GITHUB_REPO,
+    owner,
+    repo,
     pull_number: prNumber,
   });
 
   // Get issue comments
   const { data: issueComments } = await octokit.rest.issues.listComments({
-    owner: GITHUB_ORG,
-    repo: GITHUB_REPO,
+    owner,
+    repo,
     issue_number: prNumber,
   });
 
   // Get requested reviewers
   const { data: requestedReviewers } =
     await octokit.rest.pulls.listRequestedReviewers({
-      owner: GITHUB_ORG,
-      repo: GITHUB_REPO,
+      owner,
+      repo,
       pull_number: prNumber,
     });
 
   // Get reviews
   const { data: reviews } = await octokit.rest.pulls.listReviews({
-    owner: GITHUB_ORG,
-    repo: GITHUB_REPO,
+    owner,
+    repo,
     pull_number: prNumber,
   });
 
@@ -303,6 +356,8 @@ export async function getRFCDetail(
 
 export async function postComment(
   accessToken: string,
+  owner: string,
+  repo: string,
   prNumber: number,
   body: string,
   path?: string,
@@ -313,14 +368,14 @@ export async function postComment(
   if (path && line) {
     // Post as a review comment on a specific line
     const { data: pr } = await octokit.rest.pulls.get({
-      owner: GITHUB_ORG,
-      repo: GITHUB_REPO,
+      owner,
+      repo,
       pull_number: prNumber,
     });
 
     await octokit.rest.pulls.createReviewComment({
-      owner: GITHUB_ORG,
-      repo: GITHUB_REPO,
+      owner,
+      repo,
       pull_number: prNumber,
       body,
       commit_id: pr.head.sha,
@@ -330,8 +385,8 @@ export async function postComment(
   } else {
     // Post as a regular issue comment
     await octokit.rest.issues.createComment({
-      owner: GITHUB_ORG,
-      repo: GITHUB_REPO,
+      owner,
+      repo,
       issue_number: prNumber,
       body,
     });

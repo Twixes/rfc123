@@ -11,7 +11,6 @@ RFC123 is a Next.js application for reviewing GitHub pull requests containing RF
 1. **Install dependencies**: `pnpm install`
 2. **Configure environment variables**: Copy `.env.example` to `.env.local` and fill in:
    - `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` - GitHub OAuth App credentials
-   - `GITHUB_ORG` and `GITHUB_REPO` - Target repository for RFCs (defaults to PostHog/meta)
    - `AUTH_SECRET` - Generate with: `openssl rand -base64 32`
    - `AUTH_URL` - Production deployment URL (optional for local dev)
 
@@ -99,7 +98,7 @@ The core feature is line-by-line commenting on RFC markdown files. This is imple
 
 The app uses Next.js server actions for mutations (defined inline in page components):
 - `handleInlineComment()` in src/app/rfcs/[number]/page.tsx - Posts line comments
-- Sign out action in src/app/page.tsx - Handles user logout
+- Log out action in src/app/page.tsx - Handles user logout
 
 ### Styling
 

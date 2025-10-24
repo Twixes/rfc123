@@ -6,6 +6,7 @@ import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
 import type { Comment } from "@/lib/github";
 import { rehypeLineMarkers } from "@/lib/rehype-line-markers";
+import { remarkMentions } from "@/lib/remark-mentions";
 import { LineCommentBox } from "@/components/LineCommentBox";
 import { ExistingLineComments } from "@/components/ExistingLineComments";
 
@@ -442,7 +443,7 @@ export function InlineCommentableMarkdown({
           onMouseUp={handleTextSelection}
         >
           <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
+            remarkPlugins={[remarkGfm, remarkMentions]}
             rehypePlugins={[rehypeLineMarkers, rehypeHighlight]}
             components={{
               h1: ({ children, ...props }) => {

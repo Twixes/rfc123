@@ -4,6 +4,7 @@ import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import rehypeRaw from "rehype-raw";
 import remarkGfm from "remark-gfm";
+import { remarkMentions } from "@/lib/remark-mentions";
 
 interface MarkdownRendererProps {
   content: string;
@@ -13,7 +14,7 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
   return (
     <div className="prose prose-zinc max-w-none">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkMentions]}
         rehypePlugins={[rehypeRaw, rehypeHighlight]}
         components={{
           h1: ({ children }) => (

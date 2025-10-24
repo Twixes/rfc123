@@ -4,6 +4,7 @@ import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import rehypeRaw from "rehype-raw";
 import remarkGfm from "remark-gfm";
+import { remarkMentions } from "@/lib/remark-mentions";
 
 interface CommentMarkdownProps {
   content: string;
@@ -13,7 +14,7 @@ export function CommentMarkdown({ content }: CommentMarkdownProps) {
   return (
     <div className="text-sm leading-relaxed text-gray-90">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkMentions]}
         rehypePlugins={[rehypeRaw, rehypeHighlight]}
         components={{
           h1: ({ children }) => (

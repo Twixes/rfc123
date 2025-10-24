@@ -51,11 +51,17 @@ export function ExistingLineComments({
           href={`#line-${lineNumber}`}
           className="block font-mono text-xs font-bold tracking-wide transition-opacity hover:opacity-70"
           style={{ color: "var(--magenta)" }}
+          onClick={(e) => {
+            if (isCollapsed) {
+              e.preventDefault();
+              onToggleCollapse();
+            }
+          }}
         >
           Line {lineNumber}
           {isCollapsed && (
             <span className="ml-2 text-gray-50">
-              ({comments.length} {comments.length === 1 ? "comment" : "comments"})
+              {comments[0]?.user} ({comments.length} {comments.length === 1 ? "comment" : "comments"})
             </span>
           )}
         </a>

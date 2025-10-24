@@ -24,6 +24,7 @@ export function InlineCommentableMarkdown({
 }: InlineCommentableMarkdownProps) {
   const [activeLineIndex, setActiveLineIndex] = useState<number | null>(null);
   const [hoveredLineIndex, setHoveredLineIndex] = useState<number | null>(null);
+  const [hoveredCommentLineIndex, setHoveredCommentLineIndex] = useState<number | null>(null);
   const [commentText, setCommentText] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedText, setSelectedText] = useState<string>("");
@@ -99,13 +100,18 @@ export function InlineCommentableMarkdown({
     const lineNumber = props["data-line-element"];
     if (!lineNumber) return false;
 
-    // Highlight if hovered
+    // Highlight if hovered directly
     if (hoveredLineIndex !== null && lineNumber === hoveredLineIndex + 1) {
       return true;
     }
 
     // Highlight if comment box is active for this line
     if (activeLineIndex !== null && lineNumber === activeLineIndex + 1) {
+      return true;
+    }
+
+    // Highlight if comment box is hovered for this line
+    if (hoveredCommentLineIndex !== null && lineNumber === hoveredCommentLineIndex + 1) {
       return true;
     }
 
@@ -743,6 +749,8 @@ export function InlineCommentableMarkdown({
                 commentBoxRefs.current.set(-1, el);
               }
             }}
+            onMouseEnter={() => setHoveredCommentLineIndex(activeLineIndex)}
+            onMouseLeave={() => setHoveredCommentLineIndex(null)}
           />
         )}
 
@@ -772,6 +780,8 @@ export function InlineCommentableMarkdown({
                   commentBoxRefs.current.set(lineNumber, el);
                 }
               }}
+              onMouseEnter={() => setHoveredCommentLineIndex(lineNumber - 1)}
+              onMouseLeave={() => setHoveredCommentLineIndex(null)}
             />
           ))}
 

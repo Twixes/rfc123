@@ -13,6 +13,8 @@ interface ExistingLineCommentsProps {
   onCancelReply: () => void;
   onSubmitReply: () => void;
   commentBoxRef: (el: HTMLDivElement | null) => void;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
 }
 
 export function ExistingLineComments({
@@ -27,6 +29,8 @@ export function ExistingLineComments({
   onCancelReply,
   onSubmitReply,
   commentBoxRef,
+  onMouseEnter,
+  onMouseLeave,
 }: ExistingLineCommentsProps) {
   return (
     <div
@@ -36,6 +40,8 @@ export function ExistingLineComments({
         top: `${position}px`,
         width: "400px",
       }}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
     >
       <a
         href={`#line-${lineNumber}`}

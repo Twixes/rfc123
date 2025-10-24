@@ -7,6 +7,8 @@ interface LineCommentBoxProps {
   onClose: () => void;
   onSubmit: () => void;
   commentBoxRef: (el: HTMLDivElement | null) => void;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
 }
 
 export function LineCommentBox({
@@ -18,6 +20,8 @@ export function LineCommentBox({
   onClose,
   onSubmit,
   commentBoxRef,
+  onMouseEnter,
+  onMouseLeave,
 }: LineCommentBoxProps) {
   return (
     <div
@@ -28,6 +32,8 @@ export function LineCommentBox({
         width: "400px",
         borderColor: "var(--cyan)",
       }}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
     >
       <div className="mb-3 flex items-center justify-between">
         <span className="font-mono text-xs font-bold tracking-wide text-gray-50">

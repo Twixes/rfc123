@@ -136,9 +136,21 @@ export function InlineCommentableMarkdown({
   // Handle clicking on a line in the markdown content
   const handleLineClick = (lineNumber: number) => {
     const lineIndex = lineNumber - 1;
-    setActiveLineIndex(lineIndex);
-    setCommentText("");
-    setSelectedText("");
+
+    // If there are existing comments on this line, activate reply mode instead
+    if (commentsByLine.has(lineNumber)) {
+      setReplyingToLine(lineNumber);
+      setReplyText("");
+      // Close any active new comment box
+      setActiveLineIndex(null);
+      setCommentText("");
+      setSelectedText("");
+    } else {
+      // No existing comments, open new comment box
+      setActiveLineIndex(lineIndex);
+      setCommentText("");
+      setSelectedText("");
+    }
   };
 
   // Group comments by line number
@@ -380,11 +392,7 @@ export function InlineCommentableMarkdown({
                   }
                 }}
                 type="button"
-                onClick={() => {
-                  setActiveLineIndex(index);
-                  setCommentText("");
-                  setSelectedText("");
-                }}
+                onClick={() => handleLineClick(lineNumber)}
                 className="group flex items-center gap-2 pr-2 absolute cursor-pointer"
                 style={{
                   top: `${lineOffset}px`,

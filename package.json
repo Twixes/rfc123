@@ -14,7 +14,7 @@
     "@upstash/redis": "^1.35.6",
     "highlight.js": "^11.11.1",
     "next": "16.0.0",
-    "next-auth": "5.0.0-beta.29",
+    "next-auth": "5.0.0-beta.30",
     "octokit": "^5.0.4",
     "posthog-js": "^1.280.1",
     "posthog-node": "^5.10.3",

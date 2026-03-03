@@ -5,12 +5,14 @@ import type { RepoOption } from "@/lib/github";
 
 interface RepoSelectorProps {
   currentRepo: { owner: string; name: string };
+  label?: string;
   availableRepos: RepoOption[];
   onSelect: (repo: RepoOption) => void;
 }
 
 export default function RepoSelector({
   currentRepo,
+  label,
   availableRepos,
   onSelect,
 }: RepoSelectorProps) {
@@ -51,7 +53,7 @@ export default function RepoSelector({
         onClick={() => setIsOpen(!isOpen)}
         className="text-sm font-medium text-gray-50 hover:text-foreground transition-colors flex items-center gap-2"
       >
-        {currentRepo.owner}/{currentRepo.name}
+        {label ?? `${currentRepo.owner}/${currentRepo.name}`}
         <svg
           className={`w-4 h-4 transition-transform ${isOpen ? "rotate-180" : ""}`}
           fill="none"

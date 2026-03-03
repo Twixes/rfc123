@@ -97,16 +97,12 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
             </button>
           </>
         ) : (
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-gray-50">
-              All repositories
-            </span>
-            <RepoSelector
-              currentRepo={{ owner: "", name: "Filter..." }}
-              availableRepos={availableRepos}
-              onSelect={handleRepoSelect}
-            />
-          </div>
+          <RepoSelector
+            currentRepo={{ owner: "", name: "" }}
+            label="All repositories"
+            availableRepos={availableRepos}
+            onSelect={handleRepoSelect}
+          />
         )}
       </div>
     );

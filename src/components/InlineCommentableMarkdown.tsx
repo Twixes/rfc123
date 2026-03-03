@@ -9,6 +9,7 @@ import { rehypeLineMarkers } from "@/lib/rehype-line-markers";
 import { remarkMentions } from "@/lib/remark-mentions";
 import { LineCommentBox } from "@/components/LineCommentBox";
 import { ExistingLineComments } from "@/components/ExistingLineComments";
+import { ProfilePictures } from "@/components/ProfilePictures";
 
 interface InlineCommentableMarkdownProps {
   content: string;
@@ -134,6 +135,14 @@ export function InlineCommentableMarkdown({
       paddingLeft: "0.5rem",
       marginLeft: "-0.5rem",
     };
+  };
+
+  // Render profile pictures for a line if it has comments
+  const renderProfilePictures = (lineNumber?: number) => {
+    if (!lineNumber) return null;
+    const lineComments = commentsByLine.get(lineNumber);
+    if (!lineComments?.length) return null;
+    return <ProfilePictures users={lineComments.map((c) => ({ name: c.user, avatar: c.userAvatar }))} />;
   };
 
   // Handle clicking on a line in the markdown content
@@ -441,7 +450,7 @@ export function InlineCommentableMarkdown({
                 const lineNumber = (props as any)["data-line-element"];
                 return (
                   <h1
-                    className="mb-2 mt-6 text-3xl font-serif text-foreground"
+                    className="relative mb-2 mt-6 text-4xl font-serif text-foreground"
                     style={getHoverStyles(hovered, lineNumber)}
                     onClick={() => lineNumber && handleLineClick(lineNumber)}
                     onMouseEnter={() =>
@@ -451,6 +460,9 @@ export function InlineCommentableMarkdown({
                     {...props}
                   >
                     {children}
+                    <span className="absolute right-0 top-1/2 -translate-y-1/2">
+                      {renderProfilePictures(lineNumber)}
+                    </span>
                   </h1>
                 );
               },
@@ -459,7 +471,7 @@ export function InlineCommentableMarkdown({
                 const lineNumber = (props as any)["data-line-element"];
                 return (
                   <h2
-                    className="mb-2 mt-5 text-2xl font-serif text-foreground"
+                    className="relative mb-2 mt-5 text-3xl font-serif text-foreground"
                     style={getHoverStyles(hovered, lineNumber)}
                     onClick={() => lineNumber && handleLineClick(lineNumber)}
                     onMouseEnter={() =>
@@ -469,6 +481,9 @@ export function InlineCommentableMarkdown({
                     {...props}
                   >
                     {children}
+                    <span className="absolute right-0 top-1/2 -translate-y-1/2">
+                      {renderProfilePictures(lineNumber)}
+                    </span>
                   </h2>
                 );
               },
@@ -477,7 +492,7 @@ export function InlineCommentableMarkdown({
                 const lineNumber = (props as any)["data-line-element"];
                 return (
                   <h3
-                    className="mb-1 mt-4 text-xl font-serif text-foreground"
+                    className="relative mb-1 mt-4 text-2xl font-serif text-foreground"
                     style={getHoverStyles(hovered, lineNumber)}
                     onClick={() => lineNumber && handleLineClick(lineNumber)}
                     onMouseEnter={() =>
@@ -487,6 +502,9 @@ export function InlineCommentableMarkdown({
                     {...props}
                   >
                     {children}
+                    <span className="absolute right-0 top-1/2 -translate-y-1/2">
+                      {renderProfilePictures(lineNumber)}
+                    </span>
                   </h3>
                 );
               },
@@ -495,7 +513,7 @@ export function InlineCommentableMarkdown({
                 const lineNumber = (props as any)["data-line-element"];
                 return (
                   <p
-                    className="my-2 leading-relaxed"
+                    className="relative my-2 leading-relaxed"
                     style={getHoverStyles(hovered, lineNumber)}
                     onClick={() => lineNumber && handleLineClick(lineNumber)}
                     onMouseEnter={() =>
@@ -505,6 +523,9 @@ export function InlineCommentableMarkdown({
                     {...props}
                   >
                     {children}
+                    <span className="absolute right-0 top-1/2 -translate-y-1/2">
+                      {renderProfilePictures(lineNumber)}
+                    </span>
                   </p>
                 );
               },
@@ -518,12 +539,17 @@ export function InlineCommentableMarkdown({
                   {children}
                 </a>
               ),
+              strong: ({ children, ...props }) => (
+                <strong style={{ fontWeight: 600 }} {...props}>
+                  {children}
+                </strong>
+              ),
               ul: ({ children, ...props }) => {
                 const hovered = isLineHovered(props as any);
                 const lineNumber = (props as any)["data-line-element"];
                 return (
                   <ul
-                    className="my-2 ml-6 list-disc space-y-1 text-gray-90"
+                    className="relative my-2 ml-6 list-disc space-y-1 text-gray-90"
                     style={getHoverStyles(hovered, lineNumber)}
                     onClick={() => lineNumber && handleLineClick(lineNumber)}
                     onMouseEnter={() =>
@@ -533,6 +559,9 @@ export function InlineCommentableMarkdown({
                     {...props}
                   >
                     {children}
+                    <span className="absolute right-0 top-0">
+                      {renderProfilePictures(lineNumber)}
+                    </span>
                   </ul>
                 );
               },
@@ -541,7 +570,7 @@ export function InlineCommentableMarkdown({
                 const lineNumber = (props as any)["data-line-element"];
                 return (
                   <ol
-                    className="my-2 ml-6 list-decimal space-y-1 text-gray-90"
+                    className="relative my-2 ml-6 list-decimal space-y-1 text-gray-90"
                     style={getHoverStyles(hovered, lineNumber)}
                     onClick={() => lineNumber && handleLineClick(lineNumber)}
                     onMouseEnter={() =>
@@ -551,6 +580,9 @@ export function InlineCommentableMarkdown({
                     {...props}
                   >
                     {children}
+                    <span className="absolute right-0 top-0">
+                      {renderProfilePictures(lineNumber)}
+                    </span>
                   </ol>
                 );
               },
@@ -559,7 +591,7 @@ export function InlineCommentableMarkdown({
                 const lineNumber = (props as any)["data-line-element"];
                 return (
                   <li
-                    className="leading-relaxed text-gray-90"
+                    className="relative leading-relaxed text-gray-90"
                     style={getHoverStyles(hovered, lineNumber)}
                     onClick={() => lineNumber && handleLineClick(lineNumber)}
                     onMouseEnter={() =>
@@ -569,6 +601,9 @@ export function InlineCommentableMarkdown({
                     {...props}
                   >
                     {children}
+                    <span className="absolute right-0 top-1/2 -translate-y-1/2">
+                      {renderProfilePictures(lineNumber)}
+                    </span>
                   </li>
                 );
               },
@@ -595,7 +630,7 @@ export function InlineCommentableMarkdown({
                 const lineNumber = (props as any)["data-line-element"];
                 return (
                   <pre
-                    className="my-4 max-w-full overflow-x-auto border border-gray-30 rounded whitespace-pre-wrap bg-gray-90 p-4"
+                    className="relative my-4 max-w-full overflow-x-auto border border-gray-30 rounded whitespace-pre-wrap bg-gray-90 p-4"
                     style={getHoverStyles(hovered, lineNumber)}
                     onClick={() => lineNumber && handleLineClick(lineNumber)}
                     onMouseEnter={() =>
@@ -605,6 +640,9 @@ export function InlineCommentableMarkdown({
                     {...props}
                   >
                     {children}
+                    <span className="absolute right-2 top-2">
+                      {renderProfilePictures(lineNumber)}
+                    </span>
                   </pre>
                 );
               },
@@ -614,7 +652,7 @@ export function InlineCommentableMarkdown({
                 const hoverStyles = getHoverStyles(hovered, lineNumber);
                 return (
                   <blockquote
-                    className="my-4 border-l-2 bg-gray-5 py-2 pl-4 pr-4 italic text-gray-70"
+                    className="relative my-4 border-l-2 bg-gray-5 py-2 pl-4 pr-4 italic text-gray-70"
                     style={{
                       borderLeftColor: hovered
                         ? "var(--yellow)"
@@ -629,6 +667,9 @@ export function InlineCommentableMarkdown({
                     {...props}
                   >
                     {children}
+                    <span className="absolute right-2 top-2">
+                      {renderProfilePictures(lineNumber)}
+                    </span>
                   </blockquote>
                 );
               },

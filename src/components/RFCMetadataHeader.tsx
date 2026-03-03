@@ -1,4 +1,5 @@
 import type { RFCDetail } from "@/lib/github";
+import { ProfilePictures } from "@/components/ProfilePictures";
 
 interface RFCMetadataHeaderProps {
   rfc: RFCDetail;
@@ -96,20 +97,13 @@ export function RFCMetadataHeader({ rfc }: RFCMetadataHeaderProps) {
             <dt className="mb-2 text-xs font-medium uppercase tracking-widest text-gray-40">
               Reviewers
             </dt>
-            <dd className="flex items-center gap-2 flex-wrap">
-              {rfc.reviewers.map((reviewer) => (
-                <div
-                  key={reviewer.login}
-                  className={`h-6 w-6 rounded-full overflow-hidden border ${reviewer.yetToReview ? "border-dashed border-gray-40" : "border-gray-20"}`}
-                  title={reviewer.login}
-                >
-                  <img
-                    src={reviewer.avatar}
-                    alt={reviewer.login}
-                    className="h-full w-full"
-                  />
-                </div>
-              ))}
+            <dd>
+              <ProfilePictures
+                users={rfc.reviewers.map((r) => ({
+                  name: r.login,
+                  avatar: r.avatar,
+                }))}
+              />
             </dd>
           </div>
         )}

@@ -26,7 +26,7 @@ export default function AccountDropdown({ user }: AccountDropdownProps) {
   }, [open]);
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className="flex relative">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}

@@ -28,10 +28,12 @@ export default function RFCDetailClient({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(true);
   const [optimisticComments, setOptimisticComments] = useState<Comment[]>([]);
   const [viewMode, setViewMode] = useState<"pretty" | "raw">("pretty");
 
   const loadComments = useCallback(async () => {
+    setCommentsLoading(true);
     try {
       const response = await fetch(
         `/api/rfcs/${prNumber}/comments?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}`,
@@ -44,6 +46,8 @@ export default function RFCDetailClient({
       setOptimisticComments([]); // Clear optimistic comments after loading real ones
     } catch (error) {
       console.error("Error loading comments:", error);
+    } finally {
+      setCommentsLoading(false);
     }
   }, [owner, repo, prNumber]);
 
@@ -292,6 +296,7 @@ export default function RFCDetailClient({
             content={rfc.markdownContent}
             prNumber={rfc.number}
             comments={lineComments}
+            commentsLoading={commentsLoading}
             onCommentSubmit={handleInlineComment}
           />
         ) : (
@@ -303,6 +308,7 @@ export default function RFCDetailClient({
         owner={owner}
         repo={repo}
         comments={generalComments}
+        commentsLoading={commentsLoading}
         prNumber={rfc.number}
         onCommentPosted={handleGeneralComment}
       />

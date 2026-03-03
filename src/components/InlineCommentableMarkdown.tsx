@@ -16,6 +16,7 @@ interface InlineCommentableMarkdownProps {
   content: string;
   prNumber: number;
   comments: Comment[];
+  commentsLoading?: boolean;
   onCommentSubmit: (line: number, body: string) => Promise<void>;
 }
 
@@ -23,6 +24,7 @@ export function InlineCommentableMarkdown({
   content,
   prNumber,
   comments,
+  commentsLoading,
   onCommentSubmit,
 }: InlineCommentableMarkdownProps) {
   const [activeLineIndex, setActiveLineIndex] = useState<number | null>(null);
@@ -894,30 +896,41 @@ export function InlineCommentableMarkdown({
             />
           ))}
 
-        {/* Empty state */}
+        {/* Empty/loading state */}
         {commentsByLine.size === 0 && activeLineIndex === null && (
           <div
             className="lg:absolute top-0 border border-dashed border-gray-30 rounded-md bg-gray-5 p-4 sm:p-6 text-center w-full lg:w-[400px]"
           >
-            <svg
-              className="mx-auto h-8 w-8 text-gray-30"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"
-              />
-            </svg>
-            <p className="mt-3 text-sm font-medium text-gray-50">
-              No comments yet
-            </p>
-            <p className="mt-1 text-xs text-gray-50">
-              Click any line to add a comment
-            </p>
+            {commentsLoading ? (
+              <>
+                <div className="mx-auto h-8 w-8 animate-pulse rounded-full bg-gray-20" />
+                <p className="mt-3 text-sm font-medium text-gray-50">
+                  Loading comments...
+                </p>
+              </>
+            ) : (
+              <>
+                <svg
+                  className="mx-auto h-8 w-8 text-gray-30"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"
+                  />
+                </svg>
+                <p className="mt-3 text-sm font-medium text-gray-50">
+                  No comments yet
+                </p>
+                <p className="mt-1 text-xs text-gray-50">
+                  Click any line to add a comment
+                </p>
+              </>
+            )}
           </div>
         )}
       </div>

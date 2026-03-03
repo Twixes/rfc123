@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import type { RFC, RepoOption } from "@/lib/github";
 import RFCListSkeleton from "@/components/RFCListSkeleton";
@@ -23,6 +23,7 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
     null,
   );
   const [selectedRepo, setSelectedRepo] = useState<RepoOption | null>(null);
+  const rfcsAbortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     loadRepos();
@@ -40,18 +41,28 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
   }
 
   async function loadRFCs(repo?: RepoOption | null) {
+    // Abort any in-flight request
+    rfcsAbortControllerRef.current?.abort();
+    const controller = new AbortController();
+    rfcsAbortControllerRef.current = controller;
+
     setIsLoading(true);
     try {
       const params = repo
         ? `?owner=${encodeURIComponent(repo.owner)}&repo=${encodeURIComponent(repo.name)}`
         : "";
-      const response = await fetch(`/api/rfcs${params}`);
+      const response = await fetch(`/api/rfcs${params}`, {
+        signal: controller.signal,
+      });
       const data = await response.json();
       setRfcs(data);
     } catch (error) {
+      if ((error as Error).name === "AbortError") return;
       console.error("Error loading RFCs:", error);
     } finally {
-      setIsLoading(false);
+      if (!controller.signal.aborted) {
+        setIsLoading(false);
+      }
     }
   }
 

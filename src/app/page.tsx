@@ -31,7 +31,7 @@ export default async function LandingPage() {
                     </div>
 
                     <div className="mb-6 border-t border-gray-20 pt-6">
-                        <h2 className="mb-4 text-xl font-serif text-foreground">How it works</h2>
+                        <h2 className="mb-4 text-2xl font-serif text-foreground">How it works</h2>
                         <div className="space-y-3">
                             <div className="flex gap-3">
                                 <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-gray-30 text-sm font-medium text-gray-70">

@@ -27,11 +27,7 @@ export default function RepoSelectorEmptyState({
       <div className="bg-surface border border-gray-20 rounded-md shadow-md p-8">
         <h2 className="text-3xl font-serif mb-4">Select an RFC Repository</h2>
         <p className="mb-6 text-gray-70">
-          Choose a repository with a{" "}
-          <code className="bg-gray-5 border border-gray-20 rounded-sm px-2 py-1 font-mono text-sm">
-            /requests-for-comments/
-          </code>{" "}
-          directory:
+          Choose a repository containing RFCs:
         </p>
 
         <input
@@ -47,7 +43,7 @@ export default function RepoSelectorEmptyState({
           {filteredRepos.length === 0 ? (
             <div className="p-12 text-center text-gray-50">
               {repos.length === 0
-                ? "No repositories found with /requests-for-comments/ directory"
+                ? "No repositories found containing RFCs"
                 : "No repositories match your search"}
             </div>
           ) : (

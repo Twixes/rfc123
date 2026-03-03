@@ -73,13 +73,20 @@ export async function listReposWithRFCs(accessToken: string): Promise<RepoOption
             fullName: repo.full_name,
         }))
 
-        // Check all repos in parallel for /requests-for-comments/ directory
+        // Check all repos in parallel for RFC content
         const checks = repos.map(async (repo) => {
-            let rfcsDirectory = await getCachedJsonData(`repo_rfcs_dir:${repo.owner}:${repo.name}`)
-            if (rfcsDirectory != null) {
-                return rfcsDirectory ? repo : null
+            let hasRFCs = await getCachedJsonData(`repo_has_rfcs:${repo.owner}:${repo.name}`)
+            if (hasRFCs != null) {
+                return hasRFCs ? repo : null
             }
-            // Try to get the contents of the requests-for-comments directory
+            // Check if repo name suggests it's an RFC repo
+            const nameLower = repo.name.toLowerCase()
+            if (nameLower.includes("rfc") || nameLower.includes("requests-for-comments")) {
+                hasRFCs = true
+                await setCachedJsonData(`repo_has_rfcs:${repo.owner}:${repo.name}`, hasRFCs, 600)
+                return repo
+            }
+            // Otherwise check for known RFC directories
             const [variantFull, variantShort] = await Promise.allSettled([
                 octokit.rest.repos.getContent({
                     owner: repo.owner,
@@ -92,15 +99,9 @@ export async function listReposWithRFCs(accessToken: string): Promise<RepoOption
                     path: "RFCs",
                 }),
             ])
-            rfcsDirectory = false
-            if (variantFull.status === "fulfilled") {
-                rfcsDirectory = "requests-for-comments"
-            } else if (variantShort.status === "fulfilled") {
-                rfcsDirectory = "RFCs"
-            }
-            // If successful, this repo has the directory
-            await setCachedJsonData(`repo_rfcs_dir:${repo.owner}:${repo.name}`, rfcsDirectory, 600)
-            return repo
+            hasRFCs = variantFull.status === "fulfilled" || variantShort.status === "fulfilled"
+            await setCachedJsonData(`repo_has_rfcs:${repo.owner}:${repo.name}`, hasRFCs, 600)
+            return hasRFCs ? repo : null
         })
 
         const results = await Promise.all(checks)
@@ -181,11 +182,9 @@ export async function listRFCs(
             await setCachedJsonData(cacheKey, pulls, 300) // Cache for 5 minutes
         }
 
-        // Filter PRs that have .md files in /requests-for-comments/ directory
+        // Filter PRs that have .md files (RFC content can be in any directory)
         const rfcPulls = pulls.filter((pr: any) =>
-            pr.files.nodes.some(
-                (file: any) => (file.path.startsWith("requests-for-comments/") || file.path.toLowerCase().startsWith("rfcs/")) && file.path.endsWith(".md")
-            )
+            pr.files.nodes.some((file: any) => file.path.endsWith(".md"))
         )
 
         // Fetch review comment counts using HEAD requests (much faster than fetching all comments)
@@ -370,9 +369,7 @@ export async function getRFCDetail(
             })
             files = filesResponse.data
 
-            const markdownFile = files.find(
-                (file) => (file.filename.startsWith("requests-for-comments/") || file.filename.toLowerCase().startsWith("rfcs/")) && file.filename.endsWith(".md")
-            )
+            const markdownFile = files.find((file) => file.filename.endsWith(".md"))
 
             markdownContent = pr.body || ""
             markdownFilePath = markdownFile?.filename || null

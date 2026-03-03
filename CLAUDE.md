@@ -43,7 +43,7 @@ The app uses NextAuth with GitHub OAuth (src/auth.ts):
 
 ### GitHub Integration (src/lib/github.ts)
 
-The app interacts with GitHub PRs that contain `.md` files in the `requests-for-comments/` directory:
+The app interacts with GitHub PRs that contain `.md` files (RFC content can live in any directory, e.g. `/engineering/`):
 
 - **`listRFCs()`** - Fetches all PRs from target repo, filters for RFC markdown files, returns list with comment counts
 - **`getRFCDetail()`** - Fetches specific PR with markdown content, comments, and reviewer information

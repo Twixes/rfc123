@@ -485,7 +485,7 @@ export function InlineCommentableMarkdown({
                 const lineNumber = (props as any)["data-line-element"];
                 return (
                   <h1
-                    className="relative mb-2 mt-6 text-4xl font-sans text-foreground"
+                    className="relative mb-2 mt-6 pb-2 border-b border-gray-20 text-4xl font-sans text-foreground"
                     style={{...getHoverStyles(hovered, lineNumber), ...(lineNumber && commentsByLine.has(lineNumber) && { paddingRight: '2rem' })}}
                     onClick={() => lineNumber && handleLineClick(lineNumber)}
                     onMouseEnter={() =>
@@ -506,7 +506,7 @@ export function InlineCommentableMarkdown({
                 const lineNumber = (props as any)["data-line-element"];
                 return (
                   <h2
-                    className="relative mb-2 mt-5 text-3xl font-sans text-foreground"
+                    className="relative mb-2 mt-5 pb-2 border-b border-gray-20 text-3xl font-sans text-foreground"
                     style={{...getHoverStyles(hovered, lineNumber), ...(lineNumber && commentsByLine.has(lineNumber) && { paddingRight: '2rem' })}}
                     onClick={() => lineNumber && handleLineClick(lineNumber)}
                     onMouseEnter={() =>

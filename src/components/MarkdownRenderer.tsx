@@ -28,7 +28,7 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
             </h2>
           ),
           h3: ({ children }) => (
-            <h3 className="mb-1 mt-4 text-xl font-serif text-foreground">
+            <h3 className="mb-1 mt-4 text-2xl font-serif text-foreground">
               {children}
             </h3>
           ),

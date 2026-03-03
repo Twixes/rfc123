@@ -23,7 +23,7 @@ export default function Error({
 
 	return (
 		<div className="flex min-h-screen items-center justify-center p-4">
-			<div className="max-w-md space-y-4 border border-gray-20 rounded-md shadow-md bg-surface p-8">
+			<div className="max-w-md space-y-4 border border-gray-20 rounded-md bg-surface p-8">
 				<h2 className="text-2xl font-serif">Something went wrong!</h2>
 				<p className="text-gray-70">
 					An unexpected error occurred. The error has been logged and we'll look

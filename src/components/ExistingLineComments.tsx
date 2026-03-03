@@ -39,14 +39,14 @@ export function ExistingLineComments({
   return (
     <div
       ref={commentBoxRef}
-      className="lg:absolute static border border-gray-20 rounded-md shadow-sm bg-surface w-full lg:w-[400px] mb-4 lg:mb-0"
+      className="lg:absolute static border border-gray-20 rounded-md bg-surface w-full lg:w-[400px] mb-4 lg:mb-0"
       style={{
         top: `${position}px`,
       }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      <div className="flex items-center justify-between px-3 sm:p-4">
+      <div className="flex items-center justify-between p-3 sm:p-4">
         <a
           href={`#line-${lineNumber}`}
           className="block text-xs font-medium tracking-wide transition-opacity hover:opacity-70"

@@ -6,9 +6,8 @@ interface RFCMetadataHeaderProps {
 }
 
 export function RFCMetadataHeader({ rfc }: RFCMetadataHeaderProps) {
-  console.log('rfc', rfc)
   return (
-    <div className="mb-4 border border-gray-20 rounded-md shadow-sm bg-surface p-4 sm:p-8">
+    <div className="mb-4 border border-gray-20 rounded-md bg-surface p-4 sm:p-8">
       <div className="mb-2 flex flex-col sm:flex-row items-start sm:justify-between gap-3 sm:gap-4">
         <div className="flex items-baseline gap-2 sm:gap-4 flex-wrap">
           <span className="text-xs sm:text-sm font-medium tracking-widest text-gray-40 uppercase">

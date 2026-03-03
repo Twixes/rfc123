@@ -46,7 +46,7 @@ export default function AccountDropdown({ user }: AccountDropdownProps) {
         )}
       </button>
       {open && (
-        <div className="absolute right-0 mt-2 w-40 rounded-md border border-gray-20 bg-surface shadow-sm z-50">
+        <div className="absolute right-0 mt-2 w-40 rounded-md border border-gray-20 bg-surface z-50">
           {user.name && (
             <div className="px-3 py-2 text-xs text-gray-50 border-b border-gray-20 truncate">
               {user.name}

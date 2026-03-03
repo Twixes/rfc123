@@ -8,7 +8,7 @@ export default async function LandingPage() {
     return (
         <div className="flex min-h-screen items-center justify-center px-4 sm:px-8 py-8 sm:py-0">
             <div className="w-full max-w-4xl">
-                <div className="border border-gray-20 rounded-md shadow-md bg-surface p-4 sm:p-8">
+                <div className="border border-gray-20 rounded-md bg-surface p-4 sm:p-8">
                     <h1 className="font-serif font-normal text-4xl sm:text-6xl text-foreground">RFC123</h1>
 
                     <p className="mb-6 text-lg sm:text-xl font-light leading-tight text-gray-70">The RFC platform for teams.</p>
@@ -16,17 +16,17 @@ export default async function LandingPage() {
                     <div className="mb-6 flex flex-col sm:flex-row gap-6 sm:gap-8">
                         <div className="flex-1">
                             <div className="mb-2 h-0.5 w-12" style={{ backgroundColor: "var(--cyan)" }} />
-                            <div className="text-xl sm:text-2xl font-serif text-foreground">1. Draft<sup className="text-xs ml-0.5 font-sans font-medium text-gray-50">SOON</sup></div>
+                            <div className="text-2xl font-serif text-foreground">1. Draft<sup className="text-xs ml-0.5 font-sans font-medium text-gray-50">SOON</sup></div>
                             <p className="mt-1 text-sm text-gray-70">Write rich RFCs in Markdown,<br/>automatically creating a GitHub PR.</p>
                         </div>
                         <div className="flex-1">
                             <div className="mb-2 h-0.5 w-12" style={{ backgroundColor: "var(--magenta)" }} />
-                            <div className="text-xl sm:text-2xl font-serif text-foreground">2. Discuss</div>
+                            <div className="text-2xl font-serif text-foreground">2. Discuss</div>
                             <p className="mt-1 text-sm text-gray-70">Comment line-by-line,<br/>Google Docs-style.</p>
                         </div>
                         <div className="flex-1">
                             <div className="mb-2 h-0.5 w-12" style={{ backgroundColor: "var(--yellow)" }} />
-                            <div className="text-xl sm:text-2xl font-serif text-foreground">3. Decide<sup className="text-xs ml-0.5 font-sans font-medium text-gray-50">SOON</sup></div>
+                            <div className="text-2xl font-serif text-foreground">3. Decide<sup className="text-xs ml-0.5 font-sans font-medium text-gray-50">SOON</sup></div>
                             <p className="mt-1 text-sm text-gray-70">Reach conclusions ASAP<br/>thanks to Slack notifications.</p>
                         </div>
                     </div>
@@ -96,7 +96,7 @@ export default async function LandingPage() {
                                 <>
                                     <Link
                                         href="/rfcs"
-                                        className="inline-block rounded-md bg-foreground px-4 py-2 text-sm font-medium text-surface transition-all hover:opacity-80 cursor-pointer"
+                                        className="flex items-center rounded-md bg-foreground px-4 py-2 text-sm font-medium text-surface transition-all hover:opacity-80 cursor-pointer"
                                     >
                                         View RFCs
                                     </Link>
@@ -113,7 +113,7 @@ export default async function LandingPage() {
                                 >
                                     <button
                                         type="submit"
-                                        className="inline-block rounded-md bg-foreground px-4 py-2 text-sm font-medium text-surface transition-all hover:opacity-80 cursor-pointer"
+                                        className="flex items-center rounded-md bg-foreground px-4 py-2 text-sm font-medium text-surface transition-all hover:opacity-80 cursor-pointer"
                                     >
                                         Sign in with GitHub
                                     </button>

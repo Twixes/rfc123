@@ -26,7 +26,7 @@ export function LineCommentBox({
   return (
     <div
       ref={commentBoxRef}
-      className="lg:absolute static animate-in fade-in slide-in-from-right-2 border rounded-md shadow-sm bg-surface p-3 sm:p-4 w-full lg:w-[400px]"
+      className="lg:absolute static border rounded-md bg-surface p-3 sm:p-4 w-full lg:w-[400px]"
       style={{
         top: `${position}px`,
         borderColor: "var(--cyan)",

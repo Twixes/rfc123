@@ -68,7 +68,7 @@ export default function RepoSelector({
       </button>
 
       {isOpen && (
-        <div className="absolute top-full left-0 mt-2 w-80 bg-surface border border-gray-20 rounded-md shadow-md z-50">
+        <div className="absolute top-full left-0 mt-2 w-80 bg-surface border border-gray-20 rounded-md z-50">
           <div className="p-3 border-b border-gray-20">
             <input
               ref={inputRef}

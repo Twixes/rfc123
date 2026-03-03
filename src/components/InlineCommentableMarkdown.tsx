@@ -450,8 +450,8 @@ export function InlineCommentableMarkdown({
                 const lineNumber = (props as any)["data-line-element"];
                 return (
                   <h1
-                    className="relative mb-2 mt-6 text-4xl font-serif text-foreground"
-                    style={getHoverStyles(hovered, lineNumber)}
+                    className="relative mb-2 mt-6 text-4xl font-sans text-foreground"
+                    style={{...getHoverStyles(hovered, lineNumber), ...(lineNumber && commentsByLine.has(lineNumber) && { paddingRight: '2rem' })}}
                     onClick={() => lineNumber && handleLineClick(lineNumber)}
                     onMouseEnter={() =>
                       lineNumber && setHoveredLineIndex(lineNumber - 1)
@@ -471,8 +471,8 @@ export function InlineCommentableMarkdown({
                 const lineNumber = (props as any)["data-line-element"];
                 return (
                   <h2
-                    className="relative mb-2 mt-5 text-3xl font-serif text-foreground"
-                    style={getHoverStyles(hovered, lineNumber)}
+                    className="relative mb-2 mt-5 text-3xl font-sans text-foreground"
+                    style={{...getHoverStyles(hovered, lineNumber), ...(lineNumber && commentsByLine.has(lineNumber) && { paddingRight: '2rem' })}}
                     onClick={() => lineNumber && handleLineClick(lineNumber)}
                     onMouseEnter={() =>
                       lineNumber && setHoveredLineIndex(lineNumber - 1)
@@ -492,8 +492,8 @@ export function InlineCommentableMarkdown({
                 const lineNumber = (props as any)["data-line-element"];
                 return (
                   <h3
-                    className="relative mb-1 mt-4 text-2xl font-serif text-foreground"
-                    style={getHoverStyles(hovered, lineNumber)}
+                    className="relative mb-1 mt-4 text-2xl font-sans text-foreground"
+                    style={{...getHoverStyles(hovered, lineNumber), ...(lineNumber && commentsByLine.has(lineNumber) && { paddingRight: '2rem' })}}
                     onClick={() => lineNumber && handleLineClick(lineNumber)}
                     onMouseEnter={() =>
                       lineNumber && setHoveredLineIndex(lineNumber - 1)
@@ -514,7 +514,7 @@ export function InlineCommentableMarkdown({
                 return (
                   <p
                     className="relative my-2 leading-relaxed"
-                    style={getHoverStyles(hovered, lineNumber)}
+                    style={{...getHoverStyles(hovered, lineNumber), ...(lineNumber && commentsByLine.has(lineNumber) && { paddingRight: '2rem' })}}
                     onClick={() => lineNumber && handleLineClick(lineNumber)}
                     onMouseEnter={() =>
                       lineNumber && setHoveredLineIndex(lineNumber - 1)
@@ -592,7 +592,7 @@ export function InlineCommentableMarkdown({
                 return (
                   <li
                     className="relative leading-relaxed text-gray-90"
-                    style={getHoverStyles(hovered, lineNumber)}
+                    style={{...getHoverStyles(hovered, lineNumber), ...(lineNumber && commentsByLine.has(lineNumber) && { paddingRight: '2rem' })}}
                     onClick={() => lineNumber && handleLineClick(lineNumber)}
                     onMouseEnter={() =>
                       lineNumber && setHoveredLineIndex(lineNumber - 1)
@@ -762,7 +762,7 @@ export function InlineCommentableMarkdown({
             {content}
           </ReactMarkdown>
         </div>
-        <hr className="absolute -bottom-3 left-6 right-0 border-t border-dotted border-gray-30" />
+        <hr className="absolute -bottom-3 left-0 right-0 border-t border-dotted border-gray-30" />
       </div>
 
       {/* Comments sidebar */}
@@ -868,7 +868,7 @@ export function InlineCommentableMarkdown({
       {/* Selection tooltip */}
       <div
         ref={tooltipRef}
-        className="pointer-events-none fixed z-50 border border-gray-20 rounded-md bg-surface px-3 py-2 text-xs font-medium text-foreground shadow-md"
+        className="pointer-events-none fixed z-50 border border-gray-20 rounded-md bg-surface px-3 py-2 text-xs font-medium text-foreground"
         style={{
           display: "none",
           transform: "translate(-50%, -100%)",

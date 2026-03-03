@@ -146,7 +146,7 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
               <div className="flex items-start justify-between gap-4 sm:gap-6">
                 <div className="flex-1 min-w-0">
                   <div className="mb-2 flex flex-wrap items-baseline gap-2 sm:gap-3">
-                    <h2 className="text-base sm:text-xl font-medium text-foreground break-words font-sans">
+                    <h2 className="text-2xl font-medium text-foreground break-words font-serif">
                       {rfc.title}
                     </h2>
                     {rfc.reviewRequested && (

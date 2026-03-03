@@ -22,7 +22,7 @@ export function GeneralCommentsSection({
       <h2 className="mb-4 border-b border-gray-20 pb-2 text-2xl font-serif text-foreground">
         General Comments
       </h2>
-      <div className="space-y-0">
+      <div className="space-y-0 border border-gray-20 rounded-md overflow-hidden">
         {comments.map((comment) => (
           <div
             key={comment.id}
@@ -51,7 +51,7 @@ export function GeneralCommentsSection({
             <CommentMarkdown content={comment.body} />
           </div>
         ))}
-        <div className="border border-gray-20 rounded-md bg-surface p-6">
+        <div className="bg-surface p-6">
           <CommentBox
             owner={owner}
             repo={repo}

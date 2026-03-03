@@ -13,7 +13,7 @@ export default function Loading() {
       </nav>
 
       {/* RFCMetadataHeader Skeleton */}
-      <div className="mb-4 border border-gray-20 rounded-md shadow-sm bg-surface p-8">
+      <div className="mb-4 border border-gray-20 rounded-md bg-surface p-8">
         <div className="mb-2 flex items-start justify-between gap-4">
           <div className="flex items-baseline gap-4">
             <div className="h-5 w-20 animate-pulse rounded bg-gray-20" />
@@ -55,7 +55,7 @@ export default function Loading() {
       </div>
 
       {/* Markdown Content Skeleton */}
-      <div className="border border-gray-20 rounded-md shadow-sm bg-surface p-8">
+      <div className="border border-gray-20 rounded-md bg-surface p-8">
         <div className="space-y-4">
           <div className="h-6 w-full animate-pulse rounded bg-gray-20" />
           <div className="h-6 w-5/6 animate-pulse rounded bg-gray-20" />
@@ -81,7 +81,7 @@ export default function Loading() {
       </div>
 
       {/* General Comments Section Skeleton */}
-      <div className="mt-8 border border-gray-20 rounded-md shadow-sm bg-surface p-8">
+      <div className="mt-8 border border-gray-20 rounded-md bg-surface p-8">
         <div className="mb-6 h-8 w-48 animate-pulse rounded bg-gray-20" />
 
         <div className="space-y-6">

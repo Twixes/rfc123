@@ -1,9 +1,31 @@
+import type { Metadata } from "next";
 import { auth } from "@/auth";
 import { getCurrentUserLogin, getOctokit } from "@/lib/github";
 import RFCDetailClient from "./RFCDetailClient";
 
 interface PageProps {
   params: Promise<{ owner: string; repo: string; number: string }>;
+}
+
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const session = await auth();
+  const { owner, repo, number } = await params;
+  const accessToken = (session as unknown as { accessToken: string }).accessToken;
+  try {
+    const octokit = await getOctokit(accessToken);
+    const { data: pr } = await octokit.rest.pulls.get({
+      owner,
+      repo,
+      pull_number: Number(number),
+    });
+    return {
+      title: `${pr.title} (#${number})`,
+    };
+  } catch {
+    return {
+      title: `RFC #${number}`,
+    };
+  }
 }
 
 export default async function RFCPage({ params }: PageProps) {

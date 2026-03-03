@@ -17,7 +17,10 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-  title: "RFC123",
+  title: {
+    template: "%s - RFC123",
+    default: "RFC123",
+  },
   description: "The RFC platform for teams: 1. draft, 2. discuss, 3. decide.",
 };
 

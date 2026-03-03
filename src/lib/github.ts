@@ -401,36 +401,53 @@ export async function getRFCDetail(
             }
 
             // Cache the content
-            await setCachedJsonData(contentCacheKey, { pr, files, markdownContent, markdownFilePath }, 60) // Cache for 60 seconds
+            await setCachedJsonData(contentCacheKey, { pr, files, markdownContent, markdownFilePath }, 300) // Cache for 5 minutes
         }
 
-        // Get review comments
-        const { data: reviewComments } = await octokit.rest.pulls.listReviewComments({
-            owner,
-            repo,
-            pull_number: prNumber,
-        })
+        // Fetch comments, reviewers, and reviews (with caching)
+        const interactionsCacheKey = `rfc:${owner}:${repo}:${prNumber}:interactions`
+        interface CachedInteractions {
+            reviewComments: any[]
+            issueComments: any[]
+            requestedReviewers: { users: any[] }
+            reviews: any[]
+        }
+        let interactions = await getCachedJsonData<CachedInteractions>(interactionsCacheKey)
 
-        // Get issue comments
-        const { data: issueComments } = await octokit.rest.issues.listComments({
-            owner,
-            repo,
-            issue_number: prNumber,
-        })
+        if (!interactions) {
+            // Fetch all in parallel
+            const [reviewCommentsRes, issueCommentsRes, requestedReviewersRes, reviewsRes] = await Promise.all([
+                octokit.rest.pulls.listReviewComments({
+                    owner,
+                    repo,
+                    pull_number: prNumber,
+                }),
+                octokit.rest.issues.listComments({
+                    owner,
+                    repo,
+                    issue_number: prNumber,
+                }),
+                octokit.rest.pulls.listRequestedReviewers({
+                    owner,
+                    repo,
+                    pull_number: prNumber,
+                }),
+                octokit.rest.pulls.listReviews({
+                    owner,
+                    repo,
+                    pull_number: prNumber,
+                }),
+            ])
+            interactions = {
+                reviewComments: reviewCommentsRes.data,
+                issueComments: issueCommentsRes.data,
+                requestedReviewers: requestedReviewersRes.data,
+                reviews: reviewsRes.data,
+            }
+            await setCachedJsonData(interactionsCacheKey, interactions, 60) // Cache for 60 seconds
+        }
 
-        // Get requested reviewers
-        const { data: requestedReviewers } = await octokit.rest.pulls.listRequestedReviewers({
-            owner,
-            repo,
-            pull_number: prNumber,
-        })
-
-        // Get reviews
-        const { data: reviews } = await octokit.rest.pulls.listReviews({
-            owner,
-            repo,
-            pull_number: prNumber,
-        })
+        const { reviewComments, issueComments, requestedReviewers, reviews } = interactions
 
         const reviewersAlreadyAccountedFor: Set<string> = new Set()
         const reviewers: RFCDetail["reviewers"] = []

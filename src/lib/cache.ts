@@ -18,6 +18,19 @@ export async function getCachedJsonData<T>(key: string): Promise<T | null> {
   }
 }
 
+export async function deleteCachedData(key: string): Promise<void> {
+  try {
+    await redis.del(key);
+  } catch (error) {
+    captureServerException(error as Error, undefined, {
+      function: "deleteCachedData",
+      key,
+      context: "cache_delete_error",
+    });
+    console.error("Cache delete error:", error);
+  }
+}
+
 export async function setCachedJsonData<T>(
   key: string,
   data: T,

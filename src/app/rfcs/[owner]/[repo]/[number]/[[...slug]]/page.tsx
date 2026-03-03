@@ -4,7 +4,7 @@ import { getCurrentUserLogin, getOctokit } from "@/lib/github";
 import RFCDetailClient from "./RFCDetailClient";
 
 interface PageProps {
-  params: Promise<{ owner: string; repo: string; number: string }>;
+  params: Promise<{ owner: string; repo: string; number: string; slug?: string[] }>;
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {

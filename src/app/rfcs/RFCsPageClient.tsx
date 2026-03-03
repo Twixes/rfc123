@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import type { RFC, RepoOption } from "@/lib/github";
 import RFCListSkeleton from "@/components/RFCListSkeleton";
+import { slugify } from "@/lib/slugify";
 import RepoSelector from "@/components/RepoSelector";
 import AccountDropdown from "@/components/AccountDropdown";
 
@@ -133,7 +134,7 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
           {rfcs?.map((rfc, index) => (
             <Link
               key={`${rfc.owner}/${rfc.repo}/${rfc.number}`}
-              href={`/rfcs/${rfc.owner}/${rfc.repo}/${rfc.number}`}
+              href={`/rfcs/${rfc.owner}/${rfc.repo}/${rfc.number}/${slugify(rfc.title)}`}
               className="group block border-b border-gray-20 px-4 sm:px-6 py-4 sm:py-5 transition-all hover:bg-gray-5"
               style={{
                 borderTop: index === 0 ? "1px solid var(--gray-20)" : "none",

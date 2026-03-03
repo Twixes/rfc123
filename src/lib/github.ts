@@ -594,31 +594,96 @@ export async function postComment(
     }
 }
 
-export async function getCurrentUserLogin(accessToken: string) {
+interface CurrentUser {
+    login: string
+    avatarUrl: string
+}
+
+export async function getCurrentUser(accessToken: string): Promise<CurrentUser> {
     try {
         const t0 = performance.now()
-        // Get current user's login (with caching)
-        const userCacheKey = `user:${accessToken}`
-        let currentUserLogin: string
-        const cachedLogin = await getCachedJsonData<string>(userCacheKey)
+        const userCacheKey = `user_info:${accessToken}`
+        const cached = await getCachedJsonData<CurrentUser>(userCacheKey)
 
-        if (cachedLogin) {
-            currentUserLogin = cachedLogin
-            console.log(`[getCurrentUserLogin] cache HIT, took ${(performance.now() - t0).toFixed(0)}ms`)
-        } else {
-            const octokit = await getOctokit(accessToken)
-            const { data: user } = await octokit.rest.users.getAuthenticated()
-            currentUserLogin = user.login
-            await setCachedJsonData(userCacheKey, currentUserLogin, 3600) // Cache for 1 hour
-            console.log(`[getCurrentUserLogin] cache MISS, fetched from GH, took ${(performance.now() - t0).toFixed(0)}ms`)
+        if (cached) {
+            console.log(`[getCurrentUser] cache HIT, took ${(performance.now() - t0).toFixed(0)}ms`)
+            return cached
         }
 
-        return currentUserLogin
+        // Also check the legacy login-only cache key to avoid an extra GH call during migration
+        const legacyCacheKey = `user:${accessToken}`
+        const cachedLogin = await getCachedJsonData<string>(legacyCacheKey)
+
+        const octokit = await getOctokit(accessToken)
+        const { data: user } = await octokit.rest.users.getAuthenticated()
+        const currentUser: CurrentUser = { login: user.login, avatarUrl: user.avatar_url }
+        await setCachedJsonData(userCacheKey, currentUser, 3600) // Cache for 1 hour
+        // Also update legacy key so getCurrentUserLogin callers benefit
+        if (!cachedLogin) {
+            await setCachedJsonData(legacyCacheKey, user.login, 3600)
+        }
+        console.log(`[getCurrentUser] cache MISS, fetched from GH, took ${(performance.now() - t0).toFixed(0)}ms`)
+        return currentUser
+    } catch (error) {
+        captureServerException(error as Error, undefined, {
+            function: "getCurrentUser",
+            context: "fetching_current_user",
+        })
+        throw error
+    }
+}
+
+export async function getCurrentUserLogin(accessToken: string): Promise<string> {
+    try {
+        const t0 = performance.now()
+        // Check the login-only cache key first (fast path)
+        const legacyCacheKey = `user:${accessToken}`
+        const cachedLogin = await getCachedJsonData<string>(legacyCacheKey)
+
+        if (cachedLogin) {
+            console.log(`[getCurrentUserLogin] cache HIT, took ${(performance.now() - t0).toFixed(0)}ms`)
+            return cachedLogin
+        }
+
+        // Fall through to getCurrentUser which caches both
+        const user = await getCurrentUser(accessToken)
+        console.log(`[getCurrentUserLogin] resolved via getCurrentUser, took ${(performance.now() - t0).toFixed(0)}ms`)
+        return user.login
     } catch (error) {
         captureServerException(error as Error, undefined, {
             function: "getCurrentUserLogin",
             context: "fetching_current_user",
         })
         throw error
+    }
+}
+
+export async function getRFCTitle(
+    accessToken: string,
+    owner: string,
+    repo: string,
+    prNumber: number,
+): Promise<string | null> {
+    try {
+        const t0 = performance.now()
+        // Try the same cache key that getRFCDetail uses
+        const contentCacheKey = `rfc:${owner}:${repo}:${prNumber}:content`
+        const cached = await getCachedJsonData<{ pr: { title: string } }>(contentCacheKey)
+        if (cached) {
+            console.log(`[getRFCTitle] cache HIT, took ${(performance.now() - t0).toFixed(0)}ms`)
+            return cached.pr.title
+        }
+
+        // Cache miss — fetch just the PR title
+        const octokit = await getOctokit(accessToken)
+        const { data: pr } = await octokit.rest.pulls.get({
+            owner,
+            repo,
+            pull_number: prNumber,
+        })
+        console.log(`[getRFCTitle] cache MISS, fetched from GH, took ${(performance.now() - t0).toFixed(0)}ms`)
+        return pr.title
+    } catch {
+        return null
     }
 }

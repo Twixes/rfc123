@@ -18,17 +18,17 @@ export function CommentMarkdown({ content }: CommentMarkdownProps) {
         rehypePlugins={[rehypeRaw, rehypeHighlight]}
         components={{
           h1: ({ children }) => (
-            <h1 className="mb-1 mt-2 text-base font-bold text-black">
+            <h1 className="mb-1 mt-2 text-base font-sans font-semibold text-foreground">
               {children}
             </h1>
           ),
           h2: ({ children }) => (
-            <h2 className="mb-1 mt-2 text-base font-bold text-black">
+            <h2 className="mb-1 mt-2 text-base font-sans font-semibold text-foreground">
               {children}
             </h2>
           ),
           h3: ({ children }) => (
-            <h3 className="mb-1 mt-2 text-sm font-bold text-black">
+            <h3 className="mb-1 mt-2 text-sm font-sans font-semibold text-foreground">
               {children}
             </h3>
           ),
@@ -38,8 +38,7 @@ export function CommentMarkdown({ content }: CommentMarkdownProps) {
           a: ({ href, children }) => (
             <a
               href={href}
-              className="border-b font-bold text-black transition-all hover:border-black"
-              style={{ borderBottomColor: "var(--cyan)" }}
+              className="text-foreground underline decoration-cyan underline-offset-2 transition-all hover:decoration-foreground"
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -62,7 +61,7 @@ export function CommentMarkdown({ content }: CommentMarkdownProps) {
             if (isInline) {
               return (
                 <code
-                  className="border border-black bg-gray-10 px-1 py-0.5 font-mono text-xs font-bold text-black"
+                  className="border border-gray-20 rounded-sm bg-gray-5 px-1 py-0.5 font-mono text-xs text-foreground"
                   {...props}
                 >
                   {children}
@@ -76,13 +75,13 @@ export function CommentMarkdown({ content }: CommentMarkdownProps) {
             );
           },
           pre: ({ children }) => (
-            <pre className="my-2 overflow-x-auto border-2 border-black bg-black p-2 text-xs">
+            <pre className="my-2 overflow-x-auto border border-gray-30 rounded bg-gray-90 p-2 text-xs">
               {children}
             </pre>
           ),
           blockquote: ({ children }) => (
             <blockquote
-              className="my-2 border-l-2 bg-gray-10 py-1 pl-2 pr-2 text-sm italic text-gray-90"
+              className="my-2 border-l-2 bg-gray-5 py-1 pl-2 pr-2 text-sm italic text-gray-70"
               style={{ borderLeftColor: "var(--magenta)" }}
             >
               {children}
@@ -90,25 +89,25 @@ export function CommentMarkdown({ content }: CommentMarkdownProps) {
           ),
           table: ({ children }) => (
             <div className="my-2 overflow-x-auto">
-              <table className="min-w-full border border-black text-xs">
+              <table className="min-w-full border border-gray-20 text-xs">
                 {children}
               </table>
             </div>
           ),
           thead: ({ children }) => (
-            <thead className="bg-black text-white">{children}</thead>
+            <thead className="bg-gray-10">{children}</thead>
           ),
           tbody: ({ children }) => (
-            <tbody className="divide-y divide-black bg-white">{children}</tbody>
+            <tbody className="divide-y divide-gray-20 bg-surface">{children}</tbody>
           ),
-          tr: ({ children }) => <tr className="border-black">{children}</tr>,
+          tr: ({ children }) => <tr className="border-gray-20">{children}</tr>,
           th: ({ children }) => (
-            <th className="border border-black px-2 py-1 text-left text-xs font-bold text-white">
+            <th className="border border-gray-20 px-2 py-1 text-left text-xs font-medium text-foreground">
               {children}
             </th>
           ),
           td: ({ children }) => (
-            <td className="border border-black px-2 py-1 text-xs text-gray-90">
+            <td className="border border-gray-20 px-2 py-1 text-xs text-gray-90">
               {children}
             </td>
           ),

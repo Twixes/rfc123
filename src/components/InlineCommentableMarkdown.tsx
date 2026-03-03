@@ -129,7 +129,8 @@ export function InlineCommentableMarkdown({
 
     return {
       ...baseStyles,
-      backgroundColor: "var(--gray-10)",
+      backgroundColor: "var(--yellow-light)",
+      borderRadius: "2px",
       paddingLeft: "0.5rem",
       marginLeft: "-0.5rem",
     };
@@ -168,9 +169,6 @@ export function InlineCommentableMarkdown({
   }, [comments]);
 
   // Calculate all comment box positions to prevent overlaps
-  // We need to calculate all positions in a single pass because of cascading effects:
-  // if box A is pushed down, it might force box B to move, which might force box C to move, etc.
-  // This effect runs after render to ensure we have access to the actual DOM element heights.
   useEffect(() => {
     const positions = new Map<number, number>();
 
@@ -202,9 +200,6 @@ export function InlineCommentableMarkdown({
     // Sort by line number to process top-to-bottom
     boxesToPosition.sort((a, b) => a.lineNum - b.lineNum);
 
-    // Track the bottom edge of the last positioned box
-    // This is the key insight: as we process boxes in order, we track where the previous
-    // box ended, and if the next box would overlap, we push it down below the previous one.
     let lastBottom = 0;
 
     for (const { lineNum, ref, isActive } of boxesToPosition) {
@@ -216,12 +211,9 @@ export function InlineCommentableMarkdown({
 
       // Update lastBottom for the next iteration
       if (ref) {
-        // Use the actual rendered height of the box, which accounts for all comments inside
         const boxHeight = ref.offsetHeight;
         lastBottom = adjustedOffset + boxHeight + 8; // 8px gap between boxes
       } else {
-        // If ref isn't available yet, estimate a minimum height to prevent overlap
-        // This happens during initial render before refs are set
         lastBottom = adjustedOffset + 100; // Minimum estimated height
       }
     }
@@ -345,7 +337,6 @@ export function InlineCommentableMarkdown({
 
   // Calculate the minimum height needed for the main content area to accommodate all comments
   const minContentHeight = useMemo(() => {
-    // Find the maximum bottom position among all comment boxes
     let maxBottom = 0;
     for (const [key, position] of commentPositions.entries()) {
       const ref = commentBoxRefs.current.get(key);
@@ -404,24 +395,24 @@ export function InlineCommentableMarkdown({
                 onMouseLeave={() => setHoveredLineIndex(null)}
                 aria-label={`Add comment to line ${lineNumber}`}
               >
-                <div className="hidden sm:flex h-5 w-5 items-center justify-center border-[1.5px] border-black bg-white opacity-0 transition-all group-hover:opacity-100 group-hover:bg-black group-hover:text-white">
+                <div className="hidden sm:flex h-5 w-5 items-center justify-center rounded border border-gray-30 bg-surface opacity-0 transition-all group-hover:opacity-100 group-hover:bg-gray-5">
                   <svg
-                    className="h-3 w-3"
+                    className="h-3 w-3 text-gray-50"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
                   >
                     <title>Add comment</title>
                     <path
-                      strokeLinecap="square"
-                      strokeLinejoin="miter"
-                      strokeWidth={3}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
                       d="M12 4v16m8-8H4"
                     />
                   </svg>
                 </div>
                 <span
-                  className="font-mono text-[10px] sm:text-xs font-bold transition-opacity"
+                  className="font-mono text-[10px] sm:text-xs transition-opacity"
                   style={{
                     color: hasComments ? "var(--magenta)" : "var(--gray-50)",
                   }}
@@ -433,8 +424,7 @@ export function InlineCommentableMarkdown({
           })}
         </div>
 
-        {/* Full markdown content. It's important that we render the Markdown as a whole, so that multi-line features like tables work correctly.
-                Even though this makes calculating line positions harder. */}
+        {/* Full markdown content */}
         <div
           ref={markdownRef}
           className="prose prose-zinc max-w-none flex-1 min-w-0 overflow-x-auto relative"
@@ -451,7 +441,7 @@ export function InlineCommentableMarkdown({
                 const lineNumber = (props as any)["data-line-element"];
                 return (
                   <h1
-                    className="mb-2 mt-6 text-3xl font-bold tracking-tight text-black"
+                    className="mb-2 mt-6 text-3xl font-serif text-foreground"
                     style={getHoverStyles(hovered, lineNumber)}
                     onClick={() => lineNumber && handleLineClick(lineNumber)}
                     onMouseEnter={() =>
@@ -469,7 +459,7 @@ export function InlineCommentableMarkdown({
                 const lineNumber = (props as any)["data-line-element"];
                 return (
                   <h2
-                    className="mb-2 mt-5 text-2xl font-bold tracking-tight text-black"
+                    className="mb-2 mt-5 text-2xl font-serif text-foreground"
                     style={getHoverStyles(hovered, lineNumber)}
                     onClick={() => lineNumber && handleLineClick(lineNumber)}
                     onMouseEnter={() =>
@@ -487,7 +477,7 @@ export function InlineCommentableMarkdown({
                 const lineNumber = (props as any)["data-line-element"];
                 return (
                   <h3
-                    className="mb-1 mt-4 text-xl font-bold tracking-tight text-black"
+                    className="mb-1 mt-4 text-xl font-serif text-foreground"
                     style={getHoverStyles(hovered, lineNumber)}
                     onClick={() => lineNumber && handleLineClick(lineNumber)}
                     onMouseEnter={() =>
@@ -521,8 +511,7 @@ export function InlineCommentableMarkdown({
               a: ({ href, children }) => (
                 <a
                   href={href}
-                  className="border-b-2 font-bold text-black transition-all hover:border-black"
-                  style={{ borderBottomColor: "var(--cyan)" }}
+                  className="text-foreground underline decoration-cyan underline-offset-2 transition-all hover:decoration-foreground"
                   target="_blank"
                   rel="noopener noreferrer"
                 >
@@ -588,7 +577,7 @@ export function InlineCommentableMarkdown({
                 if (isInline) {
                   return (
                     <code
-                      className="border border-black px-1.5 py-0.5 font-mono text-sm font-bold text-black"
+                      className="border border-gray-20 rounded-sm bg-gray-5 px-1.5 py-0.5 font-mono text-sm text-foreground"
                       {...props}
                     >
                       {children}
@@ -606,7 +595,7 @@ export function InlineCommentableMarkdown({
                 const lineNumber = (props as any)["data-line-element"];
                 return (
                   <pre
-                    className="my-4 max-w-full overflow-x-auto border-2 whitespace-pre-wrap border-black bg-black p-4"
+                    className="my-4 max-w-full overflow-x-auto border border-gray-30 rounded whitespace-pre-wrap bg-gray-90 p-4"
                     style={getHoverStyles(hovered, lineNumber)}
                     onClick={() => lineNumber && handleLineClick(lineNumber)}
                     onMouseEnter={() =>
@@ -625,7 +614,7 @@ export function InlineCommentableMarkdown({
                 const hoverStyles = getHoverStyles(hovered, lineNumber);
                 return (
                   <blockquote
-                    className="my-4 border-l-[3px] bg-gray-10 py-2 pl-4 pr-4 font-medium italic text-gray-90"
+                    className="my-4 border-l-2 bg-gray-5 py-2 pl-4 pr-4 italic text-gray-70"
                     style={{
                       borderLeftColor: hovered
                         ? "var(--yellow)"
@@ -649,7 +638,7 @@ export function InlineCommentableMarkdown({
                 return (
                   <div className="my-4 overflow-x-auto">
                     <table
-                      className="min-w-full border-2 border-black"
+                      className="min-w-full border border-gray-20 rounded"
                       style={getHoverStyles(hovered, lineNumber)}
                       onClick={() => lineNumber && handleLineClick(lineNumber)}
                       onMouseEnter={() =>
@@ -664,12 +653,12 @@ export function InlineCommentableMarkdown({
                 );
               },
               thead: ({ children, ...props }) => (
-                <thead className="bg-black text-white" {...props}>
+                <thead className="bg-gray-10" {...props}>
                   {children}
                 </thead>
               ),
               tbody: ({ children, ...props }) => (
-                <tbody className="divide-y divide-black bg-white" {...props}>
+                <tbody className="divide-y divide-gray-20 bg-surface" {...props}>
                   {children}
                 </tbody>
               ),
@@ -678,7 +667,7 @@ export function InlineCommentableMarkdown({
                 const lineNumber = (props as any)["data-line-element"];
                 return (
                   <tr
-                    className="border-black"
+                    className="border-gray-20"
                     style={getHoverStyles(hovered, lineNumber)}
                     onClick={() => lineNumber && handleLineClick(lineNumber)}
                     onMouseEnter={() =>
@@ -696,7 +685,7 @@ export function InlineCommentableMarkdown({
                 const lineNumber = (props as any)["data-line-element"];
                 return (
                   <th
-                    className="border border-black px-4 py-2 text-left text-sm font-bold tracking-wide text-white"
+                    className="border border-gray-20 px-4 py-2 text-left text-sm font-medium text-foreground"
                     style={getHoverStyles(hovered, lineNumber)}
                     onClick={() => lineNumber && handleLineClick(lineNumber)}
                     onMouseEnter={() =>
@@ -714,7 +703,7 @@ export function InlineCommentableMarkdown({
                 const lineNumber = (props as any)["data-line-element"];
                 return (
                   <td
-                    className="border border-black px-4 py-2 text-sm text-gray-90"
+                    className="border border-gray-20 px-4 py-2 text-sm text-gray-90"
                     style={getHoverStyles(hovered, lineNumber)}
                     onClick={() => lineNumber && handleLineClick(lineNumber)}
                     onMouseEnter={() =>
@@ -732,10 +721,10 @@ export function InlineCommentableMarkdown({
             {content}
           </ReactMarkdown>
         </div>
-        <hr className="absolute -bottom-3 left-6 right-0 border-t-3 border-dotted" />
+        <hr className="absolute -bottom-3 left-6 right-0 border-t border-dotted border-gray-30" />
       </div>
 
-      {/* Comments sidebar - full width on mobile, fixed width on desktop */}
+      {/* Comments sidebar */}
       <div className="relative w-full lg:w-auto">
         {activeLineIndex !== null && (
           <LineCommentBox
@@ -810,7 +799,7 @@ export function InlineCommentableMarkdown({
         {/* Empty state */}
         {commentsByLine.size === 0 && activeLineIndex === null && (
           <div
-            className="lg:absolute top-0 border-2 border-dashed border-black bg-gray-10 p-4 sm:p-6 text-center w-full lg:w-[400px]"
+            className="lg:absolute top-0 border border-dashed border-gray-30 rounded-md bg-gray-5 p-4 sm:p-6 text-center w-full lg:w-[400px]"
           >
             <svg
               className="mx-auto h-8 w-8 text-gray-30"
@@ -819,16 +808,16 @@ export function InlineCommentableMarkdown({
               stroke="currentColor"
             >
               <path
-                strokeLinecap="square"
-                strokeLinejoin="miter"
-                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
                 d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"
               />
             </svg>
-            <p className="mt-3 text-sm font-bold tracking-wide text-gray-50">
+            <p className="mt-3 text-sm font-medium text-gray-50">
               No comments yet
             </p>
-            <p className="mt-1 text-xs font-medium text-gray-50">
+            <p className="mt-1 text-xs text-gray-50">
               Click any line to add a comment
             </p>
           </div>
@@ -838,7 +827,7 @@ export function InlineCommentableMarkdown({
       {/* Selection tooltip */}
       <div
         ref={tooltipRef}
-        className="pointer-events-none fixed z-50 border-2 border-black bg-white px-3 py-2 text-xs font-bold tracking-wide text-black shadow-lg"
+        className="pointer-events-none fixed z-50 border border-gray-20 rounded-md bg-surface px-3 py-2 text-xs font-medium text-foreground shadow-md"
         style={{
           display: "none",
           transform: "translate(-50%, -100%)",

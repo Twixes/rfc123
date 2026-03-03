@@ -39,7 +39,7 @@ export function ExistingLineComments({
   return (
     <div
       ref={commentBoxRef}
-      className="lg:absolute static border-2 border-black bg-white w-full lg:w-[400px] mb-4 lg:mb-0"
+      className="lg:absolute static border border-gray-20 rounded-md shadow-sm bg-surface w-full lg:w-[400px] mb-4 lg:mb-0"
       style={{
         top: `${position}px`,
       }}
@@ -49,7 +49,7 @@ export function ExistingLineComments({
       <div className="flex items-center justify-between px-3 sm:p-4">
         <a
           href={`#line-${lineNumber}`}
-          className="block font-mono text-xs font-bold tracking-wide transition-opacity hover:opacity-70"
+          className="block text-xs font-medium tracking-wide transition-opacity hover:opacity-70"
           style={{ color: "var(--magenta)" }}
           onClick={(e) => {
             if (isCollapsed) {
@@ -68,7 +68,7 @@ export function ExistingLineComments({
         <button
           type="button"
           onClick={onToggleCollapse}
-          className="border-[1.5px] border-black bg-white p-1 transition-all hover:bg-black hover:text-white"
+          className="rounded border border-gray-20 bg-surface p-1 transition-all hover:bg-gray-5"
           aria-label={isCollapsed ? "Expand thread" : "Collapse thread"}
         >
           <svg
@@ -79,9 +79,9 @@ export function ExistingLineComments({
           >
             <title>{isCollapsed ? "Expand" : "Collapse"}</title>
             <path
-              strokeLinecap="square"
-              strokeLinejoin="miter"
-              strokeWidth={3}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
               d={isCollapsed ? "M19 9l-7 7-7-7" : "M5 15l7-7 7 7"}
             />
           </svg>
@@ -94,20 +94,20 @@ export function ExistingLineComments({
             {comments.map((comment) => (
               <div
                 key={comment.id}
-                className="border-l-2 border-neutral-300 pl-2"
+                className="border-l border-gray-20 pl-2"
               >
                 <div className="mb-2 flex items-center gap-2">
-                  <div className="h-4 w-4 border-[1.5px] border-black">
+                  <div className="h-4 w-4 rounded-full overflow-hidden border border-gray-20">
                     <img
                       src={comment.userAvatar}
                       alt={comment.user}
                       className="h-full w-full"
                     />
                   </div>
-                  <span className="text-xs font-bold text-black">
+                  <span className="text-xs font-medium text-foreground">
                     {comment.user}
                   </span>
-                  <span className="text-xs font-medium text-gray-50">
+                  <span className="text-xs text-gray-50">
                     {new Date(comment.createdAt).toLocaleDateString("en-US", {
                       month: "short",
                       day: "numeric",
@@ -124,7 +124,7 @@ export function ExistingLineComments({
                 value={replyText}
                 onChange={(e) => onReplyTextChange(e.target.value)}
                 placeholder="Add a comment..."
-                className="w-full resize-none border-2 border-black bg-white px-3 py-2 text-sm font-medium text-black placeholder-gray-50 focus:outline-none"
+                className="w-full resize-none border border-gray-30 rounded-sm bg-surface px-3 py-2 text-sm text-foreground placeholder-gray-50 focus:outline-none focus:ring-2 focus:ring-cyan focus:border-transparent"
                 rows={4}
                 autoFocus
                 disabled={isSubmitting}
@@ -138,7 +138,7 @@ export function ExistingLineComments({
                 }}
               />
               <div className="mt-3 flex items-center justify-between">
-                <span className="text-xs font-medium text-gray-50">
+                <span className="text-xs text-gray-50">
                   ⌘+Enter to submit
                 </span>
                 <div className="flex gap-2">
@@ -146,7 +146,7 @@ export function ExistingLineComments({
                     type="button"
                     onClick={onCancelReply}
                     disabled={isSubmitting}
-                    className="border-2 border-black bg-white px-3 py-1.5 text-xs font-bold tracking-wide text-black transition-all hover:bg-black hover:text-white disabled:opacity-30"
+                    className="rounded-md border border-gray-20 bg-surface px-3 py-1.5 text-xs font-medium text-foreground transition-all hover:bg-gray-5 disabled:opacity-30"
                   >
                     Cancel
                   </button>
@@ -154,7 +154,7 @@ export function ExistingLineComments({
                     type="button"
                     onClick={onSubmitReply}
                     disabled={!replyText.trim() || isSubmitting}
-                    className="border-2 border-black bg-black px-3 py-1.5 text-xs font-bold tracking-wide text-white transition-all hover:bg-white hover:text-black disabled:cursor-not-allowed disabled:opacity-30"
+                    className="rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-surface transition-all hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-30"
                   >
                     {isSubmitting ? "Posting..." : "Comment"}
                   </button>
@@ -166,7 +166,7 @@ export function ExistingLineComments({
               <button
                 type="button"
                 onClick={onStartReply}
-                className="w-full border-[1.5px] border-black bg-white px-3 py-1.5 text-xs font-bold tracking-wide text-black transition-all hover:bg-black hover:text-white"
+                className="w-full rounded-md border border-gray-20 bg-surface px-3 py-1.5 text-xs font-medium text-foreground transition-all hover:bg-gray-5"
               >
                 Add comment
               </button>

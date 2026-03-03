@@ -41,15 +41,15 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
       <div className="mx-auto min-h-screen max-w-240 px-4 sm:px-8 py-6 sm:py-12">
         <header className="mb-8 sm:mb-12 flex flex-col sm:flex-row items-start sm:items-start justify-between gap-4">
           <div>
-            <h1 className="text-3xl sm:text-5xl font-bold uppercase tracking-tight text-black">
-              <Link href="/" className="hover:underline">
+            <h1 className="text-3xl sm:text-5xl font-serif font-normal text-foreground">
+              <Link href="/" className="hover:opacity-70 transition-opacity">
                 RFC123
               </Link>
             </h1>
           </div>
           <div className="flex items-center gap-3 sm:gap-4">
             {session?.user?.image && (
-              <div className="h-8 w-8 sm:h-10 sm:w-10 border-2 border-black">
+              <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-full overflow-hidden border border-gray-20">
                 <img
                   src={session.user.image}
                   alt={session.user.name || "User"}
@@ -59,7 +59,7 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
             )}
             <a
               href="/api/auth/signout"
-              className="border-2 border-black bg-white px-3 sm:px-4 py-2 text-xs sm:text-sm font-bold uppercase tracking-wide text-black transition-all hover:bg-black hover:text-white inline-block"
+              className="rounded-md border border-gray-20 bg-surface px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-foreground transition-all hover:bg-gray-5 inline-block"
             >
               Log out
             </a>
@@ -74,15 +74,15 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
     <div className="mx-auto min-h-screen max-w-240 px-4 sm:px-8 py-6 sm:py-12">
       <header className="mb-8 sm:mb-12 flex flex-col sm:flex-row items-start sm:items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl sm:text-5xl font-bold uppercase tracking-tight text-black">
-            <Link href="/" className="hover:underline">
+          <h1 className="text-3xl sm:text-5xl font-serif font-normal text-foreground">
+            <Link href="/" className="hover:opacity-70 transition-opacity">
               RFC123
             </Link>
           </h1>
         </div>
         <div className="flex items-center gap-3 sm:gap-4">
           {session?.user?.image && (
-            <div className="h-8 w-8 sm:h-10 sm:w-10 border-2 border-black">
+            <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-full overflow-hidden border border-gray-20">
               <img
                 src={session.user.image}
                 alt={session.user.name || "User"}
@@ -92,7 +92,7 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
           )}
           <a
             href="/api/auth/signout"
-            className="border-2 border-black bg-white px-3 sm:px-4 py-2 text-xs sm:text-sm font-bold uppercase tracking-wide text-black transition-all hover:bg-black hover:text-white inline-block"
+            className="rounded-md border border-gray-20 bg-surface px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-foreground transition-all hover:bg-gray-5 inline-block"
           >
             Log out
           </a>
@@ -104,34 +104,34 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
           <Link
             key={`${rfc.owner}/${rfc.repo}/${rfc.number}`}
             href={`/rfcs/${rfc.owner}/${rfc.repo}/${rfc.number}`}
-            className="group block border-b-2 border-black px-4 sm:px-6 py-4 sm:py-5 transition-all hover:bg-gray-10"
+            className="group block border-b border-gray-20 px-4 sm:px-6 py-4 sm:py-5 transition-all hover:bg-gray-5"
             style={{
-              borderTop: index === 0 ? "2px solid black" : "none",
+              borderTop: index === 0 ? "1px solid var(--gray-20)" : "none",
               backgroundColor: rfc.reviewRequested
-                ? "var(--yellow)"
-                : "white",
+                ? "var(--yellow-light)"
+                : undefined,
             }}
           >
             <div className="flex items-start justify-between gap-4 sm:gap-6">
               <div className="flex-1 min-w-0">
                 <div className="mb-2 flex flex-wrap items-baseline gap-2 sm:gap-3">
-                  <h2 className="text-base sm:text-xl font-bold tracking-tight text-black break-words">
+                  <h2 className="text-base sm:text-xl font-medium text-foreground break-words font-sans">
                     {rfc.title}
                   </h2>
                   {rfc.reviewRequested && (
                     <span
-                      className="border-2 px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-bold uppercase tracking-wider flex-shrink-0"
+                      className="border rounded-sm px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium uppercase tracking-wider flex-shrink-0"
                       style={{
                         borderColor: "var(--magenta)",
-                        backgroundColor: "var(--magenta)",
-                        color: "black",
+                        backgroundColor: "var(--magenta-light)",
+                        color: "var(--foreground)",
                       }}
                     >
                       Review Requested
                     </span>
                   )}
                   <span
-                    className="border-2 px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-bold uppercase tracking-wider flex-shrink-0"
+                    className="border rounded-sm px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium uppercase tracking-wider flex-shrink-0"
                     style={{
                       borderColor:
                         rfc.status === "open"
@@ -141,22 +141,22 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
                             : "var(--gray-30)",
                       backgroundColor:
                         rfc.status === "open"
-                          ? "var(--cyan)"
+                          ? "var(--cyan-light)"
                           : rfc.status === "merged"
-                            ? "var(--yellow)"
-                            : "var(--gray-10)",
-                      color: "black",
+                            ? "var(--yellow-light)"
+                            : "var(--gray-5)",
+                      color: "var(--foreground)",
                     }}
                   >
                     {rfc.status}
                   </span>
                 </div>
-                <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-[10px] sm:text-xs font-medium tracking-wide text-gray-70">
-                  <span className="font-mono font-bold">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-[10px] sm:text-xs text-gray-50">
+                  <span className="font-medium">
                     {rfc.owner}/{rfc.repo}
                   </span>
                   <div className="flex items-center gap-1.5 sm:gap-2">
-                    <div className="h-4 w-4 sm:h-5 sm:w-5 border-2 border-black">
+                    <div className="h-4 w-4 sm:h-5 sm:w-5 rounded-full overflow-hidden border border-gray-20">
                       <img
                         src={rfc.authorAvatar}
                         alt={rfc.author}
@@ -165,7 +165,7 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
                     </div>
                     <span className="truncate max-w-24 sm:max-w-none">{rfc.author}</span>
                   </div>
-                  <span className="font-mono">#{rfc.number}</span>
+                  <span>#{rfc.number}</span>
                   <span className="hidden sm:inline">
                     {new Date(rfc.createdAt).toLocaleDateString("en-US", {
                       month: "short",
@@ -174,12 +174,12 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
                     })}
                   </span>
                   {rfc.inlineCommentCount > 0 && (
-                    <span className="border-l-2 border-gray-30 pl-2 sm:pl-4">
+                    <span className="border-l border-gray-30 pl-2 sm:pl-4">
                       {rfc.inlineCommentCount} inline
                     </span>
                   )}
                   {rfc.regularCommentCount > 0 && (
-                    <span className="border-l-2 border-gray-30 pl-2 sm:pl-4">
+                    <span className="border-l border-gray-30 pl-2 sm:pl-4">
                       {rfc.regularCommentCount} general
                     </span>
                   )}

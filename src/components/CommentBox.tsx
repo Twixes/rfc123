@@ -59,7 +59,7 @@ export function CommentBox({
         value={comment}
         onChange={(e) => setComment(e.target.value)}
         placeholder="Add a comment..."
-        className="w-full border-2 border-black bg-white px-3 py-2 text-sm font-medium text-black placeholder-gray-50 focus:outline-none"
+        className="w-full border border-gray-30 rounded-sm bg-surface px-3 py-2 text-sm text-foreground placeholder-gray-50 focus:outline-none focus:ring-2 focus:ring-cyan focus:border-transparent"
         rows={4}
         disabled={isSubmitting}
       />
@@ -67,7 +67,7 @@ export function CommentBox({
         <button
           type="submit"
           disabled={!comment.trim() || isSubmitting}
-          className="border-2 border-black bg-black px-4 py-2 text-sm font-bold uppercase tracking-wide text-white transition-all hover:bg-white hover:text-black disabled:cursor-not-allowed disabled:opacity-30"
+          className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-surface transition-all hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-30"
         >
           {isSubmitting ? "Posting..." : "Post general comment"}
         </button>
@@ -76,7 +76,7 @@ export function CommentBox({
             type="button"
             onClick={onCancel}
             disabled={isSubmitting}
-            className="border-2 border-black bg-white px-4 py-2 text-sm font-bold uppercase tracking-wide text-black transition-all hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+            className="rounded-md border border-gray-20 bg-surface px-4 py-2 text-sm font-medium text-foreground transition-all hover:bg-gray-5 disabled:cursor-not-allowed disabled:opacity-30"
           >
             Cancel
           </button>

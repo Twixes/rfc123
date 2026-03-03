@@ -19,27 +19,27 @@ export function GeneralCommentsSection({
 }: GeneralCommentsSectionProps) {
   return (
     <div className="mt-8">
-      <h2 className="mb-4 border-b-[3px] border-black pb-2 text-2xl font-bold text-black">
+      <h2 className="mb-4 border-b border-gray-20 pb-2 text-2xl font-serif text-foreground">
         General Comments
       </h2>
       <div className="space-y-0">
         {comments.map((comment) => (
           <div
             key={comment.id}
-            className="border-b-2 border-black bg-white p-6"
+            className="border-b border-gray-20 bg-surface p-6"
           >
             <div className="mb-3 flex items-center gap-2">
-              <div className="h-6 w-6 border-2 border-black">
+              <div className="h-6 w-6 rounded-full overflow-hidden border border-gray-20">
                 <img
                   src={comment.userAvatar}
                   alt={comment.user}
                   className="h-full w-full"
                 />
               </div>
-              <span className="text-sm font-bold text-black">
+              <span className="text-sm font-medium text-foreground">
                 {comment.user}
               </span>
-              <span className="text-xs font-medium uppercase tracking-wide text-gray-50">
+              <span className="text-xs text-gray-50">
                 commented on{" "}
                 {new Date(comment.createdAt).toLocaleDateString("en-US", {
                   month: "short",
@@ -51,7 +51,7 @@ export function GeneralCommentsSection({
             <CommentMarkdown content={comment.body} />
           </div>
         ))}
-        <div className="border-2 border-black bg-white p-6">
+        <div className="border border-gray-20 rounded-md bg-surface p-6">
           <CommentBox
             owner={owner}
             repo={repo}

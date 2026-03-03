@@ -18,17 +18,17 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
         rehypePlugins={[rehypeRaw, rehypeHighlight]}
         components={{
           h1: ({ children }) => (
-            <h1 className="mb-2 mt-6 text-3xl font-bold uppercase tracking-tight text-black">
+            <h1 className="mb-2 mt-6 text-3xl font-serif text-foreground">
               {children}
             </h1>
           ),
           h2: ({ children }) => (
-            <h2 className="mb-2 mt-5 text-2xl font-bold uppercase tracking-tight text-black">
+            <h2 className="mb-2 mt-5 text-2xl font-serif text-foreground">
               {children}
             </h2>
           ),
           h3: ({ children }) => (
-            <h3 className="mb-1 mt-4 text-xl font-bold uppercase tracking-tight text-black">
+            <h3 className="mb-1 mt-4 text-xl font-serif text-foreground">
               {children}
             </h3>
           ),
@@ -38,8 +38,7 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
           a: ({ href, children }) => (
             <a
               href={href}
-              className="border-b-2 font-bold text-black transition-all hover:border-black"
-              style={{ borderBottomColor: "var(--cyan)" }}
+              className="text-foreground underline decoration-cyan underline-offset-2 transition-all hover:decoration-foreground"
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -47,7 +46,7 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
             </a>
           ),
           ul: ({ children }) => (
-            <ul className="my-2 ml-6 list-square space-y-1 text-gray-90">
+            <ul className="my-2 ml-6 list-disc space-y-1 text-gray-90">
               {children}
             </ul>
           ),
@@ -62,7 +61,7 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
             if (isInline) {
               return (
                 <code
-                  className="border border-black bg-gray-10 px-1.5 py-0.5 font-mono text-sm font-bold text-black"
+                  className="border border-gray-20 rounded-sm bg-gray-5 px-1.5 py-0.5 font-mono text-sm text-foreground"
                   {...props}
                 >
                   {children}
@@ -76,13 +75,13 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
             );
           },
           pre: ({ children }) => (
-            <pre className="my-4 overflow-x-auto border-2 border-black bg-black p-4">
+            <pre className="my-4 overflow-x-auto border border-gray-30 rounded bg-gray-90 p-4">
               {children}
             </pre>
           ),
           blockquote: ({ children }) => (
             <blockquote
-              className="my-4 border-l-[3px] bg-gray-10 py-2 pl-4 pr-4 font-medium italic text-gray-90"
+              className="my-4 border-l-2 bg-gray-5 py-2 pl-4 pr-4 italic text-gray-70"
               style={{ borderLeftColor: "var(--magenta)" }}
             >
               {children}
@@ -90,25 +89,25 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
           ),
           table: ({ children }) => (
             <div className="my-4 overflow-x-auto">
-              <table className="min-w-full border-2 border-black">
+              <table className="min-w-full border border-gray-20 rounded">
                 {children}
               </table>
             </div>
           ),
           thead: ({ children }) => (
-            <thead className="bg-black text-white">{children}</thead>
+            <thead className="bg-gray-10">{children}</thead>
           ),
           tbody: ({ children }) => (
-            <tbody className="divide-y divide-black bg-white">{children}</tbody>
+            <tbody className="divide-y divide-gray-20 bg-surface">{children}</tbody>
           ),
-          tr: ({ children }) => <tr className="border-black">{children}</tr>,
+          tr: ({ children }) => <tr className="border-gray-20">{children}</tr>,
           th: ({ children }) => (
-            <th className="border border-black px-4 py-2 text-left text-sm font-bold uppercase tracking-wide text-white">
+            <th className="border border-gray-20 px-4 py-2 text-left text-sm font-medium text-foreground">
               {children}
             </th>
           ),
           td: ({ children }) => (
-            <td className="border border-black px-4 py-2 text-sm text-gray-90">
+            <td className="border border-gray-20 px-4 py-2 text-sm text-gray-90">
               {children}
             </td>
           ),

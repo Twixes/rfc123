@@ -14,16 +14,16 @@ export default async function Loading() {
     <div className="mx-auto min-h-screen max-w-240 px-8 py-12">
       <header className="mb-12 flex items-start justify-between">
         <div>
-          <h1 className="text-5xl font-bold uppercase tracking-tight text-black">
-            <Link href="/" className="hover:underline">
+          <h1 className="text-5xl font-serif font-normal text-foreground">
+            <Link href="/" className="hover:opacity-70 transition-opacity">
               RFC123
             </Link>
           </h1>
-          <div className="mt-3 h-5 w-48 animate-pulse bg-gray-20" />
+          <div className="mt-3 h-5 w-48 animate-pulse rounded bg-gray-20" />
         </div>
         <div className="flex items-center gap-4">
           {session?.user?.image && (
-            <div className="h-10 w-10 border-2 border-black">
+            <div className="h-10 w-10 rounded-full overflow-hidden border border-gray-20">
               <img
                 src={session.user.image}
                 alt={session.user.name || "User"}
@@ -40,7 +40,7 @@ export default async function Loading() {
           >
             <button
               type="submit"
-              className="border-2 border-black bg-white px-4 py-2 text-sm font-bold uppercase tracking-wide text-black transition-all hover:bg-black hover:text-white"
+              className="rounded-md border border-gray-20 bg-surface px-4 py-2 text-sm font-medium text-foreground transition-all hover:bg-gray-5"
             >
               Log out
             </button>

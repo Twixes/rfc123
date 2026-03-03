@@ -49,7 +49,7 @@ export default function RepoSelector({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="text-sm font-medium tracking-wide text-gray-50 hover:text-black transition-colors flex items-center gap-2"
+        className="text-sm font-medium text-gray-50 hover:text-foreground transition-colors flex items-center gap-2"
       >
         {currentRepo.owner}/{currentRepo.name}
         <svg
@@ -68,21 +68,21 @@ export default function RepoSelector({
       </button>
 
       {isOpen && (
-        <div className="absolute top-full left-0 mt-2 w-80 bg-white border-4 border-black shadow-lg z-50">
-          <div className="p-3 border-b-2 border-black">
+        <div className="absolute top-full left-0 mt-2 w-80 bg-surface border border-gray-20 rounded-md shadow-md z-50">
+          <div className="p-3 border-b border-gray-20">
             <input
               ref={inputRef}
               type="text"
               placeholder="Search repositories..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full border-2 border-black px-3 py-2 text-sm focus:outline-none focus:border-cyan"
+              className="w-full border border-gray-30 rounded-sm px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan focus:border-transparent"
             />
           </div>
 
           <div className="max-h-80 overflow-y-auto">
             {filteredRepos.length === 0 ? (
-              <div className="p-4 text-center text-sm text-gray-500">
+              <div className="p-4 text-center text-sm text-gray-50">
                 No repositories found
               </div>
             ) : (
@@ -95,10 +95,10 @@ export default function RepoSelector({
                     setIsOpen(false);
                     setSearchQuery("");
                   }}
-                  className={`w-full text-left px-4 py-3 text-sm font-mono border-b-2 border-black hover:bg-yellow transition-colors ${
+                  className={`w-full text-left px-4 py-3 text-sm border-b border-gray-20 last:border-b-0 hover:bg-yellow-light transition-colors ${
                     repo.owner === currentRepo.owner &&
                     repo.name === currentRepo.name
-                      ? "bg-gray-10 font-bold"
+                      ? "bg-gray-5 font-medium"
                       : ""
                   }`}
                 >

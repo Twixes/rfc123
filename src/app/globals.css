@@ -3,53 +3,63 @@
 
 @supports (color: color(display-p3 1 1 1)) {
   :root {
-    /* Black & White base - pure print aesthetic */
-    --background: color(display-p3 1 1 1);
-    --foreground: color(display-p3 0 0 0);
+    /* Neutral paper base */
+    --background: color(display-p3 0.976 0.976 0.98);
+    --foreground: color(display-p3 0.1 0.1 0.12);
     --surface: color(display-p3 1 1 1);
 
-    /* CMYK-inspired P3 accent colors - maximum vibrancy */
-    --cyan: color(display-p3 0 0.9 1);
-    --magenta: color(display-p3 1 0 0.9);
-    --yellow: color(display-p3 1 0.95 0);
-    --key-black: color(display-p3 0 0 0);
+    /* Muted accent colors */
+    --cyan: color(display-p3 0.33 0.6 0.69);
+    --cyan-light: color(display-p3 0.92 0.96 0.97);
+    --magenta: color(display-p3 0.72 0.32 0.46);
+    --magenta-light: color(display-p3 0.96 0.92 0.94);
+    --yellow: color(display-p3 0.88 0.76 0.27);
+    --yellow-light: color(display-p3 0.98 0.97 0.92);
+    --key-black: color(display-p3 0.1 0.1 0.12);
 
-    /* Grayscale for depth - print tones */
-    --gray-10: color(display-p3 0.95 0.95 0.95);
-    --gray-20: color(display-p3 0.9 0.9 0.9);
-    --gray-30: color(display-p3 0.8 0.8 0.8);
-    --gray-50: color(display-p3 0.5 0.5 0.5);
-    --gray-70: color(display-p3 0.3 0.3 0.3);
-    --gray-90: color(display-p3 0.1 0.1 0.1);
+    /* Neutral grayscale */
+    --gray-5: color(display-p3 0.97 0.97 0.975);
+    --gray-10: color(display-p3 0.94 0.94 0.945);
+    --gray-20: color(display-p3 0.88 0.88 0.89);
+    --gray-30: color(display-p3 0.79 0.79 0.8);
+    --gray-40: color(display-p3 0.69 0.69 0.7);
+    --gray-50: color(display-p3 0.53 0.53 0.55);
+    --gray-70: color(display-p3 0.32 0.32 0.34);
+    --gray-90: color(display-p3 0.13 0.13 0.15);
 
-    /* Blocky borders - crisp print lines */
-    --border-thick: 3px;
+    /* Borders */
+    --border-thick: 1.5px;
     --border-thin: 1px;
-    --border-color: color(display-p3 0 0 0);
-    --border-light: color(display-p3 0.85 0.85 0.85);
+    --border-color: color(display-p3 0.69 0.69 0.7);
+    --border-light: color(display-p3 0.88 0.88 0.89);
   }
 }
 
 /* Fallback for non-P3 displays */
 @supports not (color: color(display-p3 1 1 1)) {
   :root {
-    --background: #ffffff;
-    --foreground: #000000;
+    --background: #f9f9fb;
+    --foreground: #1a1a1f;
     --surface: #ffffff;
-    --cyan: #00d4ff;
-    --magenta: #ff00e5;
-    --yellow: #ffeb00;
-    --key-black: #000000;
-    --gray-10: #f2f2f2;
-    --gray-20: #e6e6e6;
-    --gray-30: #cccccc;
-    --gray-50: #808080;
-    --gray-70: #4d4d4d;
-    --gray-90: #1a1a1a;
-    --border-thick: 3px;
+    --cyan: #5b9eb5;
+    --cyan-light: #ebf5f8;
+    --magenta: #c4567a;
+    --magenta-light: #f5ebef;
+    --yellow: #e8c547;
+    --yellow-light: #faf8eb;
+    --key-black: #1a1a1f;
+    --gray-5: #f8f8f9;
+    --gray-10: #f0f0f2;
+    --gray-20: #e1e1e3;
+    --gray-30: #c9c9cc;
+    --gray-40: #b0b0b3;
+    --gray-50: #87878c;
+    --gray-70: #525257;
+    --gray-90: #212126;
+    --border-thick: 1.5px;
     --border-thin: 1px;
-    --border-color: #000000;
-    --border-light: #d9d9d9;
+    --border-color: #b0b0b3;
+    --border-light: #e1e1e3;
   }
 }
 
@@ -58,23 +68,29 @@
   --color-foreground: var(--foreground);
   --color-surface: var(--surface);
   --color-cyan: var(--cyan);
+  --color-cyan-light: var(--cyan-light);
   --color-magenta: var(--magenta);
+  --color-magenta-light: var(--magenta-light);
   --color-yellow: var(--yellow);
+  --color-yellow-light: var(--yellow-light);
   --color-key-black: var(--key-black);
+  --color-gray-5: var(--gray-5);
   --color-gray-10: var(--gray-10);
   --color-gray-20: var(--gray-20);
   --color-gray-30: var(--gray-30);
+  --color-gray-40: var(--gray-40);
   --color-gray-50: var(--gray-50);
   --color-gray-70: var(--gray-70);
   --color-gray-90: var(--gray-90);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-geist);
+  --font-serif: var(--font-instrument-serif);
+  --font-mono: ui-monospace, "SF Mono", Monaco, "Cascadia Code", "Cascadia Mono", "Roboto Mono", Menlo, Consolas, "Liberation Mono", monospace;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), -apple-system, system-ui, sans-serif;
+  font-family: var(--font-geist), system-ui, sans-serif;
   font-feature-settings:
     "kern" 1,
     "liga" 1;
@@ -83,42 +99,35 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-/* Print-inspired typography */
+/* Editorial typography */
 h1,
 h2,
 h3,
 h4,
 h5,
 h6 {
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
+  font-family: var(--font-instrument-serif), Georgia, serif;
+  font-weight: 400;
+  line-height: 1.15;
 }
 
-/* Blocky, sharp UI elements */
-button,
-input,
-textarea,
-select {
-  border-radius: 0;
-}
-
-/* Clean focus states - high contrast */
+/* Clean focus states */
 *:focus-visible {
-  outline: var(--border-thick) solid var(--foreground);
+  outline: 2px solid var(--cyan);
   outline-offset: 2px;
 }
 
-/* Selection styling - CMYK accent */
+/* Selection styling */
 ::selection {
-  background: var(--cyan);
+  background: var(--yellow-light);
   color: var(--key-black);
 }
 
-/* Code blocks - inverted for contrast */
+/* Code blocks */
 pre {
-  background: var(--foreground) !important;
-  border: var(--border-thin) solid var(--border-color);
+  background: color-mix(in srgb, var(--foreground) 95%, transparent) !important;
+  border: var(--border-thin) solid var(--gray-30);
+  border-radius: 4px;
   font-family: ui-monospace, "SF Mono", Monaco, "Cascadia Code", "Cascadia Mono", "Roboto Mono", Menlo, Consolas, "Liberation Mono", monospace;
   font-variant-ligatures: none;
   font-feature-settings: "liga" 0, "calt" 0, "dlig" 0;

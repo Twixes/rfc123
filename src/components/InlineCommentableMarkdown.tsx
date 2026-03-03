@@ -7,6 +7,7 @@ import remarkGfm from "remark-gfm";
 import type { Comment } from "@/lib/github";
 import { rehypeLineMarkers } from "@/lib/rehype-line-markers";
 import { remarkMentions } from "@/lib/remark-mentions";
+import { MermaidDiagram } from "@/components/MermaidDiagram";
 import { LineCommentBox } from "@/components/LineCommentBox";
 import { ExistingLineComments } from "@/components/ExistingLineComments";
 import { ProfilePictures } from "@/components/ProfilePictures";
@@ -628,6 +629,30 @@ export function InlineCommentableMarkdown({
               pre: ({ children, ...props }) => {
                 const hovered = isLineHovered(props as any);
                 const lineNumber = (props as any)["data-line-element"];
+
+                // Detect mermaid code blocks
+                const childProps = (children as any)?.props;
+                const isMermaid = childProps?.className?.includes("language-mermaid");
+                if (isMermaid) {
+                  const chart = String(childProps?.children ?? "").trim();
+                  return (
+                    <div
+                      className="relative"
+                      style={getHoverStyles(hovered, lineNumber)}
+                      onClick={() => lineNumber && handleLineClick(lineNumber)}
+                      onMouseEnter={() =>
+                        lineNumber && setHoveredLineIndex(lineNumber - 1)
+                      }
+                      onMouseLeave={() => setHoveredLineIndex(null)}
+                    >
+                      <MermaidDiagram chart={chart} />
+                      <span className="absolute right-2 top-2">
+                        {renderProfilePictures(lineNumber)}
+                      </span>
+                    </div>
+                  );
+                }
+
                 return (
                   <pre
                     className="relative my-4 max-w-full overflow-x-auto border border-gray-30 rounded whitespace-pre-wrap bg-gray-90 p-4"

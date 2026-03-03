@@ -96,6 +96,35 @@ export function InlineCommentableMarkdown({
       }
     }
 
+    // Interpolate offsets for empty lines that have no marker (e.g. blank lines with comments)
+    for (let i = 1; i <= lines.length; i++) {
+      if (!offsets.has(i)) {
+        // Find the nearest preceding line with an offset
+        let prev: number | undefined;
+        for (let j = i - 1; j >= 1; j--) {
+          if (offsets.has(j)) {
+            prev = offsets.get(j)!;
+            break;
+          }
+        }
+        // Find the nearest following line with an offset
+        let next: number | undefined;
+        for (let j = i + 1; j <= lines.length; j++) {
+          if (offsets.has(j)) {
+            next = offsets.get(j)!;
+            break;
+          }
+        }
+        if (prev !== undefined && next !== undefined) {
+          offsets.set(i, (prev + next) / 2);
+        } else if (prev !== undefined) {
+          offsets.set(i, prev + 24); // 24px = approximate line height
+        } else if (next !== undefined) {
+          offsets.set(i, Math.max(0, next - 24));
+        }
+      }
+    }
+
     setLineOffsets(offsets);
   }, [content, lines.length, comments, activeLineIndex]);
 
@@ -373,8 +402,8 @@ export function InlineCommentableMarkdown({
           {lines.map((line, index) => {
             const lineNumber = index + 1;
 
-            // Skip empty lines unless they're inside a code block
-            if (line.trim() === "" && !linesInCodeBlocks.has(lineNumber)) {
+            // Skip empty lines unless they're inside a code block or have comments
+            if (line.trim() === "" && !linesInCodeBlocks.has(lineNumber) && !commentsByLine.has(lineNumber)) {
               return null;
             }
 

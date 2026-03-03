@@ -31,7 +31,7 @@ export function InlineCommentableMarkdown({
   const [commentText, setCommentText] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedText, setSelectedText] = useState<string>("");
-  const [collapsedLines, setCollapsedLines] = useState<Set<number>>(new Set());
+  const [collapsedLines, setCollapsedLines] = useState<Set<number> | null>(null);
   const [lineOffsets, setLineOffsets] = useState<Map<number, number>>(
     new Map(),
   );
@@ -178,6 +178,9 @@ export function InlineCommentableMarkdown({
     return map;
   }, [comments]);
 
+  // Initialize collapsed state: collapse all if more than 3 comment blocks
+  const resolvedCollapsedLines = collapsedLines ?? (commentsByLine.size > 3 ? new Set(commentsByLine.keys()) : new Set<number>());
+
   // Calculate all comment box positions to prevent overlaps
   useEffect(() => {
     const positions = new Map<number, number>();
@@ -229,7 +232,7 @@ export function InlineCommentableMarkdown({
     }
 
     setCommentPositions(positions);
-  }, [lineOffsets, commentsByLine, activeLineIndex, replyingToLine, replyText, commentText, collapsedLines]);
+  }, [lineOffsets, commentsByLine, activeLineIndex, replyingToLine, replyText, commentText, resolvedCollapsedLines]);
 
   // Helper to get the position for a specific line
   const getCommentPosition = (lineNumber: number): number => {
@@ -830,7 +833,7 @@ export function InlineCommentableMarkdown({
               isReplying={replyingToLine === lineNumber}
               replyText={replyText}
               isSubmitting={isSubmitting}
-              isCollapsed={collapsedLines.has(lineNumber)}
+              isCollapsed={resolvedCollapsedLines.has(lineNumber)}
               onReplyTextChange={setReplyText}
               onStartReply={() => {
                 setReplyingToLine(lineNumber);
@@ -842,8 +845,8 @@ export function InlineCommentableMarkdown({
               }}
               onSubmitReply={() => handleReplySubmit(lineNumber)}
               onToggleCollapse={() => {
-                setCollapsedLines((prev) => {
-                  const next = new Set(prev);
+                setCollapsedLines(() => {
+                  const next = new Set(resolvedCollapsedLines);
                   if (next.has(lineNumber)) {
                     next.delete(lineNumber);
                   } else {

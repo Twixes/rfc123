@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { RFC, RepoOption } from "@/lib/github";
 import RFCListSkeleton from "@/components/RFCListSkeleton";
 import RepoSelector from "@/components/RepoSelector";
+import AccountDropdown from "@/components/AccountDropdown";
 
 interface RFCsPageClientProps {
   session: {
@@ -120,23 +121,9 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
           </h1>
           <div className="mt-3">{repoSelectorElement}</div>
         </div>
-        <div className="flex items-center gap-3 sm:gap-4">
-          {session?.user?.image && (
-            <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-full overflow-hidden border border-gray-20">
-              <img
-                src={session.user.image}
-                alt={session.user.name || "User"}
-                className="h-full w-full"
-              />
-            </div>
-          )}
-          <a
-            href="/api/auth/signout"
-            className="rounded-md border border-gray-20 bg-surface px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-foreground transition-all hover:bg-gray-5 inline-block"
-          >
-            Log out
-          </a>
-        </div>
+        {session?.user && (
+          <AccountDropdown user={session.user} />
+        )}
       </header>
 
       {isLoading ? (

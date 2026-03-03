@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { auth, signIn, signOut } from "@/auth"
+import AccountDropdown from "@/components/AccountDropdown"
 
 export default async function LandingPage() {
     const session = await auth()
@@ -99,19 +100,9 @@ export default async function LandingPage() {
                                     >
                                         View RFCs
                                     </Link>
-                                    <form
-                                        action={async () => {
-                                            "use server"
-                                            await signOut({ redirectTo: "/" })
-                                        }}
-                                    >
-                                        <button
-                                            type="submit"
-                                            className="inline-block rounded-md border border-gray-20 bg-surface px-4 py-2 text-sm font-medium text-foreground transition-all hover:bg-gray-5 cursor-pointer"
-                                        >
-                                            Log out
-                                        </button>
-                                    </form>
+                                    {session.user && (
+                                        <AccountDropdown user={session.user} />
+                                    )}
                                 </>
                             ) : (
                                 <form

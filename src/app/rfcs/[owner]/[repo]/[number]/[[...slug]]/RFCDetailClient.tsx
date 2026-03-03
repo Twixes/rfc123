@@ -6,6 +6,8 @@ import type { RFCDetail, Comment } from "@/lib/github";
 import { GeneralCommentsSection } from "@/components/GeneralCommentsSection";
 import { InlineCommentableMarkdown } from "@/components/InlineCommentableMarkdown";
 import { RFCMetadataHeader } from "@/components/RFCMetadataHeader";
+import { MarkdownRawView } from "@/components/MarkdownRawView";
+import { ViewModeToggle } from "./ViewModeToggle";
 
 interface RFCDetailClientProps {
   owner: string;
@@ -27,6 +29,7 @@ export default function RFCDetailClient({
   const [error, setError] = useState<string | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [optimisticComments, setOptimisticComments] = useState<Comment[]>([]);
+  const [viewMode, setViewMode] = useState<"pretty" | "raw">("pretty");
 
   const loadComments = useCallback(async () => {
     try {
@@ -280,12 +283,19 @@ export default function RFCDetailClient({
       <RFCMetadataHeader rfc={rfc} />
 
       <div className="border border-gray-20 rounded-md bg-surface p-4 sm:p-8">
-        <InlineCommentableMarkdown
-          content={rfc.markdownContent}
-          prNumber={rfc.number}
-          comments={lineComments}
-          onCommentSubmit={handleInlineComment}
-        />
+        <div className="flex justify-end mb-4">
+          <ViewModeToggle value={viewMode} onChange={setViewMode} />
+        </div>
+        {viewMode === "pretty" ? (
+          <InlineCommentableMarkdown
+            content={rfc.markdownContent}
+            prNumber={rfc.number}
+            comments={lineComments}
+            onCommentSubmit={handleInlineComment}
+          />
+        ) : (
+          <MarkdownRawView content={rfc.markdownContent} />
+        )}
       </div>
 
       <GeneralCommentsSection

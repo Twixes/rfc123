@@ -59,14 +59,15 @@ export default function RFCDetailClient({
       }
       const data = await response.json();
       setRfc(data);
-      setComments(data.comments); // Set initial comments from RFC data
+      // Load comments progressively after content is ready
+      loadComments();
     } catch (error) {
       console.error("Error loading RFC:", error);
       setError("Failed to load RFC");
     } finally {
       setIsLoading(false);
     }
-  }, [owner, repo, prNumber]);
+  }, [owner, repo, prNumber, loadComments]);
 
   useEffect(() => {
     loadRFC();

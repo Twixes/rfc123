@@ -333,48 +333,64 @@ export async function getRFCDetail(
         const t0 = performance.now()
         const octokit = await getOctokit(accessToken)
 
-        // Check cache for RFC content (PR details + markdown)
+        // Check cache for RFC content (PR details + markdown + reviewers)
         const contentCacheKey = `rfc:${owner}:${repo}:${prNumber}:content`
         interface CachedRFCContent {
             pr: any
             files: any[]
             markdownContent: string
             markdownFilePath: string | null
+            reviewers: RFCDetail["reviewers"]
+            reviewRequested: boolean
         }
         const tContentCache = performance.now()
-        let cachedContent = await getCachedJsonData<CachedRFCContent>(contentCacheKey)
+        const cachedContent = await getCachedJsonData<CachedRFCContent>(contentCacheKey)
         console.log(`[getRFCDetail] content cache lookup took ${(performance.now() - tContentCache).toFixed(0)}ms (${cachedContent ? "HIT" : "MISS"})`)
 
         let pr: any
         let files: any[]
         let markdownContent: string
         let markdownFilePath: string | null
+        let reviewers: RFCDetail["reviewers"]
+        let reviewRequested: boolean
 
-        if (cachedContent) {
+        // Check for reviewers in cache to handle old cache entries without reviewer data
+        if (cachedContent && cachedContent.reviewers !== undefined) {
             pr = cachedContent.pr
             files = cachedContent.files
             markdownContent = cachedContent.markdownContent
             markdownFilePath = cachedContent.markdownFilePath
+            reviewers = cachedContent.reviewers
+            reviewRequested = cachedContent.reviewRequested
         } else {
             const tFetch = performance.now()
-            // Get PR details
-            const prResponse = await octokit.rest.pulls.get({
-                owner,
-                repo,
-                pull_number: prNumber,
-            })
-            pr = prResponse.data
-            console.log(`[getRFCDetail] pulls.get() took ${(performance.now() - tFetch).toFixed(0)}ms`)
 
-            // Get PR files to find the first markdown file
-            const tFiles = performance.now()
-            const filesResponse = await octokit.rest.pulls.listFiles({
-                owner,
-                repo,
-                pull_number: prNumber,
-            })
+            // Fetch PR details, files, reviewers, and reviews in parallel
+            const [prResponse, filesResponse, requestedReviewersRes, reviewsRes] = await Promise.all([
+                octokit.rest.pulls.get({
+                    owner,
+                    repo,
+                    pull_number: prNumber,
+                }),
+                octokit.rest.pulls.listFiles({
+                    owner,
+                    repo,
+                    pull_number: prNumber,
+                }),
+                octokit.rest.pulls.listRequestedReviewers({
+                    owner,
+                    repo,
+                    pull_number: prNumber,
+                }),
+                octokit.rest.pulls.listReviews({
+                    owner,
+                    repo,
+                    pull_number: prNumber,
+                }),
+            ])
+
+            pr = prResponse.data
             files = filesResponse.data
-            console.log(`[getRFCDetail] pulls.listFiles() took ${(performance.now() - tFiles).toFixed(0)}ms`)
 
             const markdownFile = files.find((file) => file.filename.endsWith(".md"))
 
@@ -409,105 +425,37 @@ export async function getRFCDetail(
                 }
             }
 
-            console.log(`[getRFCDetail] content fetch (all GH calls) took ${(performance.now() - tFetch).toFixed(0)}ms`)
-            // Cache the content
-            await setCachedJsonData(contentCacheKey, { pr, files, markdownContent, markdownFilePath }, 300) // Cache for 5 minutes
-        }
-
-        // Fetch comments, reviewers, and reviews (with caching)
-        const interactionsCacheKey = `rfc:${owner}:${repo}:${prNumber}:interactions`
-        interface CachedInteractions {
-            reviewComments: any[]
-            issueComments: any[]
-            requestedReviewers: { users: any[] }
-            reviews: any[]
-        }
-        const tInteractionsCache = performance.now()
-        let interactions = await getCachedJsonData<CachedInteractions>(interactionsCacheKey)
-        console.log(`[getRFCDetail] interactions cache lookup took ${(performance.now() - tInteractionsCache).toFixed(0)}ms (${interactions ? "HIT" : "MISS"})`)
-
-        if (!interactions) {
-            const tInteractionsFetch = performance.now()
-            // Fetch all in parallel
-            const [reviewCommentsRes, issueCommentsRes, requestedReviewersRes, reviewsRes] = await Promise.all([
-                octokit.rest.pulls.listReviewComments({
-                    owner,
-                    repo,
-                    pull_number: prNumber,
-                }),
-                octokit.rest.issues.listComments({
-                    owner,
-                    repo,
-                    issue_number: prNumber,
-                }),
-                octokit.rest.pulls.listRequestedReviewers({
-                    owner,
-                    repo,
-                    pull_number: prNumber,
-                }),
-                octokit.rest.pulls.listReviews({
-                    owner,
-                    repo,
-                    pull_number: prNumber,
-                }),
-            ])
-            interactions = {
-                reviewComments: reviewCommentsRes.data,
-                issueComments: issueCommentsRes.data,
-                requestedReviewers: requestedReviewersRes.data,
-                reviews: reviewsRes.data,
+            // Build reviewers list
+            const reviewersAlreadyAccountedFor: Set<string> = new Set()
+            reviewers = []
+            for (const review of reviewsRes.data) {
+                if (review.user && !reviewersAlreadyAccountedFor.has(review.user.login)) {
+                    reviewers.push({
+                        login: review.user.login,
+                        avatar: review.user.avatar_url,
+                        yetToReview: false,
+                    })
+                    reviewersAlreadyAccountedFor.add(review.user.login)
+                }
             }
-            console.log(`[getRFCDetail] interactions fetch (4 parallel GH calls) took ${(performance.now() - tInteractionsFetch).toFixed(0)}ms`)
-            await setCachedJsonData(interactionsCacheKey, interactions, 60) // Cache for 60 seconds
+            for (const requestedReviewer of requestedReviewersRes.data.users) {
+                if (!reviewersAlreadyAccountedFor.has(requestedReviewer.login)) {
+                    reviewers.push({
+                        login: requestedReviewer.login,
+                        avatar: requestedReviewer.avatar_url,
+                        yetToReview: true,
+                    })
+                }
+            }
+
+            reviewRequested = requestedReviewersRes.data.users.some((user) => user.login === currentUserLogin)
+
+            console.log(`[getRFCDetail] content fetch (all GH calls) took ${(performance.now() - tFetch).toFixed(0)}ms`)
+            // Cache content + reviewers together
+            await setCachedJsonData(contentCacheKey, { pr, files, markdownContent, markdownFilePath, reviewers, reviewRequested }, 300) // Cache for 5 minutes
         }
 
         console.log(`[getRFCDetail] total took ${(performance.now() - t0).toFixed(0)}ms`)
-        const { reviewComments, issueComments, requestedReviewers, reviews } = interactions
-
-        const reviewersAlreadyAccountedFor: Set<string> = new Set()
-        const reviewers: RFCDetail["reviewers"] = []
-        for (const review of reviews) {
-            if (review.user && !reviewersAlreadyAccountedFor.has(review.user.login)) {
-                reviewers.push({
-                    login: review.user.login,
-                    avatar: review.user.avatar_url,
-                    yetToReview: false,
-                })
-                reviewersAlreadyAccountedFor.add(review.user.login)
-            }
-        }
-        for (const requestedReviewer of requestedReviewers.users) {
-            if (!reviewersAlreadyAccountedFor.has(requestedReviewer.login)) {
-                reviewers.push({
-                    login: requestedReviewer.login,
-                    avatar: requestedReviewer.avatar_url,
-                    yetToReview: true,
-                })
-            }
-        }
-
-        const comments: Comment[] = [
-            ...reviewComments.map((c) => ({
-                id: c.id,
-                user: c.user?.login || "unknown",
-                userAvatar: c.user?.avatar_url || "",
-                body: c.body || "",
-                createdAt: c.created_at,
-                path: c.path,
-                line: c.line || c.original_line,
-                diffHunk: c.diff_hunk,
-            })),
-            ...issueComments.map((c) => ({
-                id: c.id,
-                user: c.user?.login || "unknown",
-                userAvatar: c.user?.avatar_url || "",
-                body: c.body || "",
-                createdAt: c.created_at,
-            })),
-        ]
-
-        // Check if current user is a requested reviewer
-        const reviewRequested = requestedReviewers.users.some((user) => user.login === currentUserLogin)
 
         return {
             number: pr.number,
@@ -528,7 +476,7 @@ export async function getRFCDetail(
             markdownFilePath,
             reviewers,
             reviewRequested: reviewRequested || false,
-            comments: comments.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
+            comments: [], // Comments are loaded progressively by the client
         }
     } catch (error) {
         captureServerException(error as Error, undefined, {

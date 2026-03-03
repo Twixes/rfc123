@@ -2,7 +2,6 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { postComment } from "@/lib/github";
-import { deleteCachedData } from "@/lib/cache";
 
 export async function POST(request: NextRequest) {
   const session = await auth();
@@ -30,8 +29,6 @@ export async function POST(request: NextRequest) {
       path,
       line,
     );
-    // Invalidate cached interactions so next page load shows fresh comments
-    await deleteCachedData(`rfc:${owner}:${repo}:${prNumber}:interactions`);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error posting comment:", error);

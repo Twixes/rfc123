@@ -5,7 +5,12 @@ const redis = Redis.fromEnv();
 
 export async function getCachedJsonData<T>(key: string): Promise<T | null> {
   try {
+    const t0 = performance.now();
     const cachedData = (await redis.get(key)) as T | null;
+    const elapsed = performance.now() - t0;
+    if (elapsed > 50) {
+      console.log(`[cache] SLOW redis.get("${key}") took ${elapsed.toFixed(0)}ms`);
+    }
     return cachedData;
   } catch (error) {
     captureServerException(error as Error, undefined, {
@@ -37,7 +42,12 @@ export async function setCachedJsonData<T>(
   ttl: number,
 ): Promise<void> {
   try {
+    const t0 = performance.now();
     await redis.set(key, JSON.stringify(data), ttl ? { ex: ttl } : undefined);
+    const elapsed = performance.now() - t0;
+    if (elapsed > 50) {
+      console.log(`[cache] SLOW redis.set("${key}") took ${elapsed.toFixed(0)}ms`);
+    }
   } catch (error) {
     captureServerException(error as Error, undefined, {
       function: "setCachedJsonData",

@@ -330,6 +330,7 @@ export async function getRFCDetail(
     currentUserLogin: string
 ): Promise<RFCDetail> {
     try {
+        const t0 = performance.now()
         const octokit = await getOctokit(accessToken)
 
         // Check cache for RFC content (PR details + markdown)
@@ -340,7 +341,9 @@ export async function getRFCDetail(
             markdownContent: string
             markdownFilePath: string | null
         }
+        const tContentCache = performance.now()
         let cachedContent = await getCachedJsonData<CachedRFCContent>(contentCacheKey)
+        console.log(`[getRFCDetail] content cache lookup took ${(performance.now() - tContentCache).toFixed(0)}ms (${cachedContent ? "HIT" : "MISS"})`)
 
         let pr: any
         let files: any[]
@@ -353,6 +356,7 @@ export async function getRFCDetail(
             markdownContent = cachedContent.markdownContent
             markdownFilePath = cachedContent.markdownFilePath
         } else {
+            const tFetch = performance.now()
             // Get PR details
             const prResponse = await octokit.rest.pulls.get({
                 owner,
@@ -360,14 +364,17 @@ export async function getRFCDetail(
                 pull_number: prNumber,
             })
             pr = prResponse.data
+            console.log(`[getRFCDetail] pulls.get() took ${(performance.now() - tFetch).toFixed(0)}ms`)
 
             // Get PR files to find the first markdown file
+            const tFiles = performance.now()
             const filesResponse = await octokit.rest.pulls.listFiles({
                 owner,
                 repo,
                 pull_number: prNumber,
             })
             files = filesResponse.data
+            console.log(`[getRFCDetail] pulls.listFiles() took ${(performance.now() - tFiles).toFixed(0)}ms`)
 
             const markdownFile = files.find((file) => file.filename.endsWith(".md"))
 
@@ -377,12 +384,14 @@ export async function getRFCDetail(
             if (markdownFile) {
                 // Fetch the actual content of the markdown file
                 try {
+                    const tMd = performance.now()
                     const { data: fileContent } = await octokit.rest.repos.getContent({
                         owner,
                         repo,
                         path: markdownFile.filename,
                         ref: pr.head.ref,
                     })
+                    console.log(`[getRFCDetail] repos.getContent() for markdown took ${(performance.now() - tMd).toFixed(0)}ms`)
 
                     if ("content" in fileContent) {
                         markdownContent = Buffer.from(fileContent.content, "base64").toString("utf-8")
@@ -400,6 +409,7 @@ export async function getRFCDetail(
                 }
             }
 
+            console.log(`[getRFCDetail] content fetch (all GH calls) took ${(performance.now() - tFetch).toFixed(0)}ms`)
             // Cache the content
             await setCachedJsonData(contentCacheKey, { pr, files, markdownContent, markdownFilePath }, 300) // Cache for 5 minutes
         }
@@ -412,9 +422,12 @@ export async function getRFCDetail(
             requestedReviewers: { users: any[] }
             reviews: any[]
         }
+        const tInteractionsCache = performance.now()
         let interactions = await getCachedJsonData<CachedInteractions>(interactionsCacheKey)
+        console.log(`[getRFCDetail] interactions cache lookup took ${(performance.now() - tInteractionsCache).toFixed(0)}ms (${interactions ? "HIT" : "MISS"})`)
 
         if (!interactions) {
+            const tInteractionsFetch = performance.now()
             // Fetch all in parallel
             const [reviewCommentsRes, issueCommentsRes, requestedReviewersRes, reviewsRes] = await Promise.all([
                 octokit.rest.pulls.listReviewComments({
@@ -444,9 +457,11 @@ export async function getRFCDetail(
                 requestedReviewers: requestedReviewersRes.data,
                 reviews: reviewsRes.data,
             }
+            console.log(`[getRFCDetail] interactions fetch (4 parallel GH calls) took ${(performance.now() - tInteractionsFetch).toFixed(0)}ms`)
             await setCachedJsonData(interactionsCacheKey, interactions, 60) // Cache for 60 seconds
         }
 
+        console.log(`[getRFCDetail] total took ${(performance.now() - t0).toFixed(0)}ms`)
         const { reviewComments, issueComments, requestedReviewers, reviews } = interactions
 
         const reviewersAlreadyAccountedFor: Set<string> = new Set()
@@ -581,6 +596,7 @@ export async function postComment(
 
 export async function getCurrentUserLogin(accessToken: string) {
     try {
+        const t0 = performance.now()
         // Get current user's login (with caching)
         const userCacheKey = `user:${accessToken}`
         let currentUserLogin: string
@@ -588,11 +604,13 @@ export async function getCurrentUserLogin(accessToken: string) {
 
         if (cachedLogin) {
             currentUserLogin = cachedLogin
+            console.log(`[getCurrentUserLogin] cache HIT, took ${(performance.now() - t0).toFixed(0)}ms`)
         } else {
             const octokit = await getOctokit(accessToken)
             const { data: user } = await octokit.rest.users.getAuthenticated()
             currentUserLogin = user.login
             await setCachedJsonData(userCacheKey, currentUserLogin, 3600) // Cache for 1 hour
+            console.log(`[getCurrentUserLogin] cache MISS, fetched from GH, took ${(performance.now() - t0).toFixed(0)}ms`)
         }
 
         return currentUserLogin

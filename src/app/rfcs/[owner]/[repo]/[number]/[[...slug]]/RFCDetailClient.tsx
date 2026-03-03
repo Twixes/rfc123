@@ -283,8 +283,8 @@ export default function RFCDetailClient({
 
       <RFCMetadataHeader rfc={rfc} />
 
-      <div className="border border-gray-20 rounded-md bg-surface p-4 sm:p-8">
-        <div className="flex justify-end mb-4">
+      <div className="relative border border-gray-20 rounded-md bg-surface p-4 sm:p-8">
+        <div className="absolute top-4 right-4 sm:top-8 sm:right-8 z-10">
           <ViewModeToggle value={viewMode} onChange={setViewMode} />
         </div>
         {viewMode === "pretty" ? (

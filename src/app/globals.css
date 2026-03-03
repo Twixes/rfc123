@@ -111,6 +111,16 @@ h6 {
   line-height: 1.15;
 }
 
+/* Markdown rendering uses Geist for headings */
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4,
+.prose h5,
+.prose h6 {
+  font-family: var(--font-geist), system-ui, sans-serif;
+}
+
 /* Clean focus states */
 *:focus-visible {
   outline: 2px solid var(--cyan);

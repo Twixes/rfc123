@@ -1,6 +1,27 @@
 import type { Element, Root, Text } from "hast";
 import { visit } from "unist-util-visit";
 
+function findFirstDescendantLine(node: Element): number | undefined {
+  const visitNode = (n: Element | Text): number | undefined => {
+    if (n.type === "element") {
+      if (n.position?.start?.line) return n.position.start.line;
+      // Marker spans have data-line from our plugin
+      const dataLine = n.properties?.["data-line"];
+      if (dataLine != null) return Number(dataLine);
+      for (const child of n.children) {
+        const line = visitNode(child as Element | Text);
+        if (line != null) return line;
+      }
+    }
+    return undefined;
+  };
+  for (const child of node.children) {
+    const line = visitNode(child as Element | Text);
+    if (line != null) return line;
+  }
+  return undefined;
+}
+
 // Void elements that cannot have children
 const VOID_ELEMENTS = new Set([
   "area",
@@ -52,7 +73,7 @@ export function rehypeLineMarkers() {
           .join("");
 
         // Only process block code (contains newlines), not inline code
-        if (textContent && textContent.includes("\n")) {
+        if (textContent?.includes("\n")) {
           const codeLines = textContent.split("\n");
           const baseLineNumber = node.position.start.line;
 
@@ -93,27 +114,13 @@ export function rehypeLineMarkers() {
         }
       }
 
-      // For all other elements, use the markdown source line number
+      // For all other elements, inject an invisible marker span for position tracking
       if (node.position?.start?.line) {
         const lineNumber = node.position.start.line;
 
-        // Add data-line attribute to the element itself for hover styling
-        // Skip the root element and body
-        if (
-          node.tagName !== "div" ||
-          (node.tagName === "div" && node.properties?.className)
-        ) {
-          if (!node.properties) {
-            node.properties = {};
-          }
-          node.properties["data-line-element"] = lineNumber;
-        }
-
-        // If we haven't added a marker for this line yet
         if (!linesSeen.has(lineNumber)) {
           linesSeen.add(lineNumber);
 
-          // Create an invisible marker element for position calculation
           const marker: Element = {
             type: "element",
             tagName: "span",
@@ -126,11 +133,33 @@ export function rehypeLineMarkers() {
             children: [],
           };
 
-          // Insert marker at the beginning of this element's children
           if (node.children) {
             node.children.unshift(marker);
           }
         }
+      }
+    });
+
+    // Add data-line-element to elements for per-line hover/comment UI.
+    // 1. Top-level block elements (p, h1, blockquote, etc.) — but NOT ol/ul
+    for (const child of tree.children) {
+      if (child.type === "element" && child.position?.start?.line) {
+        const tag = (child as Element).tagName;
+        if (tag === "ol" || tag === "ul") continue; // list containers handled by li
+        if (!child.properties) child.properties = {};
+        child.properties["data-line-element"] = child.position.start.line;
+      }
+    }
+
+    // 2. li elements — each list item gets its own line for individual highlighting
+    visit(tree, "element", (node: Element) => {
+      if (node.tagName !== "li") return;
+      const lineNumber =
+        node.position?.start?.line ??
+        findFirstDescendantLine(node);
+      if (lineNumber != null) {
+        if (!node.properties) node.properties = {};
+        node.properties["data-line-element"] = lineNumber;
       }
     });
   };

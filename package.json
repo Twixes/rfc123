@@ -15,7 +15,7 @@
     "highlight.js": "^11.11.1",
     "mermaid": "^11.12.3",
     "motion": "^12.38.0",
-    "next": "16.0.10",
+    "next": "16.1.7",
     "next-auth": "5.0.0-beta.29",
     "octokit": "^5.0.4",
     "posthog-js": "^1.280.1",

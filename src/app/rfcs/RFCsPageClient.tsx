@@ -43,22 +43,78 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
     }
   }
 
+  function repoQueryParams(repo?: RepoOption | null): string {
+    return repo
+      ? `owner=${encodeURIComponent(repo.owner)}&repo=${encodeURIComponent(repo.name)}`
+      : "";
+  }
+
   async function loadRFCs(repo?: RepoOption | null) {
-    // Abort any in-flight request
     rfcsAbortControllerRef.current?.abort();
     const controller = new AbortController();
     rfcsAbortControllerRef.current = controller;
 
     setIsLoading(true);
     try {
-      const params = repo
-        ? `?owner=${encodeURIComponent(repo.owner)}&repo=${encodeURIComponent(repo.name)}`
-        : "";
-      const response = await fetch(`/api/rfcs${params}`, {
-        signal: controller.signal,
-      });
-      const data = await response.json();
+      const repoParams = repoQueryParams(repo);
+      const response = await fetch(
+        `/api/rfcs${repoParams ? `?${repoParams}` : ""}`,
+        { signal: controller.signal },
+      );
+      const data: RFC[] = await response.json();
+      if (controller.signal.aborted) return;
       setRfcs(data);
+      setIsLoading(false);
+
+      // Resolve any missing inline comment counts per repo
+      const missingByRepo = new Map<string, number[]>();
+      for (const rfc of data) {
+        if (rfc.inlineCommentCount === null) {
+          const key = `${rfc.owner}/${rfc.repo}`;
+          const list = missingByRepo.get(key);
+          if (list) {
+            list.push(rfc.number);
+          } else {
+            missingByRepo.set(key, [rfc.number]);
+          }
+        }
+      }
+
+      if (missingByRepo.size > 0) {
+        const countEntries = await Promise.all(
+          Array.from(missingByRepo.entries()).map(async ([key, numbers]) => {
+            const [owner, repo] = key.split("/");
+            const params = new URLSearchParams({
+              owner,
+              repo,
+              numbers: numbers.join(","),
+            });
+            const res = await fetch(`/api/rfcs/comment-counts?${params}`, {
+              signal: controller.signal,
+            });
+            return (await res.json()) as Record<string, number>;
+          }),
+        );
+        if (controller.signal.aborted) return;
+
+        const allCounts = Object.assign({}, ...countEntries) as Record<
+          string,
+          number
+        >;
+        setRfcs((prev) =>
+          prev?.map((rfc) => {
+            const count = allCounts[rfc.number];
+            if (count !== undefined && rfc.inlineCommentCount === null) {
+              return {
+                ...rfc,
+                inlineCommentCount: count,
+                commentCount: count + rfc.regularCommentCount,
+              };
+            }
+            return rfc;
+          }) ?? null,
+        );
+      }
     } catch (error) {
       if ((error as Error).name === "AbortError") return;
       console.error("Error loading RFCs:", error);
@@ -181,7 +237,7 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
               >
               <div className="flex items-start justify-between gap-4 sm:gap-6">
                 <div className="flex-1 min-w-0">
-                  <div className="mb-2 flex flex-wrap items-baseline gap-2 sm:gap-3">
+                  <div className="mb-2 flex flex-wrap items-center gap-2 sm:gap-3">
                     <h2 className="text-2xl font-medium text-foreground break-words font-serif">
                       {rfc.title}
                     </h2>
@@ -242,11 +298,15 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
                         year: "numeric",
                       })}
                     </span>
-                    {rfc.inlineCommentCount > 0 && (
+                    {rfc.inlineCommentCount === null ? (
+                      <span className="border-l border-gray-30 pl-2 sm:pl-4">
+                        <span className="inline-block h-3 w-16 animate-pulse rounded bg-gray-20" />
+                      </span>
+                    ) : rfc.inlineCommentCount > 0 ? (
                       <span className="border-l border-gray-30 pl-2 sm:pl-4">
                         {rfc.inlineCommentCount} inline
                       </span>
-                    )}
+                    ) : null}
                     {rfc.regularCommentCount > 0 && (
                       <span className="border-l border-gray-30 pl-2 sm:pl-4">
                         {rfc.regularCommentCount} general

@@ -21,8 +21,8 @@ export interface RFC {
     status: "open" | "merged" | "closed"
     createdAt: string
     updatedAt: string
-    commentCount: number
-    inlineCommentCount: number
+    commentCount: number | null
+    inlineCommentCount: number | null
     regularCommentCount: number
     url: string
     owner: string
@@ -196,59 +196,14 @@ export async function listRFCs(
             pr.files.nodes.some((file: any) => file.path.endsWith(".md"))
         )
 
-        // Batch fetch review comment counts: 1 MGET for all, then parallel API fetches for misses, then 1 pipeline SET
+        // Use cached inline comment counts where available, null for misses.
+        // Missing counts are resolved separately via fetchInlineCommentCounts().
         const commentCountCacheKeys = rfcPulls.map(
             (pr: any) => `rfc:${owner}:${repo}:${pr.number}:review_comments_count`
         )
-        const cachedCounts = await getCachedJsonDataBatch<number>(commentCountCacheKeys)
+        const inlineCountByIndex = await getCachedJsonDataBatch<number>(commentCountCacheKeys)
 
-        const prsNeedingFetch = rfcPulls
-            .map((pr: any, i: number) => ({ pr, i, cached: cachedCounts[i] }))
-            .filter((x: { cached: number | null }) => x.cached == null)
-
-        const fetchedCounts =
-            prsNeedingFetch.length > 0
-                ? await Promise.all(
-                      prsNeedingFetch.map(async ({ pr }: { pr: any }) => {
-                          const response =
-                              await octokit.rest.pulls.listReviewComments({
-                                  owner,
-                                  repo,
-                                  pull_number: pr.number,
-                                  per_page: 1,
-                              })
-                          let count = response.data.length
-                          const linkHeader = response.headers.link
-                          if (linkHeader) {
-                              const lastPageMatch = linkHeader.match(
-                                  /page=(\d+)>; rel="last"/
-                              )
-                              if (lastPageMatch) {
-                                  count = Number.parseInt(lastPageMatch[1], 10)
-                              }
-                          }
-                          return { pr, count }
-                      })
-                  )
-                : []
-
-        await setCachedJsonDataBatch(
-            fetchedCounts.map(
-                ({ pr, count }: { pr: any; count: number }) => ({
-                    key: `rfc:${owner}:${repo}:${pr.number}:review_comments_count`,
-                    value: count,
-                })
-            ),
-            300
-        )
-
-        const fetchedCountByPr = new Map(
-            fetchedCounts.map((f: { pr: any; count: number }) => [f.pr.number, f.count])
-        )
         const rfcPullsWithCounts = rfcPulls.map((pr: any, i: number) => {
-            const reviewCommentCount =
-                cachedCounts[i] ?? fetchedCountByPr.get(pr.number) ?? 0
-
             const reviewRequested = pr.reviewRequests?.nodes?.some(
                 (req: any) => req.requestedReviewer?.login === currentUserLogin
             )
@@ -267,7 +222,7 @@ export async function listRFCs(
                           avatar_url: pr.author.avatarUrl,
                       }
                     : null,
-                _inlineCommentCount: reviewCommentCount,
+                _inlineCommentCount: inlineCountByIndex[i],
                 _regularCommentCount: pr.comments.totalCount,
                 _reviewRequested: reviewRequested || false,
             }
@@ -297,7 +252,10 @@ export async function listRFCs(
             status: pr.merged_at ? "merged" : (pr.state as "open" | "closed"),
             createdAt: pr.created_at,
             updatedAt: pr.updated_at,
-            commentCount: pr._inlineCommentCount + pr._regularCommentCount,
+            commentCount:
+                pr._inlineCommentCount != null
+                    ? pr._inlineCommentCount + pr._regularCommentCount
+                    : null,
             inlineCommentCount: pr._inlineCommentCount,
             regularCommentCount: pr._regularCommentCount,
             url: pr.html_url,
@@ -316,7 +274,10 @@ export async function listRFCs(
     }
 }
 
-export async function listAllRFCs(accessToken: string, currentUserLogin: string): Promise<RFC[]> {
+export async function listAllRFCs(
+    accessToken: string,
+    currentUserLogin: string
+): Promise<RFC[]> {
     try {
         // Get all repos with RFC directories
         const repos = await listReposWithRFCs(accessToken)
@@ -345,6 +306,81 @@ export async function listAllRFCs(accessToken: string, currentUserLogin: string)
         captureServerException(error as Error, undefined, {
             function: "listAllRFCs",
             context: "fetching_all_rfcs",
+        })
+        throw error
+    }
+}
+
+/** Fetch inline (review) comment counts for specific PRs, caching results. */
+export async function fetchInlineCommentCounts(
+    accessToken: string,
+    owner: string,
+    repo: string,
+    prNumbers: number[]
+): Promise<Record<number, number>> {
+    if (prNumbers.length === 0) return {}
+
+    try {
+        const octokit = await getOctokit(accessToken)
+
+        const cacheKeys = prNumbers.map(
+            (n) => `rfc:${owner}:${repo}:${n}:review_comments_count`
+        )
+        const cached = await getCachedJsonDataBatch<number>(cacheKeys)
+
+        const result: Record<number, number> = {}
+        const toFetch: number[] = []
+
+        for (let i = 0; i < prNumbers.length; i++) {
+            if (cached[i] != null) {
+                result[prNumbers[i]] = cached[i]
+            } else {
+                toFetch.push(prNumbers[i])
+            }
+        }
+
+        if (toFetch.length > 0) {
+            const fetched = await Promise.all(
+                toFetch.map(async (prNumber) => {
+                    const response = await octokit.rest.pulls.listReviewComments({
+                        owner,
+                        repo,
+                        pull_number: prNumber,
+                        per_page: 1,
+                    })
+                    let count = response.data.length
+                    const linkHeader = response.headers.link
+                    if (linkHeader) {
+                        const lastPageMatch = linkHeader.match(/page=(\d+)>; rel="last"/)
+                        if (lastPageMatch) {
+                            count = Number.parseInt(lastPageMatch[1], 10)
+                        }
+                    }
+                    return { prNumber, count }
+                })
+            )
+
+            await setCachedJsonDataBatch(
+                fetched.map(({ prNumber, count }) => ({
+                    key: `rfc:${owner}:${repo}:${prNumber}:review_comments_count`,
+                    value: count,
+                })),
+                300
+            )
+
+            for (const { prNumber, count } of fetched) {
+                result[prNumber] = count
+            }
+        }
+
+        return result
+    } catch (error) {
+        captureServerException(error as Error, undefined, {
+            function: "fetchInlineCommentCounts",
+            owner,
+            repo,
+            prNumbers,
+            context: "fetching_inline_comment_counts",
         })
         throw error
     }

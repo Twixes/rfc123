@@ -47,7 +47,11 @@ export interface Comment {
     path?: string
     line?: number
     diffHunk?: string
+    inReplyToId?: number
 }
+
+export type { CommentThread } from "./comment-threads"
+export { groupIntoThreads } from "./comment-threads"
 
 export async function getOctokit(accessToken: string) {
     return new Octokit({ auth: accessToken })
@@ -575,13 +579,21 @@ export async function postComment(
     prNumber: number,
     body: string,
     path?: string,
-    line?: number
+    line?: number,
+    replyToCommentId?: number
 ): Promise<void> {
     try {
         const octokit = await getOctokit(accessToken)
 
-        if (path && line) {
-            // Post as a review comment on a specific line
+        if (replyToCommentId) {
+            await octokit.rest.pulls.createReplyForReviewComment({
+                owner,
+                repo,
+                pull_number: prNumber,
+                comment_id: replyToCommentId,
+                body,
+            })
+        } else if (path && line) {
             const { data: pr } = await octokit.rest.pulls.get({
                 owner,
                 repo,
@@ -598,7 +610,6 @@ export async function postComment(
                 line,
             })
         } else {
-            // Post as a regular issue comment
             await octokit.rest.issues.createComment({
                 owner,
                 repo,
@@ -614,6 +625,7 @@ export async function postComment(
             prNumber,
             path,
             line,
+            replyToCommentId,
             context: "posting_comment",
         })
         throw error

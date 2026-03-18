@@ -77,21 +77,20 @@ export default function RFCDetailClient({
     loadRFC();
   }, [loadRFC]);
 
-  async function handleInlineComment(line: number, body: string) {
+  async function handleInlineComment(line: number, body: string, replyToCommentId?: number) {
     if (!rfc?.markdownFilePath) return;
 
-    // Create optimistic comment
     const optimisticComment: Comment = {
-      id: Date.now(), // Temporary ID
+      id: Date.now(),
       user: currentUser,
       userAvatar: currentUserAvatar,
       body,
       createdAt: new Date().toISOString(),
       path: rfc.markdownFilePath,
       line,
+      inReplyToId: replyToCommentId,
     };
 
-    // Add optimistic comment immediately
     setOptimisticComments((prev) => [...prev, optimisticComment]);
 
     try {
@@ -105,6 +104,7 @@ export default function RFCDetailClient({
           body,
           path: rfc.markdownFilePath,
           line,
+          replyToCommentId,
         }),
       });
 

@@ -55,6 +55,7 @@ export async function GET(
         path: c.path,
         line: c.line || c.original_line,
         diffHunk: c.diff_hunk,
+        inReplyToId: c.in_reply_to_id ?? undefined,
       })),
       ...issueComments.map((c) => ({
         id: c.id,

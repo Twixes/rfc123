@@ -6,6 +6,8 @@ import rehypeHighlight from "rehype-highlight";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import type { Comment } from "@/lib/github";
+import type { CommentThread } from "@/lib/comment-threads";
+import { groupIntoThreads } from "@/lib/comment-threads";
 import { rehypeLineMarkers } from "@/lib/rehype-line-markers";
 import { remarkMergeParagraphs } from "@/lib/remark-merge-paragraphs";
 import { remarkMentions } from "@/lib/remark-mentions";
@@ -133,12 +135,16 @@ const LineNumbersColumn = memo(function LineNumbersColumn({
   );
 });
 
+type ReplyTarget =
+  | { type: "thread"; line: number; threadId: number }
+  | { type: "newThread"; line: number }
+
 interface InlineCommentableMarkdownProps {
   content: string;
   prNumber: number;
   comments: Comment[];
   commentsLoading?: boolean;
-  onCommentSubmit: (line: number, body: string) => Promise<void>;
+  onCommentSubmit: (line: number, body: string, replyToCommentId?: number) => Promise<void>;
 }
 
 export function InlineCommentableMarkdown({
@@ -163,7 +169,7 @@ export function InlineCommentableMarkdown({
   );
   const [lineRanges, setLineRanges] = useState<Map<number, number>>(new Map());
   const [lineAlias, setLineAlias] = useState<Map<number, number>>(new Map());
-  const [replyingToLine, setReplyingToLine] = useState<number | null>(null);
+  const [replyTarget, setReplyTarget] = useState<ReplyTarget | null>(null);
   const [replyText, setReplyText] = useState("");
   const lineRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
   const markdownRef = useRef<HTMLDivElement>(null);
@@ -229,6 +235,14 @@ export function InlineCommentableMarkdown({
     }
     return map;
   }, [comments]);
+
+  const threadsByLine = useMemo(() => {
+    const map = new Map<number, CommentThread[]>();
+    for (const [line, lineComments] of commentsByLine.entries()) {
+      map.set(line, groupIntoThreads(lineComments));
+    }
+    return map;
+  }, [commentsByLine]);
 
   // Calculate line offsets after render using injected markers
   useEffect(() => {
@@ -374,20 +388,23 @@ export function InlineCommentableMarkdown({
         setActiveLineIndex(null);
         setCommentText("");
         setSelectedText("");
-        // Toggle the comment box collapsed/expanded
         setCollapsedLines((prev) => {
           const resolved = prev ?? (commentsByLine.size > 3 ? new Set(commentsByLine.keys()) : new Set<number>());
           const updated = new Set(resolved);
           if (resolved.has(lineNumber)) {
             updated.delete(lineNumber);
-            // Opening: start reply mode
-            setReplyingToLine(lineNumber);
+            // Opening: auto-start reply if single thread, otherwise let user pick
+            const lineThreads = threadsByLine.get(lineNumber);
+            if (lineThreads?.length === 1) {
+              setReplyTarget({ type: "thread", line: lineNumber, threadId: lineThreads[0].id });
+            } else {
+              setReplyTarget(null);
+            }
             setReplyText("");
           } else {
             updated.add(lineNumber);
-            // Collapsing: cancel reply if it was for this line
-            if (replyingToLine === lineNumber) {
-              setReplyingToLine(null);
+            if (replyTarget?.line === lineNumber) {
+              setReplyTarget(null);
               setReplyText("");
             }
           }
@@ -399,7 +416,7 @@ export function InlineCommentableMarkdown({
           setCommentText("");
           setSelectedText("");
         } else {
-          setReplyingToLine(null);
+          setReplyTarget(null);
           setReplyText("");
           setActiveLineIndex(lineIndex);
           setCommentText("");
@@ -407,7 +424,7 @@ export function InlineCommentableMarkdown({
         }
       }
     },
-    [activeLineIndex, commentsByLine, replyingToLine],
+    [activeLineIndex, commentsByLine, threadsByLine, replyTarget],
   );
 
   // Initialize collapsed state: collapse all if more than 3 comment blocks
@@ -485,7 +502,7 @@ export function InlineCommentableMarkdown({
     }
 
     recalcPositions();
-  }, [lineOffsets, commentsByLine, activeLineIndex, replyingToLine, replyText, commentText, resolvedCollapsedLines]);
+  }, [lineOffsets, commentsByLine, activeLineIndex, replyTarget, replyText, commentText, resolvedCollapsedLines]);
 
   // Compute SVG arrow paths from each comment to its line (only on lg when sidebar is beside content)
   const recalcArrows = useCallback(() => {
@@ -719,14 +736,15 @@ export function InlineCommentableMarkdown({
     }
   }
 
-  async function handleReplySubmit(lineNumber: number) {
-    if (!replyText.trim()) return;
+  async function handleReplySubmit() {
+    if (!replyTarget || !replyText.trim()) return;
 
     setIsSubmitting(true);
     try {
-      await onCommentSubmit(lineNumber, replyText);
+      const threadId = replyTarget.type === "thread" ? replyTarget.threadId : undefined;
+      await onCommentSubmit(replyTarget.line, replyText, threadId);
       setReplyText("");
-      setReplyingToLine(null);
+      setReplyTarget(null);
     } catch (error) {
       console.error("Error submitting reply:", error);
       alert("Failed to post comment");
@@ -1070,28 +1088,33 @@ export function InlineCommentableMarkdown({
           />
         )}
 
-        {Array.from(commentsByLine.entries())
+        {Array.from(threadsByLine.entries())
           .sort(([a], [b]) => a - b)
-          .map(([lineNumber, lineComments]) => (
+          .map(([lineNumber, lineThreads]) => (
             <ExistingLineComments
               key={lineNumber}
               lineNumber={lineNumber}
-              comments={lineComments}
+              threads={lineThreads}
               position={getCommentPosition(lineNumber)}
-              isReplying={replyingToLine === lineNumber}
-              replyText={replyText}
+              replyingToThreadId={replyTarget?.line === lineNumber && replyTarget.type === "thread" ? replyTarget.threadId : null}
+              isStartingNewThread={replyTarget?.line === lineNumber && replyTarget.type === "newThread"}
+              replyText={replyTarget?.line === lineNumber ? replyText : ""}
               isSubmitting={isSubmitting}
               isCollapsed={resolvedCollapsedLines.has(lineNumber)}
               onReplyTextChange={setReplyText}
-              onStartReply={() => {
-                setReplyingToLine(lineNumber);
+              onStartReply={(threadId) => {
+                setReplyTarget({ type: "thread", line: lineNumber, threadId });
+                setReplyText("");
+              }}
+              onStartNewThread={() => {
+                setReplyTarget({ type: "newThread", line: lineNumber });
                 setReplyText("");
               }}
               onCancelReply={() => {
-                setReplyingToLine(null);
+                setReplyTarget(null);
                 setReplyText("");
               }}
-              onSubmitReply={() => handleReplySubmit(lineNumber)}
+              onSubmitReply={handleReplySubmit}
               onToggleCollapse={() => {
                 setCollapsedLines(() => {
                   const next = new Set(resolvedCollapsedLines);

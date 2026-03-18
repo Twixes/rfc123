@@ -3,9 +3,11 @@
 import { useState, useRef, useEffect, useMemo, useCallback, memo } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
+import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import type { Comment } from "@/lib/github";
 import { rehypeLineMarkers } from "@/lib/rehype-line-markers";
+import { remarkMergeParagraphs } from "@/lib/remark-merge-paragraphs";
 import { remarkMentions } from "@/lib/remark-mentions";
 import { MermaidDiagram } from "@/components/MermaidDiagram";
 import { LineCommentBox } from "@/components/LineCommentBox";
@@ -14,7 +16,12 @@ import { ProfilePictures } from "@/components/ProfilePictures";
 
 // Module-level constants — stable references across all renders and instances.
 type PluginList = NonNullable<React.ComponentProps<typeof ReactMarkdown>["rehypePlugins"]>;
-const REMARK_PLUGINS: PluginList = [remarkGfm, remarkMentions];
+const REMARK_PLUGINS: PluginList = [
+  remarkGfm,
+  remarkMentions,
+  remarkBreaks,
+  remarkMergeParagraphs,
+];
 const REHYPE_PLUGINS: PluginList = [[rehypeHighlight, { plainText: ["mermaid"] }], rehypeLineMarkers];
 
 const MemoizedMarkdown = memo(function MemoizedMarkdown({
@@ -45,6 +52,7 @@ interface LineNumbersColumnProps {
   commentsByLine: Map<number, Comment[]>;
   lineOffsets: Map<number, number>;
   linesWithMarkers: Set<number>;
+  lineRanges: Map<number, number>;
   lineRefs: React.MutableRefObject<Map<number, HTMLButtonElement>>;
   onLineClick: (lineNumber: number) => void;
   onMouseEnterLine: (lineNumber: number) => void;
@@ -57,6 +65,7 @@ const LineNumbersColumn = memo(function LineNumbersColumn({
   commentsByLine,
   lineOffsets,
   linesWithMarkers,
+  lineRanges,
   lineRefs,
   onLineClick,
   onMouseEnterLine,
@@ -77,6 +86,8 @@ const LineNumbersColumn = memo(function LineNumbersColumn({
         if (lineOffset === undefined) return null;
 
         const hasCommentsForStyle = (commentsByLine.get(lineNumber)?.length ?? 0) > 0;
+        const endLine = lineRanges.get(lineNumber);
+        const isRange = endLine != null && endLine > lineNumber;
 
         return (
           <button
@@ -85,23 +96,35 @@ const LineNumbersColumn = memo(function LineNumbersColumn({
             ref={(el) => { if (el) lineRefs.current.set(lineNumber, el); }}
             type="button"
             onClick={() => onLineClick(lineNumber)}
-            className="group flex items-center gap-2 pr-2 absolute cursor-pointer"
-            style={{ top: `${lineOffset}px`, height: "1.5rem" }}
+            className={`group flex gap-2 justify-end pr-2 absolute right-0 cursor-pointer ${isRange ? "items-start" : "items-center"}`}
+            style={{
+              top: `${lineOffset}px`,
+              height: isRange ? "auto" : "1.5rem",
+              minHeight: "1.5rem",
+            }}
             onMouseEnter={() => onMouseEnterLine(lineNumber)}
             onMouseLeave={onMouseLeaveLine}
-            aria-label={`Add comment to line ${lineNumber}`}
+            aria-label={`Add comment to lines ${lineNumber}${isRange ? `–${endLine}` : ""}`}
           >
-            <div className="hidden sm:flex h-5 w-5 items-center justify-center rounded border border-gray-30 bg-surface opacity-0 transition-all group-hover:opacity-100 group-hover:bg-gray-5">
+            <div className="hidden sm:flex h-5 w-5 shrink-0 items-center justify-center rounded border border-gray-30 bg-surface opacity-0 transition-all group-hover:opacity-100 group-hover:bg-gray-5">
               <svg className="h-3 w-3 text-gray-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <title>Add comment</title>
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
             </div>
             <span
-              className="font-mono text-[10px] sm:text-xs transition-opacity"
+              className={`font-mono text-[10px] sm:text-xs transition-opacity flex flex-col items-center leading-normal`}
               style={{ color: hasCommentsForStyle ? "var(--magenta)" : "var(--gray-50)" }}
             >
-              {lineNumber}
+              {isRange ? (
+                <>
+                  <span>{lineNumber}</span>
+                  <span>↓</span>
+                  <span>{endLine}</span>
+                </>
+              ) : (
+                lineNumber
+              )}
             </span>
           </button>
         );
@@ -138,6 +161,7 @@ export function InlineCommentableMarkdown({
   const [linesWithMarkers, setLinesWithMarkers] = useState<Set<number>>(
     new Set(),
   );
+  const [lineRanges, setLineRanges] = useState<Map<number, number>>(new Map());
   const [replyingToLine, setReplyingToLine] = useState<number | null>(null);
   const [replyText, setReplyText] = useState("");
   const lineRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
@@ -244,8 +268,24 @@ export function InlineCommentableMarkdown({
       }
     }
 
+    // Build line ranges for multi-line blocks (e.g. merged paragraphs)
+    const ranges = new Map<number, number>();
+    const elements = markdownElement.querySelectorAll("[data-line-element]");
+    for (const el of elements) {
+      const start = el.getAttribute("data-line-element");
+      const end = el.getAttribute("data-line-end");
+      if (start && end) {
+        const startNum = Number.parseInt(start, 10);
+        const endNum = Number.parseInt(end, 10);
+        if (!Number.isNaN(startNum) && !Number.isNaN(endNum) && endNum > startNum) {
+          ranges.set(startNum, endNum);
+        }
+      }
+    }
+
     setLineOffsets(offsets);
     setLinesWithMarkers(withMarkers);
+    setLineRanges(ranges);
   }, [lines, commentsByLine, activeLineIndex]);
 
   // Stable hover callbacks — identity never changes, so they can be in memoized components
@@ -768,6 +808,7 @@ export function InlineCommentableMarkdown({
           commentsByLine={commentsByLine}
           lineOffsets={lineOffsets}
           linesWithMarkers={linesWithMarkers}
+          lineRanges={lineRanges}
           lineRefs={lineRefs}
           onLineClick={handleLineClick}
           onMouseEnterLine={handleMouseEnterLine}

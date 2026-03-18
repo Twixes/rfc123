@@ -140,14 +140,19 @@ export function rehypeLineMarkers() {
       }
     });
 
-    // Add data-line-element to elements for per-line hover/comment UI.
+    // Add data-line-element (and data-line-end for multi-line blocks) for per-line hover/comment UI.
     // 1. Top-level block elements (p, h1, blockquote, etc.) — but NOT ol/ul
     for (const child of tree.children) {
       if (child.type === "element" && child.position?.start?.line) {
-        const tag = (child as Element).tagName;
+        const el = child as Element;
+        const tag = el.tagName;
         if (tag === "ol" || tag === "ul") continue; // list containers handled by li
-        if (!child.properties) child.properties = {};
-        child.properties["data-line-element"] = child.position.start.line;
+        if (!el.properties) el.properties = {};
+        el.properties["data-line-element"] = child.position.start.line;
+        const endLine = child.position?.end?.line;
+        if (endLine != null && endLine > child.position.start.line) {
+          el.properties["data-line-end"] = endLine;
+        }
       }
     }
 

@@ -333,7 +333,7 @@ export async function fetchInlineCommentCounts(
 
         for (let i = 0; i < prNumbers.length; i++) {
             if (cached[i] != null) {
-                result[prNumbers[i]] = cached[i]
+                result[prNumbers[i]] = cached[i] as number
             } else {
                 toFetch.push(prNumbers[i])
             }

@@ -106,7 +106,7 @@ export function ExistingLineComments({
           </span>
           <span className="shrink-0 text-[10px] text-gray-50">
             {hasMultipleThreads
-              ? `${threads.length}T · ${totalCommentCount}C`
+              ? `${threads.length} threads, ${totalCommentCount} comments`
               : totalCommentCount > 1
                 ? `+${totalCommentCount - 1}`
                 : null}
@@ -128,9 +128,10 @@ export function ExistingLineComments({
         </button>
       ) : (
         <div className="flex items-center justify-between p-3 sm:p-4">
-          <a
-            href={`#line-${lineNumber}`}
-            className="block text-xs font-medium tracking-wide transition-all hover:opacity-70"
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            className="block text-xs font-medium tracking-wide transition-all hover:opacity-70 cursor-pointer"
             style={{ color: "var(--magenta)", opacity: isHovered ? 1 : 0.7 }}
           >
             Line {lineNumber}
@@ -139,7 +140,7 @@ export function ExistingLineComments({
                 {threads.length} threads
               </span>
             )}
-          </a>
+          </button>
           <button
             type="button"
             onClick={onToggleCollapse}

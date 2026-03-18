@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
-import { motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import type { RFC, RepoOption } from "@/lib/github";
 import RFCListSkeleton from "@/components/RFCListSkeleton";
 import { slugify } from "@/lib/slugify";
@@ -27,6 +27,63 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
   );
   const [selectedRepo, setSelectedRepo] = useState<RepoOption | null>(null);
   const rfcsAbortControllerRef = useRef<AbortController | null>(null);
+  const [selectedStatuses, setSelectedStatuses] = useState<
+    Set<RFC["status"]>
+  >(new Set(["open"]));
+  const [selectedAuthor, setSelectedAuthor] = useState<string | null>(null);
+  const [authorDropdownOpen, setAuthorDropdownOpen] = useState(false);
+  const [authorSearchQuery, setAuthorSearchQuery] = useState("");
+  const authorDropdownRef = useRef<HTMLDivElement>(null);
+  const authorInputRef = useRef<HTMLInputElement>(null);
+
+  const authors = useMemo(() => {
+    if (!rfcs) return [];
+    const map = new Map<string, string>();
+    for (const rfc of rfcs) {
+      if (!map.has(rfc.author)) map.set(rfc.author, rfc.authorAvatar);
+    }
+    return Array.from(map.entries())
+      .map(([login, avatar]) => ({ login, avatar }))
+      .sort((a, b) => a.login.localeCompare(b.login));
+  }, [rfcs]);
+
+  const filteredRfcs = useMemo(() => {
+    if (!rfcs) return null;
+    return rfcs.filter((rfc) => {
+      if (!selectedStatuses.has(rfc.status)) return false;
+      if (selectedAuthor && rfc.author !== selectedAuthor) return false;
+      return true;
+    });
+  }, [rfcs, selectedStatuses, selectedAuthor]);
+
+  function toggleStatus(status: RFC["status"]) {
+    setSelectedStatuses((prev) => {
+      const next = new Set(prev);
+      if (next.has(status)) {
+        if (next.size > 1) next.delete(status);
+      } else {
+        next.add(status);
+      }
+      return next;
+    });
+  }
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        authorDropdownRef.current &&
+        !authorDropdownRef.current.contains(event.target as Node)
+      ) {
+        setAuthorDropdownOpen(false);
+        setAuthorSearchQuery("");
+      }
+    }
+    if (authorDropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      authorInputRef.current?.focus();
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [authorDropdownOpen]);
 
   useEffect(() => {
     loadRepos();
@@ -127,11 +184,13 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
 
   function handleRepoSelect(repo: RepoOption) {
     setSelectedRepo(repo);
+    setSelectedAuthor(null);
     loadRFCs(repo);
   }
 
   function handleShowAll() {
     setSelectedRepo(null);
+    setSelectedAuthor(null);
     loadRFCs(null);
   }
 
@@ -203,6 +262,161 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
         )}
       </header>
 
+      {!isLoading && rfcs && rfcs.length > 0 && (
+        <div className="mb-6 flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            {(["open", "merged", "closed"] as const).map((status) => {
+              const isSelected = selectedStatuses.has(status);
+              const colors = {
+                open: { border: "var(--cyan)", bg: "var(--cyan-light)" },
+                merged: { border: "var(--yellow)", bg: "var(--yellow-light)" },
+                closed: { border: "var(--gray-30)", bg: "var(--gray-5)" },
+              };
+              return (
+                <button
+                  key={status}
+                  type="button"
+                  onClick={() => toggleStatus(status)}
+                  className={`border rounded-sm px-2 py-1 text-xs font-medium uppercase tracking-wider transition-all cursor-pointer ${
+                    isSelected ? "" : "opacity-40 hover:opacity-70"
+                  }`}
+                  style={{
+                    borderColor: colors[status].border,
+                    backgroundColor: isSelected
+                      ? colors[status].bg
+                      : "transparent",
+                    color: "var(--foreground)",
+                  }}
+                >
+                  {status}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="h-5 w-px bg-gray-20" />
+
+          <div className="relative" ref={authorDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setAuthorDropdownOpen(!authorDropdownOpen)}
+              className="text-sm text-gray-50 hover:text-foreground transition-colors flex items-center gap-2"
+            >
+              {selectedAuthor ? (
+                <span className="flex items-center gap-1.5">
+                  <img
+                    src={
+                      authors.find((a) => a.login === selectedAuthor)?.avatar
+                    }
+                    alt={selectedAuthor}
+                    className="h-4 w-4 rounded-full border border-gray-20"
+                  />
+                  {selectedAuthor}
+                </span>
+              ) : (
+                "All authors"
+              )}
+              <svg
+                className={`w-4 h-4 transition-transform ${authorDropdownOpen ? "rotate-180" : ""}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
+              </svg>
+            </button>
+
+            <AnimatePresence>
+              {authorDropdownOpen && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute top-full left-0 mt-2 w-64 bg-surface border border-gray-20 rounded-md z-50"
+                >
+                  {authors.length > 5 && (
+                    <div className="p-3 border-b border-gray-20">
+                      <input
+                        ref={authorInputRef}
+                        type="text"
+                        placeholder="Search authors..."
+                        value={authorSearchQuery}
+                        onChange={(e) => setAuthorSearchQuery(e.target.value)}
+                        className="w-full border border-gray-30 rounded-sm px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan focus:border-transparent"
+                      />
+                    </div>
+                  )}
+                  <div className="max-h-64 overflow-y-auto">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedAuthor(null);
+                        setAuthorDropdownOpen(false);
+                        setAuthorSearchQuery("");
+                      }}
+                      className={`w-full text-left px-4 py-2.5 text-sm border-b border-gray-20 hover:bg-yellow-light transition-colors ${
+                        !selectedAuthor ? "bg-gray-5 font-medium" : ""
+                      }`}
+                    >
+                      All authors
+                    </button>
+                    {authors
+                      .filter((a) =>
+                        a.login
+                          .toLowerCase()
+                          .includes(authorSearchQuery.toLowerCase()),
+                      )
+                      .map((author) => (
+                        <button
+                          key={author.login}
+                          type="button"
+                          onClick={() => {
+                            setSelectedAuthor(author.login);
+                            setAuthorDropdownOpen(false);
+                            setAuthorSearchQuery("");
+                          }}
+                          className={`w-full text-left px-4 py-2.5 text-sm border-b border-gray-20 last:border-b-0 hover:bg-yellow-light transition-colors flex items-center gap-2 ${
+                            selectedAuthor === author.login
+                              ? "bg-gray-5 font-medium"
+                              : ""
+                          }`}
+                        >
+                          <img
+                            src={author.avatar}
+                            alt={author.login}
+                            className="h-5 w-5 rounded-full border border-gray-20"
+                          />
+                          {author.login}
+                        </button>
+                      ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {selectedAuthor && (
+            <button
+              type="button"
+              onClick={() => setSelectedAuthor(null)}
+              className="text-sm text-gray-50 hover:text-foreground transition-colors"
+            >
+              (clear)
+            </button>
+          )}
+
+          <span className="text-xs text-gray-50 ml-auto tabular-nums">
+            {filteredRfcs?.length} of {rfcs.length}
+          </span>
+        </div>
+      )}
+
       {isLoading ? (
         <RFCListSkeleton />
       ) : (
@@ -215,7 +429,7 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
             hidden: {},
           }}
         >
-          {rfcs?.map((rfc, index) => (
+          {filteredRfcs?.map((rfc, index) => (
             <motion.div
               key={`${rfc.owner}/${rfc.repo}/${rfc.number}`}
               variants={{

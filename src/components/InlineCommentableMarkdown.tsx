@@ -1009,6 +1009,18 @@ export function InlineCommentableMarkdown({
           {children}
         </td>
       ),
+      img: ({ node: _node, src, alt, ...props }: MDProps<"img">) => {
+        let proxiedSrc = src;
+        try {
+          if (typeof src === "string") {
+            const url = new URL(src);
+            if (url.hostname === "github.com" && url.pathname.startsWith("/user-attachments/")) {
+              proxiedSrc = `/api/github-image?url=${encodeURIComponent(src)}`;
+            }
+          }
+        } catch {}
+        return <img src={proxiedSrc as string | undefined} alt={(alt as string) ?? ""} {...props} />;
+      },
     }),
     [commentsByLine, handleLineClick, handleMouseEnterLine, handleMouseLeaveLine, renderProfilePictures],
   );

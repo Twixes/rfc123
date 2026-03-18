@@ -17,6 +17,18 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
         remarkPlugins={[remarkGfm, remarkMentions]}
         rehypePlugins={[rehypeRaw, rehypeHighlight]}
         components={{
+          img: ({ src, alt, ...props }) => {
+            let proxiedSrc = src;
+            try {
+              if (typeof src === "string") {
+                const url = new URL(src);
+                if (url.hostname === "github.com" && url.pathname.startsWith("/user-attachments/")) {
+                  proxiedSrc = `/api/github-image?url=${encodeURIComponent(src)}`;
+                }
+              }
+            } catch {}
+            return <img src={proxiedSrc as string | undefined} alt={(alt as string) ?? ""} {...props} />;
+          },
           h1: ({ children }) => (
             <h1 className="mb-2 mt-6 text-5xl font-sans font-semibold tracking-tight text-foreground">
               {children}

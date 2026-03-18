@@ -9,7 +9,7 @@ export function ProfilePictures({ users }: ProfilePicturesProps) {
   );
 
   return (
-    <div className="flex -space-x-1.5">
+    <span className="inline-flex -space-x-1.5">
       {uniqueUsers.map(([name, avatar]) => (
         <img
           key={name}
@@ -19,6 +19,6 @@ export function ProfilePictures({ users }: ProfilePicturesProps) {
           className="h-5 w-5 rounded-full border border-surface"
         />
       ))}
-    </div>
+    </span>
   );
 }

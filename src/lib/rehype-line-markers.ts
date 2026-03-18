@@ -114,6 +114,9 @@ export function rehypeLineMarkers() {
         }
       }
 
+      // Skip table and tr — tables get markers in the dedicated table pass
+      if (node.tagName === "table" || node.tagName === "tr") return;
+
       // For all other elements, inject an invisible marker span for position tracking
       if (node.position?.start?.line) {
         const lineNumber = node.position.start.line;
@@ -140,6 +143,59 @@ export function rehypeLineMarkers() {
       }
     });
 
+    // Table rows: assign line numbers based on structure (header=line N, separator=+1,
+    // first data=+2, etc.) and inject markers into first cell to avoid column layout issues.
+    visit(tree, "element", (node: Element, index, parent) => {
+      if (node.tagName !== "table" || !node.position?.start?.line) return;
+
+      const tableLine = node.position.start.line;
+      let trIndex = 0;
+
+      for (const section of node.children) {
+        if (section.type !== "element") continue;
+        const sectionEl = section as Element;
+        if (sectionEl.tagName !== "thead" && sectionEl.tagName !== "tbody") continue;
+
+        for (const row of sectionEl.children) {
+          if (row.type !== "element") continue;
+          const tr = row as Element;
+          if (tr.tagName !== "tr") continue;
+
+          // Header = tableLine, first data = +2 (separator line), then +1 per row
+          const lineNumber =
+            trIndex === 0 ? tableLine : tableLine + 2 + (trIndex - 1);
+          trIndex++;
+
+          if (!linesSeen.has(lineNumber) && tr.children?.length) {
+            const firstCell = tr.children[0];
+            if (
+              firstCell.type === "element" &&
+              (firstCell.tagName === "th" || firstCell.tagName === "td")
+            ) {
+              linesSeen.add(lineNumber);
+              const marker: Element = {
+                type: "element",
+                tagName: "span",
+                properties: {
+                  id: `line-marker-${lineNumber}`,
+                  "data-line": lineNumber,
+                  style:
+                    "display:inline;width:0;height:0;overflow:hidden;pointer-events:none;",
+                },
+                children: [],
+              };
+              if (firstCell.children) {
+                (firstCell as Element).children.unshift(marker);
+              }
+            }
+          }
+
+          if (!tr.properties) tr.properties = {};
+          tr.properties["data-line-element"] = lineNumber;
+        }
+      }
+    });
+
     // Add data-line-element (and data-line-end for multi-line blocks) for per-line hover/comment UI.
     // 1. Top-level block elements (p, h1, blockquote, etc.) — but NOT ol/ul
     for (const child of tree.children) {
@@ -147,6 +203,7 @@ export function rehypeLineMarkers() {
         const el = child as Element;
         const tag = el.tagName;
         if (tag === "ol" || tag === "ul") continue; // list containers handled by li
+        if (tag === "table") continue; // table container handled by tr
         if (!el.properties) el.properties = {};
         el.properties["data-line-element"] = child.position.start.line;
         const endLine = child.position?.end?.line;
@@ -159,6 +216,19 @@ export function rehypeLineMarkers() {
     // 2. li elements — each list item gets its own line for individual highlighting
     visit(tree, "element", (node: Element) => {
       if (node.tagName !== "li") return;
+      const lineNumber =
+        node.position?.start?.line ??
+        findFirstDescendantLine(node);
+      if (lineNumber != null) {
+        if (!node.properties) node.properties = {};
+        node.properties["data-line-element"] = lineNumber;
+      }
+    });
+
+    // 3. tr elements — table rows are handled in the table pass above; other tr (unlikely) get position-based line
+    visit(tree, "element", (node: Element) => {
+      if (node.tagName !== "tr") return;
+      if (node.properties?.["data-line-element"]) return; // already set by table pass
       const lineNumber =
         node.position?.start?.line ??
         findFirstDescendantLine(node);

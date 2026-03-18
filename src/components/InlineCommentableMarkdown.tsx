@@ -361,6 +361,10 @@ export function InlineCommentableMarkdown({
         margin-left: 0;
         padding-left: 0;
       }
+      tr[data-line-element="${ln}"] {
+        margin-left: 0;
+        padding-left: 0;
+      }
       blockquote[data-line-element="${ln}"] {
         border-left-color: var(--yellow) !important;
       }`;
@@ -936,17 +940,10 @@ export function InlineCommentableMarkdown({
         );
       },
       table: ({ children, node: _node, ...props }: MDProps<"table">) => {
-        const lineNumber = (props as any)["data-line-element"];
+        const { "data-line-element": _stripped, ...rest } = props as any;
         return (
           <div className="my-4 overflow-x-auto">
-            <table
-              className="min-w-full border border-gray-20 rounded"
-              style={{ cursor: lineNumber ? "pointer" : undefined }}
-              onClick={() => lineNumber && handleLineClick(lineNumber)}
-              onMouseEnter={() => lineNumber && handleMouseEnterLine(lineNumber)}
-              onMouseLeave={handleMouseLeaveLine}
-              {...props}
-            >
+            <table className="min-w-full border border-gray-20 rounded" {...rest}>
               {children}
             </table>
           </div>
@@ -977,36 +974,22 @@ export function InlineCommentableMarkdown({
           </tr>
         );
       },
-      th: ({ children, node: _node, ...props }: MDProps<"th">) => {
-        const lineNumber = (props as any)["data-line-element"];
-        return (
-          <th
-            className="border border-gray-20 px-4 py-2 text-left text-sm font-medium text-foreground"
-            style={{ cursor: lineNumber ? "pointer" : undefined }}
-            onClick={() => lineNumber && handleLineClick(lineNumber)}
-            onMouseEnter={() => lineNumber && handleMouseEnterLine(lineNumber)}
-            onMouseLeave={handleMouseLeaveLine}
-            {...props}
-          >
-            {children}
-          </th>
-        );
-      },
-      td: ({ children, node: _node, ...props }: MDProps<"td">) => {
-        const lineNumber = (props as any)["data-line-element"];
-        return (
-          <td
-            className="border border-gray-20 px-4 py-2 text-sm text-gray-90"
-            style={{ cursor: lineNumber ? "pointer" : undefined }}
-            onClick={() => lineNumber && handleLineClick(lineNumber)}
-            onMouseEnter={() => lineNumber && handleMouseEnterLine(lineNumber)}
-            onMouseLeave={handleMouseLeaveLine}
-            {...props}
-          >
-            {children}
-          </td>
-        );
-      },
+      th: ({ children, node: _node, ...props }: MDProps<"th">) => (
+        <th
+          className="border border-gray-20 px-4 py-2 text-left text-sm font-medium text-foreground"
+          {...props}
+        >
+          {children}
+        </th>
+      ),
+      td: ({ children, node: _node, ...props }: MDProps<"td">) => (
+        <td
+          className="border border-gray-20 px-4 py-2 text-sm text-gray-90"
+          {...props}
+        >
+          {children}
+        </td>
+      ),
     }),
     [commentsByLine, handleLineClick, handleMouseEnterLine, handleMouseLeaveLine, renderProfilePictures],
   );

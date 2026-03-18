@@ -252,7 +252,7 @@ export function ExistingLineComments({
                   </div>
                 </div>
               ) : (
-                <div className="px-3 py-1">
+                <div className="px-3 pb-3 pt-1 flex items-center justify-between">
                   <button
                     type="button"
                     onClick={() => onStartReply(thread.id)}
@@ -260,13 +260,22 @@ export function ExistingLineComments({
                   >
                     Reply
                   </button>
+                  {threadIndex === threads.length - 1 && !isStartingNewThread && (
+                    <button
+                      type="button"
+                      onClick={onStartNewThread}
+                      className="rounded-md border border-dashed border-gray-20 bg-surface px-2.5 py-1 text-[11px] font-medium text-gray-50 transition-all hover:bg-gray-5 hover:text-foreground hover:border-gray-30"
+                    >
+                      + New thread
+                    </button>
+                  )}
                 </div>
               )}
             </div>
           ))}
 
-          {/* New thread form or button */}
-          {isStartingNewThread ? (
+          {/* New thread form */}
+          {isStartingNewThread && (
             <div className="p-3 sm:p-4 pt-2 border-t border-dashed border-gray-20 mt-2">
               <p className="mb-2 text-[11px] font-medium text-gray-50">New thread</p>
               <textarea
@@ -309,16 +318,6 @@ export function ExistingLineComments({
                   </button>
                 </div>
               </div>
-            </div>
-          ) : (
-            <div className="p-3 sm:p-4 pt-0">
-              <button
-                type="button"
-                onClick={onStartNewThread}
-                className="w-full rounded-md border border-dashed border-gray-20 bg-surface px-3 py-1.5 text-xs font-medium text-gray-50 transition-all hover:bg-gray-5 hover:text-foreground hover:border-gray-30"
-              >
-                + New thread
-              </button>
             </div>
           )}
         </div>

@@ -29,7 +29,7 @@ export default async function InvitePage({ searchParams }: InvitePageProps) {
       <div className="w-full max-w-4xl">
         <div className="border border-gray-20 rounded-md bg-surface p-4 sm:p-8">
           <h1 className="mb-6 font-serif font-normal text-4xl sm:text-6xl text-foreground">
-            You&apos;ve been invited to read this RFC
+            You&apos;ve been invited to comment on this RFC
           </h1>
 
           <div className="mb-6 border-t border-gray-20 pt-6">

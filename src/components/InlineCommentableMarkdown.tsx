@@ -167,8 +167,18 @@ export function InlineCommentableMarkdown({
   const [replyText, setReplyText] = useState("");
   const lineRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
   const markdownRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const isSelectingRef = useRef(false);
+  const [arrowPaths, setArrowPaths] = useState<
+    Array<{
+      lineNumber: number;
+      from: { x: number; y: number };
+      to: { x: number; y: number };
+      elbowX: number;
+    }>
+  >([]);
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
 
   const lines = useMemo(() => content.split("\n"), [content]);
   const commentBoxRefs = useRef<Map<number, HTMLDivElement>>(new Map());
@@ -309,18 +319,24 @@ export function InlineCommentableMarkdown({
 
   // CSS-based line highlighting — updating this never causes ReactMarkdown to re-render.
   // Omitted lines (no DOM marker) are aliased to the preceding line so we can highlight that content.
+  // Hovered lines get a more intense color than merely active (selected) lines.
   const lineHighlightCss = useMemo(() => {
-    const highlighted = new Set<number>();
     const resolve = (ln: number) => lineAlias.get(ln) ?? ln;
-    if (hoveredLineIndex !== null) highlighted.add(resolve(hoveredLineIndex + 1));
-    if (activeLineIndex !== null) highlighted.add(resolve(activeLineIndex + 1));
-    if (hoveredCommentLineIndex !== null) highlighted.add(resolve(hoveredCommentLineIndex + 1));
-    if (highlighted.size === 0) return "";
-    return Array.from(highlighted)
+    const hovered = new Set<number>();
+    const active = new Set<number>();
+    if (hoveredLineIndex !== null) hovered.add(resolve(hoveredLineIndex + 1));
+    if (hoveredCommentLineIndex !== null) hovered.add(resolve(hoveredCommentLineIndex + 1));
+    if (activeLineIndex !== null) active.add(resolve(activeLineIndex + 1));
+    const all = new Set([...hovered, ...active]);
+    if (all.size === 0) return "";
+    return Array.from(all)
       .map(
-        (ln) => `
+        (ln) => {
+          const isHovered = hovered.has(ln);
+          const bg = isHovered ? "var(--yellow-medium)" : "var(--yellow-light)";
+          return `
       [data-line-element="${ln}"] {
-        background-color: var(--yellow-light);
+        background-color: ${bg};
         border-radius: 2px;
         padding-left: 0.5rem;
         margin-left: -0.5rem;
@@ -331,7 +347,8 @@ export function InlineCommentableMarkdown({
       }
       blockquote[data-line-element="${ln}"] {
         border-left-color: var(--yellow) !important;
-      }`,
+      }`;
+        },
       )
       .join("\n");
   }, [hoveredLineIndex, activeLineIndex, hoveredCommentLineIndex, lineAlias]);
@@ -352,20 +369,27 @@ export function InlineCommentableMarkdown({
     (lineNumber: number) => {
       const lineIndex = lineNumber - 1;
       if (commentsByLine.has(lineNumber)) {
-        setReplyingToLine(lineNumber);
-        setReplyText("");
         setActiveLineIndex(null);
         setCommentText("");
         setSelectedText("");
-        // Expand the comment box if it's collapsed so the user can see the comments
+        // Toggle the comment box collapsed/expanded
         setCollapsedLines((prev) => {
           const resolved = prev ?? (commentsByLine.size > 3 ? new Set(commentsByLine.keys()) : new Set<number>());
+          const updated = new Set(resolved);
           if (resolved.has(lineNumber)) {
-            const updated = new Set(resolved);
             updated.delete(lineNumber);
-            return updated;
+            // Opening: start reply mode
+            setReplyingToLine(lineNumber);
+            setReplyText("");
+          } else {
+            updated.add(lineNumber);
+            // Collapsing: cancel reply if it was for this line
+            if (replyingToLine === lineNumber) {
+              setReplyingToLine(null);
+              setReplyText("");
+            }
           }
-          return resolved;
+          return updated;
         });
       } else {
         setActiveLineIndex(lineIndex);
@@ -373,7 +397,7 @@ export function InlineCommentableMarkdown({
         setSelectedText("");
       }
     },
-    [commentsByLine],
+    [commentsByLine, replyingToLine],
   );
 
   // Initialize collapsed state: collapse all if more than 3 comment blocks
@@ -452,6 +476,126 @@ export function InlineCommentableMarkdown({
 
     recalcPositions();
   }, [lineOffsets, commentsByLine, activeLineIndex, replyingToLine, replyText, commentText, resolvedCollapsedLines]);
+
+  // Compute SVG arrow paths from each comment to its line (only on lg when sidebar is beside content)
+  const recalcArrows = useCallback(() => {
+    const container = containerRef.current;
+    const markdown = markdownRef.current;
+    if (!container || !markdown || typeof window === "undefined") return;
+
+    const rect = container.getBoundingClientRect();
+    if (rect.width < 1024) {
+      setArrowPaths([]);
+      setContainerSize({ width: 0, height: 0 });
+      return;
+    }
+
+    setContainerSize({ width: rect.width, height: rect.height });
+    const rawPaths: Array<{
+      lineNumber: number;
+      from: { x: number; y: number };
+      to: { x: number; y: number };
+      vy1: number;
+      vy2: number;
+    }> = [];
+
+    const collect = (lineNum: number, boxRef: HTMLDivElement | null) => {
+      if (!boxRef) return;
+      const targetLine = lineAlias.get(lineNum) ?? lineNum;
+      // Use data-line-element block (full-width) for right edge; line-marker is zero-width at line start
+      let targetEl: HTMLElement | null = null;
+      const blocks = markdown?.querySelectorAll("[data-line-element]") ?? [];
+      for (const el of blocks) {
+        const start = Number.parseInt(
+          el.getAttribute("data-line-element") ?? "",
+          10,
+        );
+        const endAttr = el.getAttribute("data-line-end");
+        const end = endAttr ? Number.parseInt(endAttr, 10) : start;
+        if (!Number.isNaN(start) && targetLine >= start && targetLine <= end) {
+          targetEl = el as HTMLElement;
+          break;
+        }
+      }
+      if (!targetEl) {
+        targetEl = document.getElementById(`line-marker-${targetLine}`);
+      }
+      if (!targetEl) return;
+
+      const boxRect = boxRef.getBoundingClientRect();
+      const targetRect = targetEl.getBoundingClientRect();
+
+      // Start: left edge of comment box, vertical center
+      const from = {
+        x: boxRect.left - rect.left,
+        y: boxRect.top - rect.top + boxRect.height / 2,
+      };
+      // End: top-right of line block, aligned with profile pic center (3px + 10px)
+      const to = {
+        x: targetRect.right - rect.left,
+        y: targetRect.top - rect.top + 13,
+      };
+      const vy1 = Math.min(from.y, to.y);
+      const vy2 = Math.max(from.y, to.y);
+      rawPaths.push({ lineNumber: lineNum, from, to, vy1, vy2 });
+    };
+
+    for (const ln of commentsByLine.keys()) {
+      collect(ln, commentBoxRefs.current.get(ln) ?? null);
+    }
+    if (activeLineIndex !== null) {
+      collect(activeLineIndex + 1, commentBoxRefs.current.get(-1) ?? null);
+    }
+
+    // Assign elbowX: right-angle paths; offset overlapping vertical segments by 4px
+    const OFFSET = 4;
+    const baseElbowX =
+      rawPaths.length > 0
+        ? rawPaths.reduce((s, p) => s + (p.from.x + p.to.x) / 2, 0) / rawPaths.length
+        : 0;
+    const segments: Array<{ x: number; vy1: number; vy2: number }> = [];
+    const paths = rawPaths
+      .sort((a, b) => a.vy1 - b.vy1)
+      .map((p) => {
+        let offset = 0;
+        let elbowX: number;
+        for (;;) {
+          const tryX = Math.max(p.to.x, baseElbowX - offset);
+          const overlaps = segments.some(
+            (s) =>
+              Math.abs(s.x - tryX) < OFFSET &&
+              Math.min(p.vy2, s.vy2) > Math.max(p.vy1, s.vy1),
+          );
+          if (!overlaps) {
+            elbowX = tryX;
+            segments.push({ x: tryX, vy1: p.vy1, vy2: p.vy2 });
+            break;
+          }
+          offset += OFFSET;
+        }
+        return { lineNumber: p.lineNumber, from: p.from, to: p.to, elbowX };
+      });
+
+    setArrowPaths(paths);
+  }, [commentsByLine, activeLineIndex, lineAlias]);
+
+  useEffect(() => {
+    recalcArrows();
+    const ro = new ResizeObserver(() => recalcArrows());
+    if (containerRef.current) ro.observe(containerRef.current);
+    const onScroll = () => requestAnimationFrame(recalcArrows);
+    window.addEventListener("scroll", onScroll, true);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("scroll", onScroll, true);
+    };
+  }, [recalcArrows, commentPositions, resolvedCollapsedLines]);
+
+  // Re-run after expand/collapse animations complete
+  useEffect(() => {
+    const timer = setTimeout(recalcArrows, 350);
+    return () => clearTimeout(timer);
+  }, [recalcArrows, commentPositions, resolvedCollapsedLines]);
 
   // Helper to get the position for a specific line
   const getCommentPosition = (lineNumber: number): number => {
@@ -583,7 +727,7 @@ export function InlineCommentableMarkdown({
             {...props}
           >
             {children}
-            <span className="absolute right-0 top-1/2 -translate-y-1/2">{renderProfilePictures(lineNumber)}</span>
+            <span className="absolute right-[3px] top-[3px]">{renderProfilePictures(lineNumber)}</span>
           </h1>
         );
       },
@@ -599,7 +743,7 @@ export function InlineCommentableMarkdown({
             {...props}
           >
             {children}
-            <span className="absolute right-0 top-1/2 -translate-y-1/2">{renderProfilePictures(lineNumber)}</span>
+            <span className="absolute right-[3px] top-[3px]">{renderProfilePictures(lineNumber)}</span>
           </h2>
         );
       },
@@ -615,7 +759,7 @@ export function InlineCommentableMarkdown({
             {...props}
           >
             {children}
-            <span className="absolute right-0 top-1/2 -translate-y-1/2">{renderProfilePictures(lineNumber)}</span>
+            <span className="absolute right-[3px] top-[3px]">{renderProfilePictures(lineNumber)}</span>
           </h3>
         );
       },
@@ -631,7 +775,7 @@ export function InlineCommentableMarkdown({
             {...props}
           >
             {children}
-            <span className="absolute right-0 top-1/2 -translate-y-1/2">{renderProfilePictures(lineNumber)}</span>
+            <span className="absolute right-[3px] top-[3px]">{renderProfilePictures(lineNumber)}</span>
           </p>
         );
       },
@@ -678,7 +822,7 @@ export function InlineCommentableMarkdown({
             {...props}
           >
             {children}
-            <span className="absolute right-0 top-1/2 -translate-y-1/2">{renderProfilePictures(lineNumber)}</span>
+            <span className="absolute right-[3px] top-[3px]">{renderProfilePictures(lineNumber)}</span>
           </li>
         );
       },
@@ -839,8 +983,9 @@ export function InlineCommentableMarkdown({
   }, [commentPositions]);
 
   return (
-    <div className="relative grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-8 lg:gap-12" style={{ minHeight: `${minContentHeight}px` }}>
-      {/* Main content */}
+    <div ref={containerRef} className="relative" style={{ minHeight: `${minContentHeight}px` }}>
+      <div className="relative grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-8 lg:gap-12">
+        {/* Main content */}
       <div className="relative flex gap-2 sm:gap-4 -ml-2 sm:-ml-4 min-w-0 h-fit" >
         {/* Line numbers column */}
         <LineNumbersColumn
@@ -946,6 +1091,7 @@ export function InlineCommentableMarkdown({
                   contentRefs.current.delete(lineNumber);
                 }
               }}
+              isHovered={hoveredCommentLineIndex === lineNumber - 1 || hoveredLineIndex === lineNumber - 1}
               onMouseEnter={() => setHoveredCommentLineIndex(lineNumber - 1)}
               onMouseLeave={() => setHoveredCommentLineIndex(null)}
             />
@@ -989,6 +1135,51 @@ export function InlineCommentableMarkdown({
           </div>
         )}
       </div>
+      </div>
+
+      {/* SVG arrows from comments to line markers (lg only) */}
+      {containerSize.width > 0 && arrowPaths.length > 0 && (
+        <svg
+          className="pointer-events-none absolute left-0 top-0 z-10 hidden lg:block"
+          width={containerSize.width}
+          height={containerSize.height}
+          viewBox={`0 0 ${containerSize.width} ${containerSize.height}`}
+          preserveAspectRatio="none"
+        >
+          <defs>
+            <marker
+              id="arrowhead"
+              markerWidth="6"
+              markerHeight="6"
+              refX="6"
+              refY="3"
+              orient="auto"
+            >
+              <path
+                d="M6,3 L0,0 L0,6 Z"
+                fill="var(--magenta)"
+                fillOpacity="0.6"
+              />
+            </marker>
+          </defs>
+          {arrowPaths.map(({ lineNumber, from, to, elbowX }) => {
+            const isLineHovered = hoveredCommentLineIndex === lineNumber - 1 || hoveredLineIndex === lineNumber - 1;
+            const d = `M ${from.x} ${from.y} H ${elbowX} V ${to.y} H ${to.x}`;
+            return (
+              <path
+                key={lineNumber}
+                d={d}
+                fill="none"
+                stroke="var(--magenta)"
+                strokeWidth="1"
+                strokeOpacity={isLineHovered ? 1 : 0.6}
+                markerEnd="url(#arrowhead)"
+                style={{ transition: "stroke-opacity 0.15s, stroke-width 0.15s" }}
+              />
+            );
+          })}
+        </svg>
+      )}
 
       {/* Selection tooltip */}
       <div

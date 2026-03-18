@@ -14,6 +14,7 @@
     --magenta: color(display-p3 0.72 0.32 0.46);
     --magenta-light: color(display-p3 0.96 0.92 0.94);
     --yellow: color(display-p3 0.88 0.76 0.27);
+    --yellow-medium: color(display-p3 0.95 0.92 0.78);
     --yellow-light: color(display-p3 0.98 0.97 0.92);
     --key-black: color(display-p3 0.1 0.1 0.12);
 
@@ -46,6 +47,7 @@
     --magenta: #c4567a;
     --magenta-light: #f5ebef;
     --yellow: #e8c547;
+    --yellow-medium: #f2ebc7;
     --yellow-light: #faf8eb;
     --key-black: #1a1a1f;
     --gray-5: #f8f8f9;

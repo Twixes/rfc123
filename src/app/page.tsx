@@ -19,27 +19,33 @@ export default async function LandingPage() {
                     </StaggeredFadeIn>
 
                     <StaggeredFadeIn delay={0.16}>
-                    <div className="mb-6 flex flex-col sm:flex-row gap-6 sm:gap-8">
-                        <div className="flex-1">
-                            <div className="mb-2 h-0.5 w-12" style={{ backgroundColor: "var(--cyan)" }} />
-                            <div className="text-2xl font-serif text-foreground">1. Draft<sup className="text-xs ml-0.5 font-sans font-medium text-gray-50">SOON</sup></div>
-                            <p className="mt-1 text-sm text-gray-70">Write rich RFCs in Markdown,<br/>automatically creating a GitHub PR.</p>
-                        </div>
-                        <div className="flex-1">
-                            <div className="mb-2 h-0.5 w-12" style={{ backgroundColor: "var(--magenta)" }} />
-                            <div className="text-2xl font-serif text-foreground">2. Discuss</div>
-                            <p className="mt-1 text-sm text-gray-70">Comment line-by-line,<br/>Google Docs-style.</p>
-                        </div>
-                        <div className="flex-1">
-                            <div className="mb-2 h-0.5 w-12" style={{ backgroundColor: "var(--yellow)" }} />
-                            <div className="text-2xl font-serif text-foreground">3. Decide<sup className="text-xs ml-0.5 font-sans font-medium text-gray-50">SOON</sup></div>
-                            <p className="mt-1 text-sm text-gray-70">Reach conclusions ASAP<br/>thanks to Slack notifications.</p>
-                        </div>
+                    <div className="mb-6 flex flex-col sm:flex-row gap-6 sm:gap-8 border-b border-gray-20 pb-6">
+                        <StaggeredFadeIn delay={0.16}>
+                            <div className="flex-1">
+                                <div className="mb-2 h-0.5 w-12" style={{ backgroundColor: "var(--cyan)" }} />
+                                <div className="text-2xl font-serif text-foreground">1. Draft<sup className="text-xs ml-0.5 font-sans font-medium text-gray-50">SOON</sup></div>
+                                <p className="mt-1 text-sm text-gray-70">Write rich RFCs in Markdown,<br/>automatically creating a GitHub PR.</p>
+                            </div>
+                        </StaggeredFadeIn>
+                        <StaggeredFadeIn delay={0.24}>
+                            <div className="flex-1">
+                                <div className="mb-2 h-0.5 w-12" style={{ backgroundColor: "var(--magenta)" }} />
+                                <div className="text-2xl font-serif text-foreground">2. Discuss</div>
+                                <p className="mt-1 text-sm text-gray-70">Comment line-by-line,<br/>Google Docs-style.</p>
+                            </div>
+                        </StaggeredFadeIn>
+                        <StaggeredFadeIn delay={0.32}>
+                            <div className="flex-1">
+                                <div className="mb-2 h-0.5 w-12" style={{ backgroundColor: "var(--yellow)" }} />
+                                <div className="text-2xl font-serif text-foreground">3. Decide<sup className="text-xs ml-0.5 font-sans font-medium text-gray-50">SOON</sup></div>
+                                <p className="mt-1 text-sm text-gray-70">Reach conclusions ASAP<br/>thanks to Slack notifications.</p>
+                            </div>
+                        </StaggeredFadeIn>
                     </div>
                     </StaggeredFadeIn>
 
-                    <StaggeredFadeIn delay={0.24}>
-                    <div className="mb-6 border-t border-gray-20 pt-6">
+                    <StaggeredFadeIn delay={0.40}>
+                    <div className="mb-6">
                         <h2 className="mb-4 text-2xl font-serif text-foreground">How it works</h2>
                         <div className="space-y-3">
                             <div className="flex gap-3">
@@ -99,7 +105,7 @@ export default async function LandingPage() {
                     </div>
                     </StaggeredFadeIn>
 
-                    <StaggeredFadeIn delay={0.32}>
+                    <StaggeredFadeIn delay={0.48}>
                     <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
                         <div className="flex gap-3 items-center">
                             {session ? (

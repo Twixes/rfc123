@@ -79,10 +79,10 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
     loadRFCs(null);
   }
 
-  const repoSelectorElement = availableRepos &&
-    availableRepos.length > 0 && (
-      <div className="flex items-center gap-2">
-        {selectedRepo ? (
+  const repoSelectorElement = (
+    <div className="flex items-center gap-2">
+      {availableRepos && availableRepos.length > 0 ? (
+        selectedRepo ? (
           <>
             <RepoSelector
               currentRepo={selectedRepo}
@@ -104,9 +104,32 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
             availableRepos={availableRepos}
             onSelect={handleRepoSelect}
           />
-        )}
-      </div>
-    );
+        )
+      ) : (
+        <div
+          className="text-sm font-medium text-gray-50 flex items-center gap-2"
+          aria-hidden
+        >
+          All repositories
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden
+          >
+            <title>Dropdown</title>
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M19 9l-7 7-7-7"
+            />
+          </svg>
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="mx-auto min-h-screen max-w-240 px-4 sm:px-8 py-6 sm:py-12">

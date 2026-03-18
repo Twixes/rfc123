@@ -21,6 +21,7 @@ interface ExistingLineCommentsProps {
   commentBoxRef: (el: HTMLDivElement | null) => void;
   /** Ref to the expandable content block; used to measure final height before animation */
   onContentRef?: (el: HTMLDivElement | null) => void;
+  isHovered?: boolean;
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
 }
@@ -40,6 +41,7 @@ export function ExistingLineComments({
   onToggleCollapse,
   commentBoxRef,
   onContentRef,
+  isHovered,
   onMouseEnter,
   onMouseLeave,
 }: ExistingLineCommentsProps) {
@@ -65,47 +67,72 @@ export function ExistingLineComments({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      <div className="flex items-center justify-between p-3 sm:p-4">
-        <a
-          href={`#line-${lineNumber}`}
-          className="block text-xs font-medium tracking-wide transition-opacity hover:opacity-70"
-          style={{ color: "var(--magenta)" }}
-          onClick={(e) => {
-            if (isCollapsed) {
-              e.preventDefault();
-              onToggleCollapse();
-            }
-          }}
-        >
-          Line {lineNumber}
-          {isCollapsed && (
-            <span className="ml-2 text-gray-50">
-              {comments[0]?.user} ({comments.length} {comments.length === 1 ? "comment" : "comments"})
-            </span>
-          )}
-        </a>
+      {isCollapsed ? (
         <button
           type="button"
           onClick={onToggleCollapse}
-          className="rounded border border-gray-20 bg-surface p-1 transition-all hover:bg-gray-5"
-          aria-label={isCollapsed ? "Expand thread" : "Collapse thread"}
+          className="flex w-full items-center gap-2 p-3 sm:p-4 text-left cursor-pointer hover:bg-gray-5 transition-colors rounded-md"
         >
+          <span
+            className="shrink-0 text-xs font-medium tracking-wide transition-all"
+            style={{ color: "var(--magenta)", opacity: isHovered ? 1 : 0.7 }}
+          >
+            L{lineNumber}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-xs text-gray-70">
+            <span className="font-medium text-gray-90">{comments[0]?.user}: </span>
+            {comments[0]?.body.replace(/^>\s.*\n?/gm, "").replace(/\n/g, " ").trim()}
+          </span>
+          <span className="shrink-0 text-[10px] text-gray-50">
+            {comments.length > 1 && `+${comments.length - 1}`}
+          </span>
           <svg
-            className="h-3 w-3"
+            className="h-3 w-3 shrink-0 text-gray-40"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
           >
-            <title>{isCollapsed ? "Expand" : "Collapse"}</title>
+            <title>Expand</title>
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
               strokeWidth={2}
-              d={isCollapsed ? "M19 9l-7 7-7-7" : "M5 15l7-7 7 7"}
+              d="M19 9l-7 7-7-7"
             />
           </svg>
         </button>
-      </div>
+      ) : (
+        <div className="flex items-center justify-between p-3 sm:p-4">
+          <a
+            href={`#line-${lineNumber}`}
+            className="block text-xs font-medium tracking-wide transition-all hover:opacity-70"
+            style={{ color: "var(--magenta)", opacity: isHovered ? 1 : 0.7 }}
+          >
+            Line {lineNumber}
+          </a>
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            className="rounded border border-gray-20 bg-surface p-1 transition-all hover:bg-gray-5"
+            aria-label="Collapse thread"
+          >
+            <svg
+              className="h-3 w-3"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <title>Collapse</title>
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M5 15l7-7 7 7"
+              />
+            </svg>
+          </button>
+        </div>
+      )}
 
       {/* Always render content so we can measure its height before animating; collapse via height */}
       <motion.div

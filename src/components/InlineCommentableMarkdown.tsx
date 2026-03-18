@@ -784,7 +784,7 @@ export function InlineCommentableMarkdown({
         const lineNumber = (props as any)["data-line-element"];
         return (
           <h1
-            className="relative mb-2 mt-6 pb-2 border-b border-gray-20 text-5xl font-serif tracking-tight text-foreground"
+            className="relative mb-2 mt-6 pb-2 border-b border-gray-20 text-5xl font-sans font-semibold tracking-tight text-foreground"
             style={{ cursor: lineNumber ? "pointer" : undefined, ...(lineNumber && commentsByLine.has(lineNumber) && { paddingRight: "2rem" }) }}
             onClick={() => lineNumber && handleLineClick(lineNumber)}
             onMouseEnter={() => lineNumber && handleMouseEnterLine(lineNumber)}
@@ -800,7 +800,7 @@ export function InlineCommentableMarkdown({
         const lineNumber = (props as any)["data-line-element"];
         return (
           <h2
-            className="relative mb-2 mt-5 pb-2 border-b border-gray-20 text-4xl font-serif tracking-tight text-foreground"
+            className="relative mb-2 mt-5 pb-2 border-b border-gray-20 text-4xl font-sans font-semibold tracking-tight text-foreground"
             style={{ cursor: lineNumber ? "pointer" : undefined, ...(lineNumber && commentsByLine.has(lineNumber) && { paddingRight: "2rem" }) }}
             onClick={() => lineNumber && handleLineClick(lineNumber)}
             onMouseEnter={() => lineNumber && handleMouseEnterLine(lineNumber)}

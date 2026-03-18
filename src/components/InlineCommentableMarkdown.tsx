@@ -144,6 +144,7 @@ interface InlineCommentableMarkdownProps {
   prNumber: number;
   comments: Comment[];
   commentsLoading?: boolean;
+  highlightedCommentId?: number | null;
   onCommentSubmit: (line: number, body: string, replyToCommentId?: number) => Promise<void>;
 }
 
@@ -152,6 +153,7 @@ export function InlineCommentableMarkdown({
   prNumber,
   comments,
   commentsLoading,
+  highlightedCommentId,
   onCommentSubmit,
 }: InlineCommentableMarkdownProps) {
   const [activeLineIndex, setActiveLineIndex] = useState<number | null>(null);
@@ -430,6 +432,23 @@ export function InlineCommentableMarkdown({
     },
     [activeLineIndex, commentsByLine, threadsByLine, replyTarget],
   );
+
+  // Auto-expand the collapsed group that contains the highlighted comment
+  useEffect(() => {
+    if (highlightedCommentId == null) return;
+    for (const [line, lineComments] of commentsByLine.entries()) {
+      if (lineComments.some((c) => c.id === highlightedCommentId)) {
+        setCollapsedLines((prev) => {
+          const resolved = prev ?? (commentsByLine.size > 3 ? new Set(commentsByLine.keys()) : new Set<number>());
+          if (!resolved.has(line)) return prev;
+          const next = new Set(resolved);
+          next.delete(line);
+          return next;
+        });
+        break;
+      }
+    }
+  }, [highlightedCommentId, commentsByLine]);
 
   // Initialize collapsed state: collapse all if more than 3 comment blocks
   const resolvedCollapsedLines = useMemo(
@@ -1084,6 +1103,7 @@ export function InlineCommentableMarkdown({
               replyText={replyTarget?.line === lineNumber ? replyText : ""}
               isSubmitting={isSubmitting}
               isCollapsed={resolvedCollapsedLines.has(lineNumber)}
+              highlightedCommentId={highlightedCommentId}
               onReplyTextChange={setReplyText}
               onStartReply={(threadId) => {
                 setReplyTarget({ type: "thread", line: lineNumber, threadId });

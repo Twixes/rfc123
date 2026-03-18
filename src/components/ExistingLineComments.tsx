@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { motion } from "motion/react";
 import { CommentMarkdown } from "@/components/CommentMarkdown";
+import { CommentPermalink } from "@/components/CommentPermalink";
 import type { CommentThread } from "@/lib/comment-threads";
 
 interface ExistingLineCommentsProps {
@@ -14,6 +15,7 @@ interface ExistingLineCommentsProps {
   replyText: string;
   isSubmitting: boolean;
   isCollapsed: boolean;
+  highlightedCommentId?: number | null;
   onReplyTextChange: (text: string) => void;
   onStartReply: (threadId: number) => void;
   onStartNewThread: () => void;
@@ -37,6 +39,7 @@ export function ExistingLineComments({
   replyText,
   isSubmitting,
   isCollapsed,
+  highlightedCommentId,
   onReplyTextChange,
   onStartReply,
   onStartNewThread,
@@ -178,7 +181,8 @@ export function ExistingLineComments({
                 {thread.comments.map((comment) => (
                   <div
                     key={comment.id}
-                    className="border-l border-gray-20 pl-2"
+                    id={`comment-${comment.id}`}
+                    className={`border-l pl-2 transition-colors duration-700 ${highlightedCommentId === comment.id ? "border-cyan bg-cyan/10" : "border-gray-20"}`}
                   >
                     <div className="mb-2 flex items-center gap-2">
                       <div className="h-4 w-4 rounded-full overflow-hidden border border-gray-20">
@@ -197,6 +201,7 @@ export function ExistingLineComments({
                           day: "numeric",
                         })}
                       </span>
+                      <CommentPermalink commentId={comment.id} />
                     </div>
                     <CommentMarkdown content={comment.body} />
                   </div>

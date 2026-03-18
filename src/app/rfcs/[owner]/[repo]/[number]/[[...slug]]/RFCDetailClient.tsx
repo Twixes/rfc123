@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import type { RFCDetail, Comment } from "@/lib/github";
 import { GeneralCommentsSection } from "@/components/GeneralCommentsSection";
@@ -8,6 +8,11 @@ import { InlineCommentableMarkdown } from "@/components/InlineCommentableMarkdow
 import { RFCMetadataHeader } from "@/components/RFCMetadataHeader";
 import { MarkdownRawView } from "@/components/MarkdownRawView";
 import { ViewModeToggle } from "./ViewModeToggle";
+
+function parseCommentIdFromHash(hash: string): number | null {
+  const match = hash.match(/^#comment-(\d+)$/);
+  return match ? Number.parseInt(match[1], 10) : null;
+}
 
 interface RFCDetailClientProps {
   owner: string;
@@ -31,6 +36,8 @@ export default function RFCDetailClient({
   const [commentsLoading, setCommentsLoading] = useState(true);
   const [optimisticComments, setOptimisticComments] = useState<Comment[]>([]);
   const [viewMode, setViewMode] = useState<"pretty" | "raw">("pretty");
+  const [highlightedCommentId, setHighlightedCommentId] = useState<number | null>(null);
+  const hasScrolledToComment = useRef(false);
 
   const loadComments = useCallback(async () => {
     setCommentsLoading(true);
@@ -76,6 +83,54 @@ export default function RFCDetailClient({
   useEffect(() => {
     loadRFC();
   }, [loadRFC]);
+
+  // Scroll to and highlight the comment referenced in the URL hash
+  useEffect(() => {
+    if (commentsLoading || hasScrolledToComment.current) return;
+    const commentId = parseCommentIdFromHash(window.location.hash);
+    if (commentId == null) return;
+    const allComments = [...comments, ...optimisticComments];
+    if (!allComments.some((c) => c.id === commentId)) return;
+
+    setHighlightedCommentId(commentId);
+
+    // Wait a tick for the DOM to update (expand animation, render)
+    const scrollTimer = setTimeout(() => {
+      const el = document.getElementById(`comment-${commentId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }, 400);
+
+    const fadeTimer = setTimeout(() => {
+      setHighlightedCommentId(null);
+    }, 3000);
+
+    hasScrolledToComment.current = true;
+
+    return () => {
+      clearTimeout(scrollTimer);
+      clearTimeout(fadeTimer);
+    };
+  }, [commentsLoading, comments, optimisticComments]);
+
+  // Also handle hash changes while the page is open (e.g. clicking a permalink)
+  useEffect(() => {
+    function onHashChange() {
+      const commentId = parseCommentIdFromHash(window.location.hash);
+      if (commentId == null) return;
+      setHighlightedCommentId(commentId);
+      setTimeout(() => {
+        const el = document.getElementById(`comment-${commentId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }, 400);
+      setTimeout(() => setHighlightedCommentId(null), 3000);
+    }
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
 
   async function handleInlineComment(line: number, body: string, replyToCommentId?: number) {
     if (!rfc?.markdownFilePath) return;
@@ -297,6 +352,7 @@ export default function RFCDetailClient({
             prNumber={rfc.number}
             comments={lineComments}
             commentsLoading={commentsLoading}
+            highlightedCommentId={highlightedCommentId}
             onCommentSubmit={handleInlineComment}
           />
         ) : (
@@ -310,6 +366,7 @@ export default function RFCDetailClient({
         comments={generalComments}
         commentsLoading={commentsLoading}
         prNumber={rfc.number}
+        highlightedCommentId={highlightedCommentId}
         onCommentPosted={handleGeneralComment}
       />
     </div>

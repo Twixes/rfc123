@@ -46,12 +46,12 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
             </a>
           ),
           ul: ({ children }) => (
-            <ul className="my-2 ml-6 list-disc space-y-1 text-gray-90">
+            <ul className="my-2 ml-6 list-disc space-y-0.5 text-gray-90">
               {children}
             </ul>
           ),
           ol: ({ children }) => (
-            <ol className="my-2 ml-6 list-decimal space-y-1 text-gray-90">
+            <ol className="my-2 ml-6 list-decimal space-y-0.5 text-gray-90">
               {children}
             </ol>
           ),

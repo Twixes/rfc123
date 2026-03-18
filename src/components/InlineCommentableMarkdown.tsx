@@ -612,7 +612,7 @@ export function InlineCommentableMarkdown({
       ul: ({ children, node: _node, ...props }: MDProps<"ul">) => {
         const { "data-line-element": _stripped, ...rest } = props as any;
         return (
-          <ul className="my-2 ml-6 list-disc space-y-1 text-gray-90" {...rest}>
+          <ul className="my-2 ml-6 list-disc space-y-0.5 text-gray-90" {...rest}>
             {children}
           </ul>
         );
@@ -620,7 +620,7 @@ export function InlineCommentableMarkdown({
       ol: ({ children, node: _node, ...props }: MDProps<"ol">) => {
         const { "data-line-element": _stripped, ...rest } = props as any;
         return (
-          <ol className="my-2 ml-6 list-decimal space-y-1 text-gray-90" {...rest}>
+          <ol className="my-2 ml-6 list-decimal space-y-0.5 text-gray-90" {...rest}>
             {children}
           </ol>
         );

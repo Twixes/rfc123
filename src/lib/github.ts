@@ -1,5 +1,10 @@
 import { Octokit } from "octokit"
-import { getCachedJsonData, setCachedJsonData } from "./cache"
+import {
+    getCachedJsonData,
+    getCachedJsonDataBatch,
+    setCachedJsonData,
+    setCachedJsonDataBatch,
+} from "./cache"
 import { captureServerException } from "./posthog-server"
 
 export interface RepoOption {
@@ -187,63 +192,82 @@ export async function listRFCs(
             pr.files.nodes.some((file: any) => file.path.endsWith(".md"))
         )
 
-        // Fetch review comment counts using HEAD requests (much faster than fetching all comments)
-        const rfcPullsWithCounts = await Promise.all(
-            rfcPulls.map(async (pr: any) => {
-                // Check cache for review comment count
-                const commentCountCacheKey = `rfc:${owner}:${repo}:${pr.number}:review_comments_count`
-                let reviewCommentCount = 0
-                const cachedCount = await getCachedJsonData<number>(commentCountCacheKey)
-
-                if (cachedCount != null) {
-                    reviewCommentCount = cachedCount
-                } else {
-                    // Use per_page=1 and check pagination headers for total count
-                    const response = await octokit.rest.pulls.listReviewComments({
-                        owner,
-                        repo,
-                        pull_number: pr.number,
-                        per_page: 1,
-                    })
-
-                    // Extract total count from link header or data length
-                    reviewCommentCount = response.data.length
-                    const linkHeader = response.headers.link
-                    if (linkHeader) {
-                        const lastPageMatch = linkHeader.match(/page=(\d+)>; rel="last"/)
-                        if (lastPageMatch) {
-                            reviewCommentCount = Number.parseInt(lastPageMatch[1], 10)
-                        }
-                    }
-
-                    await setCachedJsonData(commentCountCacheKey, reviewCommentCount, 300) // Cache for 5 minutes
-                }
-
-                // Check if current user is a requested reviewer
-                const reviewRequested = pr.reviewRequests?.nodes?.some(
-                    (req: any) => req.requestedReviewer?.login === currentUserLogin
-                )
-
-                return {
-                    number: pr.number,
-                    title: pr.title,
-                    state: pr.state.toLowerCase(),
-                    merged_at: pr.mergedAt,
-                    created_at: pr.createdAt,
-                    updated_at: pr.updatedAt,
-                    html_url: pr.url,
-                    user: pr.author
-                        ? {
-                              login: pr.author.login,
-                              avatar_url: pr.author.avatarUrl,
-                          }
-                        : null,
-                    _inlineCommentCount: reviewCommentCount,
-                    _regularCommentCount: pr.comments.totalCount,
-                    _reviewRequested: reviewRequested || false,
-                }
-            })
+        // Batch fetch review comment counts: 1 MGET for all, then parallel API fetches for misses, then 1 pipeline SET
+        const commentCountCacheKeys = rfcPulls.map(
+            (pr: any) => `rfc:${owner}:${repo}:${pr.number}:review_comments_count`
         )
+        const cachedCounts = await getCachedJsonDataBatch<number>(commentCountCacheKeys)
+
+        const prsNeedingFetch = rfcPulls
+            .map((pr: any, i: number) => ({ pr, i, cached: cachedCounts[i] }))
+            .filter((x: { cached: number | null }) => x.cached == null)
+
+        const fetchedCounts =
+            prsNeedingFetch.length > 0
+                ? await Promise.all(
+                      prsNeedingFetch.map(async ({ pr }: { pr: any }) => {
+                          const response =
+                              await octokit.rest.pulls.listReviewComments({
+                                  owner,
+                                  repo,
+                                  pull_number: pr.number,
+                                  per_page: 1,
+                              })
+                          let count = response.data.length
+                          const linkHeader = response.headers.link
+                          if (linkHeader) {
+                              const lastPageMatch = linkHeader.match(
+                                  /page=(\d+)>; rel="last"/
+                              )
+                              if (lastPageMatch) {
+                                  count = Number.parseInt(lastPageMatch[1], 10)
+                              }
+                          }
+                          return { pr, count }
+                      })
+                  )
+                : []
+
+        await setCachedJsonDataBatch(
+            fetchedCounts.map(
+                ({ pr, count }: { pr: any; count: number }) => ({
+                    key: `rfc:${owner}:${repo}:${pr.number}:review_comments_count`,
+                    value: count,
+                })
+            ),
+            300
+        )
+
+        const fetchedCountByPr = new Map(
+            fetchedCounts.map((f: { pr: any; count: number }) => [f.pr.number, f.count])
+        )
+        const rfcPullsWithCounts = rfcPulls.map((pr: any, i: number) => {
+            const reviewCommentCount =
+                cachedCounts[i] ?? fetchedCountByPr.get(pr.number) ?? 0
+
+            const reviewRequested = pr.reviewRequests?.nodes?.some(
+                (req: any) => req.requestedReviewer?.login === currentUserLogin
+            )
+
+            return {
+                number: pr.number,
+                title: pr.title,
+                state: pr.state.toLowerCase(),
+                merged_at: pr.mergedAt,
+                created_at: pr.createdAt,
+                updated_at: pr.updatedAt,
+                html_url: pr.url,
+                user: pr.author
+                    ? {
+                          login: pr.author.login,
+                          avatar_url: pr.author.avatarUrl,
+                      }
+                    : null,
+                _inlineCommentCount: reviewCommentCount,
+                _regularCommentCount: pr.comments.totalCount,
+                _reviewRequested: reviewRequested || false,
+            }
+        })
 
         const filteredPulls = rfcPullsWithCounts
 
@@ -340,6 +364,7 @@ export async function getRFCDetail(
             files: any[]
             markdownContent: string
             markdownFilePath: string | null
+            markdownEtag?: string
             reviewers: RFCDetail["reviewers"]
             reviewRequested: boolean
         }
@@ -348,21 +373,53 @@ export async function getRFCDetail(
         console.log(`[getRFCDetail] content cache lookup took ${(performance.now() - tContentCache).toFixed(0)}ms (${cachedContent ? "HIT" : "MISS"})`)
 
         let pr: any
-        let files: any[]
-        let markdownContent: string
-        let markdownFilePath: string | null
-        let reviewers: RFCDetail["reviewers"]
-        let reviewRequested: boolean
+        let files: any[] = []
+        let markdownContent = ""
+        let markdownFilePath: string | null = null
+        let reviewers: RFCDetail["reviewers"] = []
+        let reviewRequested = false
+        let cacheValid = false
 
-        // Check for reviewers in cache to handle old cache entries without reviewer data
-        if (cachedContent && cachedContent.reviewers !== undefined) {
-            pr = cachedContent.pr
-            files = cachedContent.files
-            markdownContent = cachedContent.markdownContent
-            markdownFilePath = cachedContent.markdownFilePath
-            reviewers = cachedContent.reviewers
-            reviewRequested = cachedContent.reviewRequested
-        } else {
+        // On cache hit: validate markdown freshness with conditional request (304 = free, no rate limit)
+        if (
+            cachedContent &&
+            cachedContent.reviewers !== undefined &&
+            cachedContent.markdownFilePath &&
+            cachedContent.markdownEtag
+        ) {
+            try {
+                const conditionalResp = await octokit.request(
+                    "GET /repos/{owner}/{repo}/contents/{path}",
+                    {
+                        owner,
+                        repo,
+                        path: cachedContent.markdownFilePath,
+                        ref: cachedContent.pr.head.ref,
+                        headers: {
+                            "If-None-Match": cachedContent.markdownEtag,
+                        } as Record<string, string>,
+                    }
+                )
+                if ((conditionalResp.status as number) === 304) {
+                    cacheValid = true
+                }
+            } catch (err: unknown) {
+                const reqErr = err as { status?: number }
+                if (reqErr.status === 304) {
+                    cacheValid = true
+                }
+            }
+            if (cacheValid) {
+                pr = cachedContent.pr
+                files = cachedContent.files
+                markdownContent = cachedContent.markdownContent
+                markdownFilePath = cachedContent.markdownFilePath
+                reviewers = cachedContent.reviewers
+                reviewRequested = cachedContent.reviewRequested
+            }
+        }
+
+        if (!cacheValid) {
             const tFetch = performance.now()
 
             // Fetch PR details, files, reviewers, and reviews in parallel
@@ -397,19 +454,28 @@ export async function getRFCDetail(
             markdownContent = pr.body || ""
             markdownFilePath = markdownFile?.filename || null
 
+            let markdownEtag: string | undefined
             if (markdownFile) {
-                // Fetch the actual content of the markdown file
+                // Fetch the actual content of the markdown file (use request to capture ETag)
                 try {
                     const tMd = performance.now()
-                    const { data: fileContent } = await octokit.rest.repos.getContent({
-                        owner,
-                        repo,
-                        path: markdownFile.filename,
-                        ref: pr.head.ref,
-                    })
+                    const fileResp = await octokit.request(
+                        "GET /repos/{owner}/{repo}/contents/{path}",
+                        {
+                            owner,
+                            repo,
+                            path: markdownFile.filename,
+                            ref: pr.head.ref,
+                        }
+                    )
                     console.log(`[getRFCDetail] repos.getContent() for markdown took ${(performance.now() - tMd).toFixed(0)}ms`)
 
-                    if ("content" in fileContent) {
+                    const fileContent = fileResp.data as { content?: string }
+                    const rawEtag = fileResp.headers?.["etag"] as string | undefined
+                    if (rawEtag) {
+                        markdownEtag = rawEtag
+                    }
+                    if (fileContent && "content" in fileContent && fileContent.content) {
                         markdownContent = Buffer.from(fileContent.content, "base64").toString("utf-8")
                     }
                 } catch (error) {
@@ -451,8 +517,20 @@ export async function getRFCDetail(
             reviewRequested = requestedReviewersRes.data.users.some((user) => user.login === currentUserLogin)
 
             console.log(`[getRFCDetail] content fetch (all GH calls) took ${(performance.now() - tFetch).toFixed(0)}ms`)
-            // Cache content + reviewers together
-            await setCachedJsonData(contentCacheKey, { pr, files, markdownContent, markdownFilePath, reviewers, reviewRequested }, 300) // Cache for 5 minutes
+            // Cache content + reviewers + ETag for conditional validation
+            await setCachedJsonData(
+                contentCacheKey,
+                {
+                    pr,
+                    files,
+                    markdownContent,
+                    markdownFilePath,
+                    reviewers,
+                    reviewRequested,
+                    markdownEtag,
+                },
+                300
+            )
         }
 
         console.log(`[getRFCDetail] total took ${(performance.now() - t0).toFixed(0)}ms`)

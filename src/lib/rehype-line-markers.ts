@@ -39,6 +39,11 @@ export function rehypeLineMarkers() {
       }
 
       // Special handling for code blocks - each line gets a marker
+      // Skip mermaid blocks — they need pristine text for rendering
+      const classes = Array.isArray(node.properties?.className) ? node.properties.className : [];
+      if (node.tagName === "code" && classes.some((c) => String(c) === "language-mermaid")) {
+        return;
+      }
       if (node.tagName === "code" && node.children && node.position) {
         // Check if this is an inline code element (no newlines) or a block
         const textContent = node.children

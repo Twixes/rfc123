@@ -70,7 +70,7 @@ export function RFCMetadataHeader({ rfc }: RFCMetadataHeaderProps) {
         </a>
       </div>
 
-      <h1 className="mb-6 text-2xl sm:text-4xl font-serif font-normal text-foreground">
+      <h1 className="mb-6 text-3xl sm:text-5xl font-serif font-normal tracking-tight text-foreground">
         {rfc.title}
       </h1>
 

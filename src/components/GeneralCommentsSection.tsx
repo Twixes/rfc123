@@ -21,8 +21,8 @@ export function GeneralCommentsSection({
 }: GeneralCommentsSectionProps) {
   return (
     <div className="mt-8">
-      <h2 className="mb-4 border-b border-gray-20 pb-2 text-2xl font-serif text-foreground">
-        General Comments
+      <h2 className="mb-4 border-b border-gray-20 pb-2 text-4xl font-serif tracking-tight text-foreground">
+        General comments
       </h2>
       <div className="space-y-0 border border-gray-20 rounded-md overflow-hidden">
         {commentsLoading && comments.length === 0 ? (

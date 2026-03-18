@@ -113,7 +113,7 @@ const LineNumbersColumn = memo(function LineNumbersColumn({
               </svg>
             </div>
             <span
-              className={`font-mono text-[10px] sm:text-xs transition-opacity flex flex-col items-center leading-normal`}
+              className={`font-mono text-[10px] sm:text-xs transition-opacity flex flex-col items-center leading-snug`}
               style={{ color: hasCommentsForStyle ? "var(--magenta)" : "var(--gray-50)" }}
             >
               {isRange ? (
@@ -534,7 +534,7 @@ export function InlineCommentableMarkdown({
         const lineNumber = (props as any)["data-line-element"];
         return (
           <h1
-            className="relative mb-2 mt-6 pb-2 border-b border-gray-20 text-4xl font-sans text-foreground"
+            className="relative mb-2 mt-6 pb-2 border-b border-gray-20 text-5xl font-serif tracking-tight text-foreground"
             style={{ cursor: lineNumber ? "pointer" : undefined, ...(lineNumber && commentsByLine.has(lineNumber) && { paddingRight: "2rem" }) }}
             onClick={() => lineNumber && handleLineClick(lineNumber)}
             onMouseEnter={() => lineNumber && handleMouseEnterLine(lineNumber)}
@@ -550,7 +550,7 @@ export function InlineCommentableMarkdown({
         const lineNumber = (props as any)["data-line-element"];
         return (
           <h2
-            className="relative mb-2 mt-5 pb-2 border-b border-gray-20 text-3xl font-sans text-foreground"
+            className="relative mb-2 mt-5 pb-2 border-b border-gray-20 text-4xl font-serif tracking-tight text-foreground"
             style={{ cursor: lineNumber ? "pointer" : undefined, ...(lineNumber && commentsByLine.has(lineNumber) && { paddingRight: "2rem" }) }}
             onClick={() => lineNumber && handleLineClick(lineNumber)}
             onMouseEnter={() => lineNumber && handleMouseEnterLine(lineNumber)}
@@ -566,7 +566,7 @@ export function InlineCommentableMarkdown({
         const lineNumber = (props as any)["data-line-element"];
         return (
           <h3
-            className="relative mb-1 mt-4 text-2xl font-sans text-foreground"
+            className="relative mb-1 mt-4 text-lg font-sans font-semibold text-foreground"
             style={{ cursor: lineNumber ? "pointer" : undefined, ...(lineNumber && commentsByLine.has(lineNumber) && { paddingRight: "2rem" }) }}
             onClick={() => lineNumber && handleLineClick(lineNumber)}
             onMouseEnter={() => lineNumber && handleMouseEnterLine(lineNumber)}

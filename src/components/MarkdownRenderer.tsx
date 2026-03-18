@@ -18,17 +18,17 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
         rehypePlugins={[rehypeRaw, rehypeHighlight]}
         components={{
           h1: ({ children }) => (
-            <h1 className="mb-2 mt-6 text-3xl font-serif text-foreground">
+            <h1 className="mb-2 mt-6 text-5xl font-serif tracking-tight text-foreground">
               {children}
             </h1>
           ),
           h2: ({ children }) => (
-            <h2 className="mb-2 mt-5 text-2xl font-serif text-foreground">
+            <h2 className="mb-2 mt-5 text-4xl font-serif tracking-tight text-foreground">
               {children}
             </h2>
           ),
           h3: ({ children }) => (
-            <h3 className="mb-1 mt-4 text-2xl font-serif text-foreground">
+            <h3 className="mb-1 mt-4 text-lg font-sans font-semibold text-foreground">
               {children}
             </h3>
           ),

@@ -25,7 +25,7 @@ export default function RepoSelectorEmptyState({
   return (
     <div className="max-w-4xl mx-auto">
       <div className="bg-surface border border-gray-20 rounded-md p-8">
-        <h2 className="text-3xl font-serif mb-4">Select an RFC Repository</h2>
+        <h2 className="text-4xl font-serif tracking-tight mb-4">Select an RFC Repository</h2>
         <p className="mb-6 text-gray-70">
           Choose a repository containing RFCs:
         </p>

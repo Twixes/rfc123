@@ -1,13 +1,30 @@
+"use client";
+
+import { motion } from "motion/react";
+
 export default function RFCListSkeleton() {
   return (
-    <div className="space-y-0">
+    <motion.div
+      className="space-y-0"
+      initial="hidden"
+      animate="visible"
+      variants={{
+        visible: { transition: { staggerChildren: 0.06 } },
+        hidden: {},
+      }}
+    >
       {[...Array(5)].map((_, index) => (
-        <div
+        <motion.div
           key={index}
           className="block border-b border-gray-20 bg-surface px-4 sm:px-6 py-4 sm:py-5"
           style={{
             borderTop: index === 0 ? "1px solid var(--gray-20)" : "none",
           }}
+          variants={{
+            visible: { opacity: 1, y: 0 },
+            hidden: { opacity: 0, y: 6 },
+          }}
+          transition={{ duration: 0.3 }}
         >
           <div className="flex items-start justify-between gap-6">
             <div className="flex-1">
@@ -25,8 +42,8 @@ export default function RFCListSkeleton() {
               </div>
             </div>
           </div>
-        </div>
+        </motion.div>
       ))}
-    </div>
+    </motion.div>
   );
 }

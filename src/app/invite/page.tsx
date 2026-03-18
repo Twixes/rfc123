@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { auth, signIn } from "@/auth";
 import { redirect } from "next/navigation";
+import { StaggeredFadeIn } from "@/components/StaggeredFadeIn";
 
 interface InvitePageProps {
   searchParams: Promise<{ callbackUrl?: string }>;
@@ -28,10 +29,13 @@ export default async function InvitePage({ searchParams }: InvitePageProps) {
     <div className="flex min-h-screen items-center justify-center px-4 sm:px-8 py-8 sm:py-0">
       <div className="w-full max-w-4xl">
         <div className="border border-gray-20 rounded-md bg-surface p-4 sm:p-8">
-          <h1 className="mb-6 font-serif font-normal text-4xl sm:text-6xl text-foreground">
-            You&apos;ve been invited to comment on this RFC
-          </h1>
+          <StaggeredFadeIn delay={0}>
+            <h1 className="mb-6 font-serif font-normal text-4xl sm:text-6xl text-foreground">
+              You&apos;ve been invited to comment on this RFC
+            </h1>
+          </StaggeredFadeIn>
 
+          <StaggeredFadeIn delay={0.12}>
           <div className="mb-6 border-t border-gray-20 pt-6">
             <h2 className="mb-4 text-2xl font-serif text-foreground">
               How it works
@@ -62,7 +66,9 @@ export default async function InvitePage({ searchParams }: InvitePageProps) {
               </div>
             </div>
           </div>
+          </StaggeredFadeIn>
 
+          <StaggeredFadeIn delay={0.24}>
           <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
             <form
               action={async () => {
@@ -88,6 +94,7 @@ export default async function InvitePage({ searchParams }: InvitePageProps) {
               </Link>
             </span>
           </div>
+          </StaggeredFadeIn>
         </div>
       </div>
     </div>

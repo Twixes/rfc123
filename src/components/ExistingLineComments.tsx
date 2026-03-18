@@ -19,6 +19,8 @@ interface ExistingLineCommentsProps {
   onSubmitReply: () => void;
   onToggleCollapse: () => void;
   commentBoxRef: (el: HTMLDivElement | null) => void;
+  /** Ref to the expandable content block; used to measure final height before animation */
+  onContentRef?: (el: HTMLDivElement | null) => void;
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
 }
@@ -37,6 +39,7 @@ export function ExistingLineComments({
   onSubmitReply,
   onToggleCollapse,
   commentBoxRef,
+  onContentRef,
   onMouseEnter,
   onMouseLeave,
 }: ExistingLineCommentsProps) {
@@ -104,8 +107,14 @@ export function ExistingLineComments({
         </button>
       </div>
 
-      {!isCollapsed && (
-        <>
+      {/* Always render content so we can measure its height before animating; collapse via height */}
+      <motion.div
+        initial={false}
+        animate={{ height: isCollapsed ? 0 : "auto", opacity: isCollapsed ? 0 : 1 }}
+        transition={{ type: "spring", stiffness: 400, damping: 35 }}
+        className="overflow-hidden"
+      >
+        <div ref={onContentRef}>
           <div className="space-y-3 px-3">
             {comments.map((comment) => (
               <div
@@ -188,8 +197,8 @@ export function ExistingLineComments({
               </button>
             </div>
           )}
-        </>
-      )}
+        </div>
+      </motion.div>
     </motion.div>
   );
 }

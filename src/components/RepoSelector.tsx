@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import type { RepoOption } from "@/lib/github";
 
 interface RepoSelectorProps {
@@ -69,8 +70,15 @@ export default function RepoSelector({
         </svg>
       </button>
 
-      {isOpen && (
-        <div className="absolute top-full left-0 mt-2 w-80 bg-surface border border-gray-20 rounded-md z-50">
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.15 }}
+            className="absolute top-full left-0 mt-2 w-80 bg-surface border border-gray-20 rounded-md z-50"
+          >
           <div className="p-3 border-b border-gray-20">
             <input
               ref={inputRef}
@@ -109,8 +117,9 @@ export default function RepoSelector({
               ))
             )}
           </div>
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

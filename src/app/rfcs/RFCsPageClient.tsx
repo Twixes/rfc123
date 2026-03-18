@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { motion } from "motion/react";
 import type { RFC, RepoOption } from "@/lib/github";
 import RFCListSkeleton from "@/components/RFCListSkeleton";
 import { slugify } from "@/lib/slugify";
@@ -126,19 +127,35 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
       {isLoading ? (
         <RFCListSkeleton />
       ) : (
-        <div className="space-y-0">
+        <motion.div
+          className="space-y-0"
+          initial="hidden"
+          animate="visible"
+          variants={{
+            visible: { transition: { staggerChildren: 0.04 } },
+            hidden: {},
+          }}
+        >
           {rfcs?.map((rfc, index) => (
-            <Link
+            <motion.div
               key={`${rfc.owner}/${rfc.repo}/${rfc.number}`}
-              href={`/rfcs/${rfc.owner}/${rfc.repo}/${rfc.number}/${slugify(rfc.title)}`}
-              className="group block border-b border-gray-20 px-4 sm:px-6 py-4 sm:py-5 transition-all hover:bg-gray-5"
-              style={{
-                borderTop: index === 0 ? "1px solid var(--gray-20)" : "none",
-                backgroundColor: rfc.reviewRequested
-                  ? "var(--yellow-light)"
-                  : undefined,
+              variants={{
+                visible: { opacity: 1, y: 0 },
+                hidden: { opacity: 0, y: 8 },
               }}
+              transition={{ type: "spring", stiffness: 400, damping: 35 }}
+              whileHover={{ scale: 1.002 }}
             >
+              <Link
+                href={`/rfcs/${rfc.owner}/${rfc.repo}/${rfc.number}/${slugify(rfc.title)}`}
+                className="group block border-b border-gray-20 px-4 sm:px-6 py-4 sm:py-5 transition-all hover:bg-gray-5"
+                style={{
+                  borderTop: index === 0 ? "1px solid var(--gray-20)" : "none",
+                  backgroundColor: rfc.reviewRequested
+                    ? "var(--yellow-light)"
+                    : undefined,
+                }}
+              >
               <div className="flex items-start justify-between gap-4 sm:gap-6">
                 <div className="flex-1 min-w-0">
                   <div className="mb-2 flex flex-wrap items-baseline gap-2 sm:gap-3">
@@ -215,9 +232,10 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
                   </div>
                 </div>
               </div>
-            </Link>
+              </Link>
+            </motion.div>
           ))}
-        </div>
+        </motion.div>
       )}
     </div>
   );

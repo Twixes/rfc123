@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { auth, signIn, signOut } from "@/auth"
 import AccountDropdown from "@/components/AccountDropdown"
+import { StaggeredFadeIn } from "@/components/StaggeredFadeIn"
 
 export default async function LandingPage() {
     const session = await auth()
@@ -9,10 +10,15 @@ export default async function LandingPage() {
         <div className="flex min-h-screen items-center justify-center px-4 sm:px-8 py-8 sm:py-0">
             <div className="w-full max-w-4xl">
                 <div className="border border-gray-20 rounded-md bg-surface p-4 sm:p-8">
-                    <h1 className="font-serif font-normal text-4xl sm:text-6xl text-foreground">RFC123</h1>
+                    <StaggeredFadeIn delay={0}>
+                        <h1 className="font-serif font-normal text-4xl sm:text-6xl text-foreground">RFC123</h1>
+                    </StaggeredFadeIn>
 
-                    <p className="mb-6 text-lg sm:text-xl font-light leading-tight text-gray-70">The RFC platform for teams.</p>
+                    <StaggeredFadeIn delay={0.08}>
+                        <p className="mb-6 text-lg sm:text-xl font-light leading-tight text-gray-70">The RFC platform for teams.</p>
+                    </StaggeredFadeIn>
 
+                    <StaggeredFadeIn delay={0.16}>
                     <div className="mb-6 flex flex-col sm:flex-row gap-6 sm:gap-8">
                         <div className="flex-1">
                             <div className="mb-2 h-0.5 w-12" style={{ backgroundColor: "var(--cyan)" }} />
@@ -30,7 +36,9 @@ export default async function LandingPage() {
                             <p className="mt-1 text-sm text-gray-70">Reach conclusions ASAP<br/>thanks to Slack notifications.</p>
                         </div>
                     </div>
+                    </StaggeredFadeIn>
 
+                    <StaggeredFadeIn delay={0.24}>
                     <div className="mb-6 border-t border-gray-20 pt-6">
                         <h2 className="mb-4 text-2xl font-serif text-foreground">How it works</h2>
                         <div className="space-y-3">
@@ -89,7 +97,9 @@ export default async function LandingPage() {
                             </div>
                         </div>
                     </div>
+                    </StaggeredFadeIn>
 
+                    <StaggeredFadeIn delay={0.32}>
                     <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
                         <div className="flex gap-3 items-center">
                             {session ? (
@@ -131,6 +141,7 @@ export default async function LandingPage() {
                             </a>
                         </span>
                     </div>
+                    </StaggeredFadeIn>
                 </div>
             </div>
         </div>

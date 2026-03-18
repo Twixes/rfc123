@@ -162,6 +162,7 @@ export function InlineCommentableMarkdown({
     new Set(),
   );
   const [lineRanges, setLineRanges] = useState<Map<number, number>>(new Map());
+  const [lineAlias, setLineAlias] = useState<Map<number, number>>(new Map());
   const [replyingToLine, setReplyingToLine] = useState<number | null>(null);
   const [replyText, setReplyText] = useState("");
   const lineRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
@@ -171,6 +172,7 @@ export function InlineCommentableMarkdown({
 
   const lines = useMemo(() => content.split("\n"), [content]);
   const commentBoxRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+  const contentRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const [commentPositions, setCommentPositions] = useState<Map<number, number>>(
     new Map(),
   );
@@ -240,31 +242,39 @@ export function InlineCommentableMarkdown({
     // Interpolate offsets ONLY for blank lines that have comments (so comment boxes can be positioned).
     // Do NOT interpolate for other blank lines — they have no rendered content, so no marker exists,
     // and showing their line numbers would bunch up in the gutter.
+    // Alias omitted lines (no marker) with comments to the latest preceding line with rendered content.
+    const alias = new Map<number, number>();
+    const aliasCountAtPrev = new Map<number, number>();
     for (let i = 1; i <= lines.length; i++) {
       if (offsets.has(i)) continue;
       const isEmpty = lines[i - 1]?.trim() === "";
       if (isEmpty && !commentsByLine.has(i)) continue;
 
-      let prev: number | undefined;
+      let prevLine: number | undefined;
+      let prevOffset: number | undefined;
+      let nextOffset: number | undefined;
       for (let j = i - 1; j >= 1; j--) {
-        if (offsets.has(j)) {
-          prev = offsets.get(j)!;
+        const val = offsets.get(j);
+        if (val !== undefined) {
+          prevLine = j;
+          prevOffset = val;
           break;
         }
       }
-      let next: number | undefined;
       for (let j = i + 1; j <= lines.length; j++) {
-        if (offsets.has(j)) {
-          next = offsets.get(j)!;
+        const val = offsets.get(j);
+        if (val !== undefined) {
+          nextOffset = val;
           break;
         }
       }
-      if (prev !== undefined && next !== undefined) {
-        offsets.set(i, (prev + next) / 2);
-      } else if (prev !== undefined) {
-        offsets.set(i, prev + 24);
-      } else if (next !== undefined) {
-        offsets.set(i, Math.max(0, next - 24));
+      if (prevLine !== undefined && prevOffset !== undefined) {
+        alias.set(i, prevLine);
+        const stacked = aliasCountAtPrev.get(prevLine) ?? 0;
+        aliasCountAtPrev.set(prevLine, stacked + 1);
+        offsets.set(i, prevOffset + stacked * 4);
+      } else if (nextOffset !== undefined) {
+        offsets.set(i, Math.max(0, nextOffset - 24));
       }
     }
 
@@ -286,6 +296,7 @@ export function InlineCommentableMarkdown({
     setLineOffsets(offsets);
     setLinesWithMarkers(withMarkers);
     setLineRanges(ranges);
+    setLineAlias(alias);
   }, [lines, commentsByLine, activeLineIndex]);
 
   // Stable hover callbacks — identity never changes, so they can be in memoized components
@@ -296,12 +307,14 @@ export function InlineCommentableMarkdown({
     setHoveredLineIndex(null);
   }, []);
 
-  // CSS-based line highlighting — updating this never causes ReactMarkdown to re-render
+  // CSS-based line highlighting — updating this never causes ReactMarkdown to re-render.
+  // Omitted lines (no DOM marker) are aliased to the preceding line so we can highlight that content.
   const lineHighlightCss = useMemo(() => {
     const highlighted = new Set<number>();
-    if (hoveredLineIndex !== null) highlighted.add(hoveredLineIndex + 1);
-    if (activeLineIndex !== null) highlighted.add(activeLineIndex + 1);
-    if (hoveredCommentLineIndex !== null) highlighted.add(hoveredCommentLineIndex + 1);
+    const resolve = (ln: number) => lineAlias.get(ln) ?? ln;
+    if (hoveredLineIndex !== null) highlighted.add(resolve(hoveredLineIndex + 1));
+    if (activeLineIndex !== null) highlighted.add(resolve(activeLineIndex + 1));
+    if (hoveredCommentLineIndex !== null) highlighted.add(resolve(hoveredCommentLineIndex + 1));
     if (highlighted.size === 0) return "";
     return Array.from(highlighted)
       .map(
@@ -321,7 +334,7 @@ export function InlineCommentableMarkdown({
       }`,
       )
       .join("\n");
-  }, [hoveredLineIndex, activeLineIndex, hoveredCommentLineIndex]);
+  }, [hoveredLineIndex, activeLineIndex, hoveredCommentLineIndex, lineAlias]);
 
   // Render profile pictures for a line if it has comments
   const renderProfilePictures = useCallback(
@@ -371,55 +384,73 @@ export function InlineCommentableMarkdown({
 
   // Calculate all comment box positions to prevent overlaps
   useEffect(() => {
-    const positions = new Map<number, number>();
+    function recalcPositions() {
+      const positions = new Map<number, number>();
 
-    // Collect all boxes that need positioning (both existing comments and active form)
-    const boxesToPosition: Array<{
-      lineNum: number;
-      ref: HTMLDivElement | null;
-      isActive: boolean;
-    }> = [];
+      // Collect all boxes that need positioning (both existing comments and active form)
+      const boxesToPosition: Array<{
+        lineNum: number;
+        ref: HTMLDivElement | null;
+        isActive: boolean;
+      }> = [];
 
-    // Add all existing comment boxes
-    for (const ln of commentsByLine.keys()) {
-      boxesToPosition.push({
-        lineNum: ln,
-        ref: commentBoxRefs.current.get(ln) || null,
-        isActive: false,
-      });
-    }
-
-    // Add the active comment form if present
-    if (activeLineIndex !== null) {
-      boxesToPosition.push({
-        lineNum: activeLineIndex + 1,
-        ref: commentBoxRefs.current.get(-1) || null,
-        isActive: true,
-      });
-    }
-
-    // Sort by line number to process top-to-bottom
-    boxesToPosition.sort((a, b) => a.lineNum - b.lineNum);
-
-    let lastBottom = 0;
-
-    for (const { lineNum, ref, isActive } of boxesToPosition) {
-      const baseOffset = lineOffsets.get(lineNum) || 0;
-      let adjustedOffset = Math.max(baseOffset, lastBottom);
-
-      // Store the calculated position
-      positions.set(isActive ? -1 : lineNum, adjustedOffset);
-
-      // Update lastBottom for the next iteration
-      if (ref) {
-        const boxHeight = ref.offsetHeight;
-        lastBottom = adjustedOffset + boxHeight + 8; // 8px gap between boxes
-      } else {
-        lastBottom = adjustedOffset + 100; // Minimum estimated height
+      // Add all existing comment boxes
+      for (const ln of commentsByLine.keys()) {
+        boxesToPosition.push({
+          lineNum: ln,
+          ref: commentBoxRefs.current.get(ln) || null,
+          isActive: false,
+        });
       }
+
+      // Add the active comment form if present
+      if (activeLineIndex !== null) {
+        boxesToPosition.push({
+          lineNum: activeLineIndex + 1,
+          ref: commentBoxRefs.current.get(-1) || null,
+          isActive: true,
+        });
+      }
+
+      // Sort by line number to process top-to-bottom
+      boxesToPosition.sort((a, b) => a.lineNum - b.lineNum);
+
+      let lastBottom = 0;
+
+      for (const { lineNum, ref, isActive } of boxesToPosition) {
+        const baseOffset = lineOffsets.get(lineNum) || 0;
+        let adjustedOffset = Math.max(baseOffset, lastBottom);
+
+        // Store the calculated position
+        positions.set(isActive ? -1 : lineNum, adjustedOffset);
+
+        // Update lastBottom for the next iteration
+        if (ref) {
+          const headerEl = ref.firstElementChild as HTMLElement | null;
+          let boxHeight = ref.offsetHeight;
+          if (!isActive) {
+            // Use known end-state height so we don't read mid-animation
+            if (resolvedCollapsedLines.has(lineNum)) {
+              // Collapsed: content height = 0, so box = header only
+              boxHeight = headerEl?.offsetHeight ?? boxHeight;
+            } else {
+              // Expanded: box = header + content
+              const contentEl = contentRefs.current.get(lineNum);
+              if (contentEl && headerEl) {
+                boxHeight = headerEl.offsetHeight + contentEl.offsetHeight;
+              }
+            }
+          }
+          lastBottom = adjustedOffset + boxHeight + 8; // 8px gap between boxes
+        } else {
+          lastBottom = adjustedOffset + 100; // Minimum estimated height
+        }
+      }
+
+      setCommentPositions(positions);
     }
 
-    setCommentPositions(positions);
+    recalcPositions();
   }, [lineOffsets, commentsByLine, activeLineIndex, replyingToLine, replyText, commentText, resolvedCollapsedLines]);
 
   // Helper to get the position for a specific line
@@ -906,6 +937,13 @@ export function InlineCommentableMarkdown({
               commentBoxRef={(el) => {
                 if (el) {
                   commentBoxRefs.current.set(lineNumber, el);
+                }
+              }}
+              onContentRef={(el) => {
+                if (el) {
+                  contentRefs.current.set(lineNumber, el);
+                } else {
+                  contentRefs.current.delete(lineNumber);
                 }
               }}
               onMouseEnter={() => setHoveredCommentLineIndex(lineNumber - 1)}

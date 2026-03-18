@@ -1,3 +1,6 @@
+"use client";
+
+import { motion } from "motion/react";
 import { CommentBox } from "@/components/CommentBox";
 import { CommentMarkdown } from "@/components/CommentMarkdown";
 import type { Comment } from "@/lib/github";
@@ -27,25 +30,54 @@ export function GeneralCommentsSection({
       <div className="space-y-0 border border-gray-20 rounded-md overflow-hidden">
         {commentsLoading && comments.length === 0 ? (
           <div className="bg-surface p-6">
-            <div className="space-y-6">
-              {[...Array(2)].map((_, index) => (
-                <div key={index} className="flex items-start gap-3">
+            <motion.div
+              className="space-y-6"
+              initial="hidden"
+              animate="visible"
+              variants={{
+                visible: { transition: { staggerChildren: 0.08 } },
+                hidden: {},
+              }}
+            >
+              {["skeleton-0", "skeleton-1"].map((id) => (
+                <motion.div
+                  key={id}
+                  className="flex items-start gap-3"
+                  variants={{
+                    visible: { opacity: 1, y: 0 },
+                    hidden: { opacity: 0, y: 8 },
+                  }}
+                  transition={{ duration: 0.3 }}
+                >
                   <div className="h-6 w-6 animate-pulse rounded-full bg-gray-20" />
                   <div className="flex-1 space-y-2">
                     <div className="h-4 w-32 animate-pulse rounded bg-gray-20" />
                     <div className="h-4 w-full animate-pulse rounded bg-gray-20" />
                     <div className="h-4 w-5/6 animate-pulse rounded bg-gray-20" />
                   </div>
-                </div>
+                </motion.div>
               ))}
-            </div>
+            </motion.div>
           </div>
         ) : (
-          comments.map((comment) => (
-            <div
-              key={comment.id}
-              className="border-b border-gray-20 bg-surface p-6"
-            >
+          <motion.div
+            initial="hidden"
+            animate="visible"
+            variants={{
+              visible: { transition: { staggerChildren: 0.05 } },
+              hidden: {},
+            }}
+          >
+            {comments.map((comment) => (
+              <motion.div
+                key={comment.id}
+                className="border-b border-gray-20 bg-surface p-6"
+                variants={{
+                  visible: { opacity: 1, y: 0 },
+                  hidden: { opacity: 0, y: 8 },
+                }}
+                transition={{ type: "spring", stiffness: 400, damping: 35 }}
+              >
               <div className="mb-3 flex items-center gap-2">
                 <div className="h-6 w-6 rounded-full overflow-hidden border border-gray-20">
                   <img
@@ -67,8 +99,9 @@ export function GeneralCommentsSection({
                 </span>
               </div>
               <CommentMarkdown content={comment.body} />
-            </div>
-          ))
+              </motion.div>
+            ))}
+          </motion.div>
         )}
         <div className="bg-surface p-6">
           <CommentBox

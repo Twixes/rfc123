@@ -176,6 +176,8 @@ export function InlineCommentableMarkdown({
       from: { x: number; y: number };
       to: { x: number; y: number };
       elbowX: number;
+      color: string;
+      isDraft: boolean;
     }>
   >([]);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
@@ -392,12 +394,20 @@ export function InlineCommentableMarkdown({
           return updated;
         });
       } else {
-        setActiveLineIndex(lineIndex);
-        setCommentText("");
-        setSelectedText("");
+        if (activeLineIndex === lineIndex) {
+          setActiveLineIndex(null);
+          setCommentText("");
+          setSelectedText("");
+        } else {
+          setReplyingToLine(null);
+          setReplyText("");
+          setActiveLineIndex(lineIndex);
+          setCommentText("");
+          setSelectedText("");
+        }
       }
     },
-    [commentsByLine, replyingToLine],
+    [activeLineIndex, commentsByLine, replyingToLine],
   );
 
   // Initialize collapsed state: collapse all if more than 3 comment blocks
@@ -497,9 +507,16 @@ export function InlineCommentableMarkdown({
       to: { x: number; y: number };
       vy1: number;
       vy2: number;
+      color: string;
+      isDraft: boolean;
     }> = [];
 
-    const collect = (lineNum: number, boxRef: HTMLDivElement | null) => {
+    const collect = (
+      lineNum: number,
+      boxRef: HTMLDivElement | null,
+      color: string,
+      isDraft: boolean,
+    ) => {
       if (!boxRef) return;
       const targetLine = lineAlias.get(lineNum) ?? lineNum;
       // Use data-line-element block (full-width) for right edge; line-marker is zero-width at line start
@@ -537,14 +554,14 @@ export function InlineCommentableMarkdown({
       };
       const vy1 = Math.min(from.y, to.y);
       const vy2 = Math.max(from.y, to.y);
-      rawPaths.push({ lineNumber: lineNum, from, to, vy1, vy2 });
+      rawPaths.push({ lineNumber: lineNum, from, to, vy1, vy2, color, isDraft });
     };
 
     for (const ln of commentsByLine.keys()) {
-      collect(ln, commentBoxRefs.current.get(ln) ?? null);
+      collect(ln, commentBoxRefs.current.get(ln) ?? null, "var(--magenta)", false);
     }
     if (activeLineIndex !== null) {
-      collect(activeLineIndex + 1, commentBoxRefs.current.get(-1) ?? null);
+      collect(activeLineIndex + 1, commentBoxRefs.current.get(-1) ?? null, "var(--cyan)", true);
     }
 
     // Assign elbowX: right-angle paths; offset overlapping vertical segments by 4px
@@ -573,7 +590,14 @@ export function InlineCommentableMarkdown({
           }
           offset += OFFSET;
         }
-        return { lineNumber: p.lineNumber, from: p.from, to: p.to, elbowX };
+        return {
+          lineNumber: p.lineNumber,
+          from: p.from,
+          to: p.to,
+          elbowX,
+          color: p.color,
+          isDraft: p.isDraft,
+        };
       });
 
     setArrowPaths(paths);
@@ -1148,7 +1172,7 @@ export function InlineCommentableMarkdown({
         >
           <defs>
             <marker
-              id="arrowhead"
+              id="arrowhead-magenta"
               markerWidth="6"
               markerHeight="6"
               refX="6"
@@ -1161,8 +1185,22 @@ export function InlineCommentableMarkdown({
                 fillOpacity="0.6"
               />
             </marker>
+            <marker
+              id="arrowhead-cyan"
+              markerWidth="6"
+              markerHeight="6"
+              refX="6"
+              refY="3"
+              orient="auto"
+            >
+              <path
+                d="M6,3 L0,0 L0,6 Z"
+                fill="var(--cyan)"
+                fillOpacity="1"
+              />
+            </marker>
           </defs>
-          {arrowPaths.map(({ lineNumber, from, to, elbowX }) => {
+          {arrowPaths.map(({ lineNumber, from, to, elbowX, color, isDraft }) => {
             const isLineHovered = hoveredCommentLineIndex === lineNumber - 1 || hoveredLineIndex === lineNumber - 1;
             const d = `M ${from.x} ${from.y} H ${elbowX} V ${to.y} H ${to.x}`;
             return (
@@ -1170,10 +1208,10 @@ export function InlineCommentableMarkdown({
                 key={lineNumber}
                 d={d}
                 fill="none"
-                stroke="var(--magenta)"
+                stroke={color}
                 strokeWidth="1"
-                strokeOpacity={isLineHovered ? 1 : 0.6}
-                markerEnd="url(#arrowhead)"
+                strokeOpacity={isDraft ? 1 : isLineHovered ? 1 : 0.6}
+                markerEnd={isDraft ? "url(#arrowhead-cyan)" : "url(#arrowhead-magenta)"}
                 style={{ transition: "stroke-opacity 0.15s, stroke-width 0.15s" }}
               />
             );

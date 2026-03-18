@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useRef } from "react";
 import { CommentMarkdown } from "@/components/CommentMarkdown";
 import type { Comment } from "@/lib/github";
 
@@ -36,6 +39,18 @@ export function ExistingLineComments({
   onMouseEnter,
   onMouseLeave,
 }: ExistingLineCommentsProps) {
+  const replyTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (isReplying && !isCollapsed) {
+      // Use requestAnimationFrame to ensure focus happens after layout when expanding
+      const id = requestAnimationFrame(() => {
+        replyTextareaRef.current?.focus();
+      });
+      return () => cancelAnimationFrame(id);
+    }
+  }, [isReplying, isCollapsed]);
+
   return (
     <div
       ref={commentBoxRef}
@@ -121,12 +136,12 @@ export function ExistingLineComments({
           {isReplying ? (
             <div className="p-3 sm:p-4 pt-0">
               <textarea
+                ref={replyTextareaRef}
                 value={replyText}
                 onChange={(e) => onReplyTextChange(e.target.value)}
                 placeholder="Add a comment..."
                 className="w-full resize-none border border-gray-30 rounded-sm bg-surface px-3 py-2 text-sm text-foreground placeholder-gray-50 focus:outline-none focus:ring-2 focus:ring-cyan focus:border-transparent"
                 rows={4}
-                autoFocus
                 disabled={isSubmitting}
                 onKeyDown={(e) => {
                   if (e.key === "Escape") {

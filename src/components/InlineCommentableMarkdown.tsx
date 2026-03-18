@@ -344,6 +344,16 @@ export function InlineCommentableMarkdown({
         setActiveLineIndex(null);
         setCommentText("");
         setSelectedText("");
+        // Expand the comment box if it's collapsed so the user can see the comments
+        setCollapsedLines((prev) => {
+          const resolved = prev ?? (commentsByLine.size > 3 ? new Set(commentsByLine.keys()) : new Set<number>());
+          if (resolved.has(lineNumber)) {
+            const updated = new Set(resolved);
+            updated.delete(lineNumber);
+            return updated;
+          }
+          return resolved;
+        });
       } else {
         setActiveLineIndex(lineIndex);
         setCommentText("");

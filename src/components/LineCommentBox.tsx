@@ -1,3 +1,7 @@
+"use client";
+
+import { motion } from "motion/react";
+
 interface LineCommentBoxProps {
   lineNumber: number;
   commentText: string;
@@ -24,13 +28,15 @@ export function LineCommentBox({
   onMouseLeave,
 }: LineCommentBoxProps) {
   return (
-    <div
+    <motion.div
       ref={commentBoxRef}
       className="lg:absolute static border rounded-md bg-surface p-3 sm:p-4 w-full lg:w-[400px]"
       style={{
-        top: `${position}px`,
         borderColor: "var(--cyan)",
       }}
+      initial={{ top: position }}
+      animate={{ top: position }}
+      transition={{ type: "spring", stiffness: 400, damping: 35 }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
@@ -99,6 +105,6 @@ export function LineCommentBox({
           </button>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }

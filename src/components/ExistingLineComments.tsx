@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { motion } from "motion/react";
 import { CommentMarkdown } from "@/components/CommentMarkdown";
 import type { Comment } from "@/lib/github";
 
@@ -52,12 +53,12 @@ export function ExistingLineComments({
   }, [isReplying, isCollapsed]);
 
   return (
-    <div
+    <motion.div
       ref={commentBoxRef}
       className="lg:absolute static border border-gray-20 rounded-md bg-surface w-full lg:w-[400px] mb-4 lg:mb-0"
-      style={{
-        top: `${position}px`,
-      }}
+      initial={{ top: position }}
+      animate={{ top: position }}
+      transition={{ type: "spring", stiffness: 400, damping: 35 }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
@@ -189,6 +190,6 @@ export function ExistingLineComments({
           )}
         </>
       )}
-    </div>
+    </motion.div>
   );
 }

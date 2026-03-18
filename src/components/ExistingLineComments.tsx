@@ -247,7 +247,7 @@ export function ExistingLineComments({
                   </div>
                 </div>
               ) : (
-                <div className="px-3 pb-2 pt-1">
+                <div className="px-3 py-1">
                   <button
                     type="button"
                     onClick={() => onStartReply(thread.id)}

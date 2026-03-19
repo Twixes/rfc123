@@ -121,8 +121,8 @@ const LineNumbersColumn = memo(function LineNumbersColumn({
               {isRange ? (
                 <>
                   <span>{lineNumber}</span>
-                  <span>↓</span>
-                  <span>{endLine}</span>
+                  <span className="opacity-50">↓</span>
+                  <span className="opacity-50">{endLine}</span>
                 </>
               ) : (
                 lineNumber
@@ -390,32 +390,57 @@ export function InlineCommentableMarkdown({
   const handleLineClick = useCallback(
     (lineNumber: number) => {
       const lineIndex = lineNumber - 1;
+      const endLine = lineRanges.get(lineNumber);
+      const isMultiLineBlock = endLine != null && endLine > lineNumber;
+
       if (commentsByLine.has(lineNumber)) {
         setActiveLineIndex(null);
         setCommentText("");
         setSelectedText("");
-        setCollapsedLines((prev) => {
-          const resolved = prev ?? (commentsByLine.size > 3 ? new Set(commentsByLine.keys()) : new Set<number>());
-          const updated = new Set(resolved);
-          if (resolved.has(lineNumber)) {
+
+        if (isMultiLineBlock) {
+          // Multi-line block with existing thread: always expand and piggyback on the thread
+          setCollapsedLines((prev) => {
+            const resolved = prev ?? (commentsByLine.size > 3 ? new Set(commentsByLine.keys()) : new Set<number>());
+            const updated = new Set(resolved);
             updated.delete(lineNumber);
-            // Opening: auto-start reply if single thread, otherwise let user pick
+            return updated;
+          });
+          // Only set reply target if not already replying to this line
+          if (replyTarget?.line !== lineNumber) {
             const lineThreads = threadsByLine.get(lineNumber);
             if (lineThreads?.length === 1) {
               setReplyTarget({ type: "thread", line: lineNumber, threadId: lineThreads[0].id });
             } else {
-              setReplyTarget(null);
+              setReplyTarget({ type: "newThread", line: lineNumber });
             }
             setReplyText("");
-          } else {
-            updated.add(lineNumber);
-            if (replyTarget?.line === lineNumber) {
-              setReplyTarget(null);
-              setReplyText("");
-            }
           }
-          return updated;
-        });
+        } else {
+          // Single-line element: toggle collapse/expand
+          setCollapsedLines((prev) => {
+            const resolved = prev ?? (commentsByLine.size > 3 ? new Set(commentsByLine.keys()) : new Set<number>());
+            const updated = new Set(resolved);
+            if (resolved.has(lineNumber)) {
+              updated.delete(lineNumber);
+              // Opening: auto-start reply if single thread, otherwise let user pick
+              const lineThreads = threadsByLine.get(lineNumber);
+              if (lineThreads?.length === 1) {
+                setReplyTarget({ type: "thread", line: lineNumber, threadId: lineThreads[0].id });
+              } else {
+                setReplyTarget(null);
+              }
+              setReplyText("");
+            } else {
+              updated.add(lineNumber);
+              if (replyTarget?.line === lineNumber) {
+                setReplyTarget(null);
+                setReplyText("");
+              }
+            }
+            return updated;
+          });
+        }
       } else {
         if (activeLineIndex === lineIndex) {
           setActiveLineIndex(null);
@@ -430,7 +455,7 @@ export function InlineCommentableMarkdown({
         }
       }
     },
-    [activeLineIndex, commentsByLine, threadsByLine, replyTarget],
+    [activeLineIndex, commentsByLine, threadsByLine, replyTarget, lineRanges],
   );
 
   // Auto-expand the collapsed group that contains the highlighted comment
@@ -735,9 +760,31 @@ export function InlineCommentableMarkdown({
 
     if (lineNumber !== null) {
       const lineIndex = lineNumber - 1;
-      setActiveLineIndex(lineIndex);
-      setCommentText(`> ${selectedText}\n`);
-      setSelectedText(selectedText);
+      const endLine = lineRanges.get(lineNumber);
+      const isMultiLineBlock = endLine != null && endLine > lineNumber;
+
+      if (isMultiLineBlock && commentsByLine.has(lineNumber)) {
+        // Multi-line block with existing thread: expand and piggyback with selected text as quote
+        setActiveLineIndex(null);
+        setCollapsedLines((prev) => {
+          const resolved = prev ?? (commentsByLine.size > 3 ? new Set(commentsByLine.keys()) : new Set<number>());
+          const updated = new Set(resolved);
+          updated.delete(lineNumber);
+          return updated;
+        });
+        const lineThreads = threadsByLine.get(lineNumber);
+        if (lineThreads?.length === 1) {
+          setReplyTarget({ type: "thread", line: lineNumber, threadId: lineThreads[0].id });
+        } else {
+          setReplyTarget({ type: "newThread", line: lineNumber });
+        }
+        setReplyText(`> ${selectedText}\n`);
+        setSelectedText(selectedText);
+      } else {
+        setActiveLineIndex(lineIndex);
+        setCommentText(`> ${selectedText}\n`);
+        setSelectedText(selectedText);
+      }
       selection.removeAllRanges(); // Clear the selection
     }
   }
@@ -1073,6 +1120,7 @@ export function InlineCommentableMarkdown({
         {activeLineIndex !== null && (
           <LineCommentBox
             lineNumber={activeLineIndex + 1}
+            endLineNumber={lineRanges.get(activeLineIndex + 1)}
             commentText={commentText}
             isSubmitting={isSubmitting}
             position={
@@ -1103,6 +1151,7 @@ export function InlineCommentableMarkdown({
             <ExistingLineComments
               key={lineNumber}
               lineNumber={lineNumber}
+              endLineNumber={lineRanges.get(lineNumber)}
               threads={lineThreads}
               position={getCommentPosition(lineNumber)}
               replyingToThreadId={replyTarget?.line === lineNumber && replyTarget.type === "thread" ? replyTarget.threadId : null}

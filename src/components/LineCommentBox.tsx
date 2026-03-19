@@ -4,6 +4,7 @@ import { motion } from "motion/react";
 
 interface LineCommentBoxProps {
   lineNumber: number;
+  endLineNumber?: number;
   commentText: string;
   isSubmitting: boolean;
   position: number;
@@ -17,6 +18,7 @@ interface LineCommentBoxProps {
 
 export function LineCommentBox({
   lineNumber,
+  endLineNumber,
   commentText,
   isSubmitting,
   position,
@@ -27,6 +29,7 @@ export function LineCommentBox({
   onMouseEnter,
   onMouseLeave,
 }: LineCommentBoxProps) {
+  const isRange = endLineNumber != null && endLineNumber > lineNumber;
   return (
     <motion.div
       ref={commentBoxRef}
@@ -39,7 +42,7 @@ export function LineCommentBox({
     >
       <div className="mb-3 flex items-center justify-between">
         <span className="text-xs font-medium tracking-wide text-gray-50">
-          Line {lineNumber}
+          {isRange ? `Lines ${lineNumber}–${endLineNumber}` : `Line ${lineNumber}`}
         </span>
         <button
           type="button"

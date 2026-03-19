@@ -9,6 +9,7 @@ import type { CommentThread } from "@/lib/comment-threads";
 
 interface ExistingLineCommentsProps {
   lineNumber: number;
+  endLineNumber?: number;
   threads: CommentThread[];
   position: number;
   replyingToThreadId: number | null;
@@ -33,6 +34,7 @@ interface ExistingLineCommentsProps {
 
 export function ExistingLineComments({
   lineNumber,
+  endLineNumber,
   threads,
   position,
   replyingToThreadId,
@@ -78,6 +80,8 @@ export function ExistingLineComments({
   const totalCommentCount = allComments.length;
   const firstComment = threads[0]?.comments[0];
   const hasMultipleThreads = threads.length > 1;
+  const isRange = endLineNumber != null && endLineNumber > lineNumber;
+  const lineLabel = isRange ? `${lineNumber}–${endLineNumber}` : String(lineNumber);
 
   return (
     <motion.div
@@ -99,7 +103,7 @@ export function ExistingLineComments({
             className="comment-line-badge shrink-0 text-xs font-medium tracking-wide transition-all"
             style={{ "--comment-opacity": isHovered ? 1 : 0.7 } as React.CSSProperties}
           >
-            L{lineNumber}
+            L{lineLabel}
           </span>
           <span className="min-w-0 flex-1 truncate text-xs text-gray-70">
             <span className="font-medium text-gray-90">{firstComment?.user}: </span>
@@ -135,7 +139,7 @@ export function ExistingLineComments({
             className="comment-line-badge block text-xs font-medium tracking-wide transition-all hover:opacity-70 cursor-pointer"
             style={{ "--comment-opacity": isHovered ? 1 : 0.7 } as React.CSSProperties}
           >
-            Line {lineNumber}
+            Lines {lineLabel}
             {hasMultipleThreads && (
               <span className="ml-1.5 text-[10px] text-gray-50 font-normal">
                 {threads.length} threads

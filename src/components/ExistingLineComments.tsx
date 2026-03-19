@@ -181,14 +181,14 @@ export function ExistingLineComments({
             <div key={thread.id}>
               {/* Thread separator for second thread onward */}
               {threadIndex > 0 && (
-                <div className="border-t border-dashed border-gray-20 mt-2 mb-6 mx-2" />
+                <div className="border-t border-dashed border-gray-20 mt-1 mb-5 mx-2" />
               )}
-              <div className="space-y-3 px-3">
+              <div className="space-y-5 px-3">
                 {thread.comments.map((comment) => (
                   <div
                     key={comment.id}
                     id={`comment-${comment.id}`}
-                    className={`border-l pl-2 transition-colors duration-700 ${highlightedCommentId === comment.id ? "border-cyan bg-cyan/10" : "border-gray-20"}`}
+                    className={`pl-2 transition-colors duration-700 ${highlightedCommentId === comment.id ? "border-cyan bg-cyan/10" : "border-gray-20"}`}
                   >
                     <div className="mb-2 flex items-center gap-2">
                       <div className="h-4 w-4 rounded-full overflow-hidden border border-gray-20">
@@ -228,7 +228,7 @@ export function ExistingLineComments({
                       }
                     }}
                   />
-                  <div className="mt-3 flex items-center justify-between">
+                  <div className="mt-1 flex items-center justify-between">
                     <span className="text-xs text-gray-50">
                       ⌘+Enter to submit
                     </span>

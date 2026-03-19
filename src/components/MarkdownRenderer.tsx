@@ -5,6 +5,7 @@ import rehypeHighlight from "rehype-highlight";
 import rehypeRaw from "rehype-raw";
 import remarkGfm from "remark-gfm";
 import { remarkMentions } from "@/lib/remark-mentions";
+import { ClickableImage } from "@/components/ClickableImage";
 
 interface MarkdownRendererProps {
   content: string;
@@ -27,20 +28,20 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
                 }
               }
             } catch {}
-            return <img src={proxiedSrc as string | undefined} alt={(alt as string) ?? ""} {...props} />;
+            return <ClickableImage src={proxiedSrc as string | undefined} alt={(alt as string) ?? ""} {...props} />;
           },
           h1: ({ children }) => (
-            <h1 className="mb-2 mt-6 text-5xl font-sans font-semibold tracking-tight text-foreground">
+            <h1 className="mb-3 mt-6 pb-2 border-b border-gray-20 text-3xl font-sans! font-semibold! tracking-tight leading-tight text-foreground">
               {children}
             </h1>
           ),
           h2: ({ children }) => (
-            <h2 className="mb-2 mt-5 text-4xl font-sans font-semibold tracking-tight text-foreground">
+            <h2 className="mb-3 mt-5 pb-2 border-b border-gray-20 text-2xl font-sans! font-semibold! tracking-tight leading-tight text-foreground">
               {children}
             </h2>
           ),
           h3: ({ children }) => (
-            <h3 className="mb-1 mt-4 text-lg font-sans font-semibold text-foreground">
+            <h3 className="mb-2 mt-4 text-xl font-sans! font-semibold! leading-snug text-foreground">
               {children}
             </h3>
           ),
@@ -92,10 +93,9 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
             </pre>
           ),
           blockquote: ({ children }) => (
-            <blockquote
-              className="my-4 border-l-2 bg-gray-5 py-2 pl-4 pr-4 italic text-gray-70"
-              style={{ borderLeftColor: "var(--magenta)" }}
-            >
+<blockquote
+            className="my-4 border-l-2 border-l-magenta bg-gray-5 py-2 pl-4 pr-4 italic text-gray-70"
+          >
               {children}
             </blockquote>
           ),

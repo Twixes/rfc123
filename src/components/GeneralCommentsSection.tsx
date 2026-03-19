@@ -4,6 +4,7 @@ import { motion } from "motion/react";
 import { CommentBox } from "@/components/CommentBox";
 import { CommentMarkdown } from "@/components/CommentMarkdown";
 import { CommentPermalink } from "@/components/CommentPermalink";
+import { RelativeTime } from "@/components/RelativeTime";
 import type { Comment } from "@/lib/github";
 
 interface GeneralCommentsSectionProps {
@@ -94,12 +95,7 @@ export function GeneralCommentsSection({
                   {comment.user}
                 </span>
                 <span className="text-xs text-gray-50">
-                  commented on{" "}
-                  {new Date(comment.createdAt).toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                  })}
+                  commented <RelativeTime date={comment.createdAt} />
                 </span>
                 <CommentPermalink commentId={comment.id} />
               </div>

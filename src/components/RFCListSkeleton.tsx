@@ -16,10 +16,7 @@ export default function RFCListSkeleton() {
       {[...Array(5)].map((_, index) => (
         <motion.div
           key={index}
-          className="block border-b border-gray-20 px-4 sm:px-6 py-4 sm:py-5"
-          style={{
-            borderTop: index === 0 ? "1px solid var(--gray-20)" : "none",
-          }}
+          className={`block border-b border-gray-20 px-4 sm:px-6 py-4 sm:py-5 ${index === 0 ? "border-t border-gray-20" : ""}`}
           variants={{
             visible: { opacity: 1, y: 0 },
             hidden: { opacity: 0, y: 6 },

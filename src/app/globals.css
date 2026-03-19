@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import "tailwindcss" important;
 @import "highlight.js/styles/github-dark.css";
 
 @supports (color: color(display-p3 1 1 1)) {
@@ -184,4 +184,14 @@ pre code {
   letter-spacing: 0;
   word-spacing: 0;
   font-variant-numeric: tabular-nums;
+}
+
+/* Override classes for values previously in style attributes — must win over Tailwind !important */
+.comment-line-badge {
+  color: var(--magenta) !important;
+  opacity: var(--comment-opacity, 0.7) !important;
+}
+
+.svg-stroke-transition {
+  transition: stroke-opacity 0.15s, stroke-width 0.15s !important;
 }

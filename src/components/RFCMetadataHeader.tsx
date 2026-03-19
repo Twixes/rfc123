@@ -1,5 +1,6 @@
 import type { RFCDetail } from "@/lib/github";
 import { ProfilePictures } from "@/components/ProfilePictures";
+import { RelativeTime } from "@/components/RelativeTime";
 
 interface RFCMetadataHeaderProps {
   rfc: RFCDetail;
@@ -15,33 +16,19 @@ export function RFCMetadataHeader({ rfc }: RFCMetadataHeaderProps) {
           </span>
           {rfc.reviewRequested && (
             <span
-              className="border rounded-sm px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-xs font-medium uppercase tracking-wider"
-              style={{
-                borderColor: "var(--magenta)",
-                backgroundColor: "var(--magenta-light)",
-                color: "var(--foreground)",
-              }}
+              className="border border-magenta bg-magenta-light text-foreground rounded-sm px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-xs font-medium uppercase tracking-wider"
             >
               Review Requested
             </span>
           )}
           <span
-            className="border rounded-sm px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-xs font-medium uppercase tracking-wider"
-            style={{
-              borderColor:
-                rfc.status === "open"
-                  ? "var(--cyan)"
-                  : rfc.status === "merged"
-                    ? "var(--yellow)"
-                    : "var(--gray-30)",
-              backgroundColor:
-                rfc.status === "open"
-                  ? "var(--cyan-light)"
-                  : rfc.status === "merged"
-                    ? "var(--yellow-light)"
-                    : "var(--gray-5)",
-              color: "var(--foreground)",
-            }}
+            className={`border rounded-sm px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-xs font-medium uppercase tracking-wider text-foreground ${
+              rfc.status === "open"
+                ? "border-cyan bg-cyan-light"
+                : rfc.status === "merged"
+                  ? "border-yellow bg-yellow-light"
+                  : "border-gray-30 bg-gray-5"
+            }`}
           >
             {rfc.status}
           </span>
@@ -112,11 +99,7 @@ export function RFCMetadataHeader({ rfc }: RFCMetadataHeaderProps) {
             Updated
           </dt>
           <dd className="text-sm font-medium text-foreground">
-            {new Date(rfc.updatedAt).toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-              year: "numeric",
-            })}
+            <RelativeTime date={rfc.updatedAt} />
           </dd>
         </div>
 

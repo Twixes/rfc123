@@ -12,6 +12,7 @@ import { rehypeLineMarkers } from "@/lib/rehype-line-markers";
 import { remarkMergeParagraphs } from "@/lib/remark-merge-paragraphs";
 import { remarkMentions } from "@/lib/remark-mentions";
 import { MermaidDiagram } from "@/components/MermaidDiagram";
+import { ClickableImage } from "@/components/ClickableImage";
 import { LineCommentBox } from "@/components/LineCommentBox";
 import { ExistingLineComments } from "@/components/ExistingLineComments";
 import { ProfilePictures } from "@/components/ProfilePictures";
@@ -74,7 +75,7 @@ const LineNumbersColumn = memo(function LineNumbersColumn({
   onMouseLeaveLine,
 }: LineNumbersColumnProps) {
   return (
-    <div className="shrink-0 select-none relative" style={{ width: "40px" }}>
+    <div className="shrink-0 select-none relative w-[40px]">
       {lines.map((line, index) => {
         const lineNumber = index + 1;
 
@@ -115,8 +116,7 @@ const LineNumbersColumn = memo(function LineNumbersColumn({
               </svg>
             </div>
             <span
-              className={`font-mono text-[10px] sm:text-xs transition-opacity flex flex-col items-center leading-snug`}
-              style={{ color: hasCommentsForStyle ? "var(--magenta)" : "var(--gray-50)" }}
+              className={`font-mono text-[10px] sm:text-xs transition-opacity flex flex-col items-center leading-snug ${hasCommentsForStyle ? "text-magenta" : "text-gray-50"}`}
             >
               {isRange ? (
                 <>
@@ -784,8 +784,7 @@ export function InlineCommentableMarkdown({
         const lineNumber = (props as any)["data-line-element"];
         return (
           <h1
-            className="relative mb-2 mt-6 pb-2 border-b border-gray-20 text-5xl font-sans font-semibold tracking-tight text-foreground"
-            style={{ cursor: lineNumber ? "pointer" : undefined, ...(lineNumber && commentsByLine.has(lineNumber) && { paddingRight: "2rem" }) }}
+            className={`relative mb-3 mt-6 py-2 border-b border-gray-20 text-4xl font-sans! font-semibold! tracking-tight leading-tight text-foreground ${lineNumber ? "cursor-pointer" : ""} ${lineNumber && commentsByLine.has(lineNumber) ? "pr-8" : ""}`}
             onClick={() => lineNumber && handleLineClick(lineNumber)}
             onMouseEnter={() => lineNumber && handleMouseEnterLine(lineNumber)}
             onMouseLeave={handleMouseLeaveLine}
@@ -800,8 +799,7 @@ export function InlineCommentableMarkdown({
         const lineNumber = (props as any)["data-line-element"];
         return (
           <h2
-            className="relative mb-2 mt-5 pb-2 border-b border-gray-20 text-4xl font-sans font-semibold tracking-tight text-foreground"
-            style={{ cursor: lineNumber ? "pointer" : undefined, ...(lineNumber && commentsByLine.has(lineNumber) && { paddingRight: "2rem" }) }}
+            className={`relative mb-3 mt-5 py-2 border-b border-gray-20 text-2xl font-sans! font-semibold! tracking-tight leading-tight text-foreground ${lineNumber ? "cursor-pointer" : ""} ${lineNumber && commentsByLine.has(lineNumber) ? "pr-8" : ""}`}
             onClick={() => lineNumber && handleLineClick(lineNumber)}
             onMouseEnter={() => lineNumber && handleMouseEnterLine(lineNumber)}
             onMouseLeave={handleMouseLeaveLine}
@@ -816,8 +814,7 @@ export function InlineCommentableMarkdown({
         const lineNumber = (props as any)["data-line-element"];
         return (
           <h3
-            className="relative mb-1 mt-4 text-lg font-sans font-semibold text-foreground"
-            style={{ cursor: lineNumber ? "pointer" : undefined, ...(lineNumber && commentsByLine.has(lineNumber) && { paddingRight: "2rem" }) }}
+            className={`relative mb-2 mt-4 text-xl font-sans! font-semibold! leading-snug text-foreground ${lineNumber ? "cursor-pointer" : ""} ${lineNumber && commentsByLine.has(lineNumber) ? "pr-8" : ""}`}
             onClick={() => lineNumber && handleLineClick(lineNumber)}
             onMouseEnter={() => lineNumber && handleMouseEnterLine(lineNumber)}
             onMouseLeave={handleMouseLeaveLine}
@@ -832,8 +829,7 @@ export function InlineCommentableMarkdown({
         const lineNumber = (props as any)["data-line-element"];
         return (
           <p
-            className="relative my-2 leading-relaxed"
-            style={{ cursor: lineNumber ? "pointer" : undefined, ...(lineNumber && commentsByLine.has(lineNumber) && { paddingRight: "2rem" }) }}
+            className={`relative my-2 leading-relaxed ${lineNumber ? "cursor-pointer" : ""} ${lineNumber && commentsByLine.has(lineNumber) ? "pr-8" : ""}`}
             onClick={() => lineNumber && handleLineClick(lineNumber)}
             onMouseEnter={() => lineNumber && handleMouseEnterLine(lineNumber)}
             onMouseLeave={handleMouseLeaveLine}
@@ -855,7 +851,7 @@ export function InlineCommentableMarkdown({
         </a>
       ),
       strong: ({ children, node: _node, ...props }: MDProps<"strong">) => (
-        <strong style={{ fontWeight: 600 }} {...props}>
+        <strong className="font-semibold" {...props}>
           {children}
         </strong>
       ),
@@ -879,8 +875,7 @@ export function InlineCommentableMarkdown({
         const lineNumber = (props as any)["data-line-element"];
         return (
           <li
-            className="relative leading-relaxed text-gray-90"
-            style={{ cursor: lineNumber ? "pointer" : undefined, ...(lineNumber && commentsByLine.has(lineNumber) && { paddingRight: "2rem" }) }}
+            className={`relative leading-relaxed text-gray-90 ${lineNumber ? "cursor-pointer" : ""} ${lineNumber && commentsByLine.has(lineNumber) ? "pr-8" : ""}`}
             onClick={() => lineNumber && handleLineClick(lineNumber)}
             onMouseEnter={() => lineNumber && handleMouseEnterLine(lineNumber)}
             onMouseLeave={handleMouseLeaveLine}
@@ -917,8 +912,7 @@ export function InlineCommentableMarkdown({
           const chart = String(childProps?.children ?? "").trim();
           return (
             <div
-              className="relative"
-              style={{ cursor: lineNumber ? "pointer" : undefined }}
+              className={`relative ${lineNumber ? "cursor-pointer" : ""}`}
               onClick={() => lineNumber && handleLineClick(lineNumber)}
               onMouseEnter={() => lineNumber && handleMouseEnterLine(lineNumber)}
               onMouseLeave={handleMouseLeaveLine}
@@ -930,8 +924,7 @@ export function InlineCommentableMarkdown({
         }
         return (
           <pre
-            className="relative my-4 max-w-full overflow-x-auto border border-gray-30 rounded whitespace-pre-wrap bg-gray-90 p-4"
-            style={{ cursor: lineNumber ? "pointer" : undefined }}
+            className={`relative my-4 max-w-full overflow-x-auto border border-gray-30 rounded whitespace-pre-wrap bg-gray-90 p-4 ${lineNumber ? "cursor-pointer" : ""}`}
             onClick={() => lineNumber && handleLineClick(lineNumber)}
             onMouseEnter={() => lineNumber && handleMouseEnterLine(lineNumber)}
             onMouseLeave={handleMouseLeaveLine}
@@ -946,8 +939,7 @@ export function InlineCommentableMarkdown({
         const lineNumber = (props as any)["data-line-element"];
         return (
           <blockquote
-            className="relative my-4 border-l-2 bg-gray-5 py-2 pl-4 pr-4 italic text-gray-70"
-            style={{ borderLeftColor: "var(--magenta)", cursor: lineNumber ? "pointer" : undefined }}
+            className={`relative my-4 border-l-2 border-l-magenta bg-gray-5 py-2 pl-4 pr-4 italic text-gray-70 ${lineNumber ? "cursor-pointer" : ""}`}
             onClick={() => lineNumber && handleLineClick(lineNumber)}
             onMouseEnter={() => lineNumber && handleMouseEnterLine(lineNumber)}
             onMouseLeave={handleMouseLeaveLine}
@@ -982,8 +974,7 @@ export function InlineCommentableMarkdown({
         const lineNumber = (props as any)["data-line-element"];
         return (
           <tr
-            className="border-gray-20"
-            style={{ cursor: lineNumber ? "pointer" : undefined }}
+            className={`border-gray-20 ${lineNumber ? "cursor-pointer" : ""}`}
             onClick={() => lineNumber && handleLineClick(lineNumber)}
             onMouseEnter={() => lineNumber && handleMouseEnterLine(lineNumber)}
             onMouseLeave={handleMouseLeaveLine}
@@ -1019,7 +1010,7 @@ export function InlineCommentableMarkdown({
             }
           }
         } catch {}
-        return <img src={proxiedSrc as string | undefined} alt={(alt as string) ?? ""} {...props} />;
+        return <ClickableImage src={proxiedSrc as string | undefined} alt={(alt as string) ?? ""} {...props} />;
       },
     }),
     [commentsByLine, handleLineClick, handleMouseEnterLine, handleMouseLeaveLine, renderProfilePictures],
@@ -1039,7 +1030,11 @@ export function InlineCommentableMarkdown({
   }, [commentPositions]);
 
   return (
-    <div ref={containerRef} className="relative" style={{ minHeight: `${minContentHeight}px` }}>
+    <div
+      ref={containerRef}
+      className="relative min-h-[var(--min-content-height)]"
+      style={{ "--min-content-height": `${minContentHeight}px` } as React.CSSProperties}
+    >
       <div className="relative grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-8 lg:gap-12">
         {/* Main content */}
       <div className="relative flex gap-2 sm:gap-4 -ml-2 sm:-ml-4 min-w-0 h-fit" >
@@ -1250,7 +1245,7 @@ export function InlineCommentableMarkdown({
                 strokeWidth="1"
                 strokeOpacity={isDraft ? 1 : isLineHovered ? 1 : 0.6}
                 markerEnd={isDraft ? "url(#arrowhead-cyan)" : "url(#arrowhead-magenta)"}
-                style={{ transition: "stroke-opacity 0.15s, stroke-width 0.15s" }}
+                className="svg-stroke-transition"
               />
             );
           })}

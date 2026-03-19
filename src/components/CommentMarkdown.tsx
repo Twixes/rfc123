@@ -5,6 +5,7 @@ import rehypeHighlight from "rehype-highlight";
 import rehypeRaw from "rehype-raw";
 import remarkGfm from "remark-gfm";
 import { remarkMentions } from "@/lib/remark-mentions";
+import { ClickableImage } from "@/components/ClickableImage";
 
 interface CommentMarkdownProps {
   content: string;
@@ -27,7 +28,7 @@ export function CommentMarkdown({ content }: CommentMarkdownProps) {
                 }
               }
             } catch {}
-            return <img src={proxiedSrc as string | undefined} alt={(alt as string) ?? ""} {...props} />;
+            return <ClickableImage src={proxiedSrc as string | undefined} alt={(alt as string) ?? ""} {...props} />;
           },
           h1: ({ children }) => (
             <h1 className="mb-1 mt-2 text-base font-sans font-semibold text-foreground">
@@ -93,8 +94,7 @@ export function CommentMarkdown({ content }: CommentMarkdownProps) {
           ),
           blockquote: ({ children }) => (
             <blockquote
-              className="my-2 border-l-2 bg-gray-5 py-1 pl-2 pr-2 text-sm italic text-gray-70"
-              style={{ borderLeftColor: "var(--magenta)" }}
+              className="my-2 border-l-2 border-l-magenta bg-gray-5 py-1 pl-2 pr-2 text-sm italic text-gray-70"
             >
               {children}
             </blockquote>

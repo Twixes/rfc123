@@ -14,11 +14,13 @@ export function ViewModeToggle({ value, onChange }: ViewModeToggleProps) {
     <div className="relative inline-flex rounded-md border border-gray-20 bg-gray-5 p-0.5">
       <motion.div
         layoutId="viewmode-indicator"
-        className="absolute inset-y-0.5 rounded border border-gray-20 bg-surface shadow-sm"
-        style={{
-          left: value === "pretty" ? 2 : "50%",
-          right: value === "pretty" ? "50%" : 2,
-        }}
+        className="absolute inset-y-0.5 rounded border border-gray-20 bg-surface shadow-sm [left:var(--indicator-left)] [right:var(--indicator-right)]"
+        style={
+          {
+            "--indicator-left": value === "pretty" ? "2px" : "50%",
+            "--indicator-right": value === "pretty" ? "50%" : "2px",
+          } as React.CSSProperties
+        }
         transition={{ type: "spring", stiffness: 400, damping: 35 }}
       />
       <button

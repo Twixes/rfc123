@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
 import type { RFC, RepoOption } from "@/lib/github";
 import RFCListSkeleton from "@/components/RFCListSkeleton";
+import { RelativeTime } from "@/components/RelativeTime";
 import { slugify } from "@/lib/slugify";
 import RepoSelector from "@/components/RepoSelector";
 import AccountDropdown from "@/components/AccountDropdown";
@@ -267,26 +268,25 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
           <div className="flex items-center gap-1.5">
             {(["open", "merged", "closed"] as const).map((status) => {
               const isSelected = selectedStatuses.has(status);
-              const colors = {
-                open: { border: "var(--cyan)", bg: "var(--cyan-light)" },
-                merged: { border: "var(--yellow)", bg: "var(--yellow-light)" },
-                closed: { border: "var(--gray-30)", bg: "var(--gray-5)" },
-              };
               return (
                 <button
                   key={status}
                   type="button"
                   onClick={() => toggleStatus(status)}
-                  className={`border rounded-sm px-2 py-1 text-xs font-medium uppercase tracking-wider transition-all cursor-pointer ${
-                    isSelected ? "" : "opacity-40 hover:opacity-70"
+                  className={`border rounded-sm px-2 py-1 text-xs font-medium uppercase tracking-wider transition-all cursor-pointer text-foreground ${
+                    isSelected
+                      ? status === "open"
+                        ? "border-cyan bg-cyan-light"
+                        : status === "merged"
+                          ? "border-yellow bg-yellow-light"
+                          : "border-gray-30 bg-gray-5"
+                      : "bg-transparent opacity-40 hover:opacity-70 " +
+                        (status === "open"
+                          ? "border-cyan"
+                          : status === "merged"
+                            ? "border-yellow"
+                            : "border-gray-30")
                   }`}
-                  style={{
-                    borderColor: colors[status].border,
-                    backgroundColor: isSelected
-                      ? colors[status].bg
-                      : "transparent",
-                    color: "var(--foreground)",
-                  }}
                 >
                   {status}
                 </button>
@@ -441,13 +441,9 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
             >
               <Link
                 href={`/rfcs/${rfc.owner}/${rfc.repo}/${rfc.number}/${slugify(rfc.title)}`}
-                className="group block border-b border-gray-20 px-4 sm:px-6 py-4 sm:py-5 transition-all hover:bg-gray-5"
-                style={{
-                  borderTop: index === 0 ? "1px solid var(--gray-20)" : "none",
-                  backgroundColor: rfc.reviewRequested
-                    ? "var(--yellow-light)"
-                    : undefined,
-                }}
+                className={`group block border-b border-gray-20 px-4 sm:px-6 py-4 sm:py-5 transition-all hover:bg-gray-5 ${
+                  index === 0 ? "border-t border-gray-20" : ""
+                } ${rfc.reviewRequested ? "bg-yellow-light" : ""}`}
               >
               <div className="flex items-start justify-between gap-4 sm:gap-6">
                 <div className="flex-1 min-w-0">
@@ -457,33 +453,19 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
                     </h2>
                     {rfc.reviewRequested && (
                       <span
-                        className="border rounded-sm px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium uppercase tracking-wider flex-shrink-0"
-                        style={{
-                          borderColor: "var(--magenta)",
-                          backgroundColor: "var(--magenta-light)",
-                          color: "var(--foreground)",
-                        }}
+                        className="border border-magenta bg-magenta-light text-foreground rounded-sm px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium uppercase tracking-wider flex-shrink-0"
                       >
                         Review Requested
                       </span>
                     )}
                     <span
-                      className="border rounded-sm px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium uppercase tracking-wider flex-shrink-0"
-                      style={{
-                        borderColor:
-                          rfc.status === "open"
-                            ? "var(--cyan)"
-                            : rfc.status === "merged"
-                              ? "var(--yellow)"
-                              : "var(--gray-30)",
-                        backgroundColor:
-                          rfc.status === "open"
-                            ? "var(--cyan-light)"
-                            : rfc.status === "merged"
-                              ? "var(--yellow-light)"
-                              : "var(--gray-5)",
-                        color: "var(--foreground)",
-                      }}
+                      className={`border rounded-sm px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium uppercase tracking-wider flex-shrink-0 text-foreground ${
+                        rfc.status === "open"
+                          ? "border-cyan bg-cyan-light"
+                          : rfc.status === "merged"
+                            ? "border-yellow bg-yellow-light"
+                            : "border-gray-30 bg-gray-5"
+                      }`}
                     >
                       {rfc.status}
                     </span>
@@ -506,11 +488,7 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
                     </div>
                     <span>#{rfc.number}</span>
                     <span className="hidden sm:inline">
-                      {new Date(rfc.createdAt).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                      })}
+                      <RelativeTime date={rfc.createdAt} />
                     </span>
                     {rfc.inlineCommentCount === null ? (
                       <span className="border-l border-gray-30 pl-2 sm:pl-4">

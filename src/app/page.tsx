@@ -15,17 +15,17 @@ export default async function LandingPage() {
 
                     <div className="mb-6 flex flex-col sm:flex-row gap-6 sm:gap-8 border-b border-gray-20 pb-6">
                         <div className="flex-1">
-                            <div className="mb-2 h-0.5 w-12" style={{ backgroundColor: "var(--cyan)" }} />
+                            <div className="mb-2 h-0.5 w-12 bg-cyan" />
                             <div className="text-2xl font-serif text-foreground">1. Draft<sup className="text-xs ml-0.5 font-sans font-medium text-gray-50">SOON</sup></div>
                             <p className="mt-1 text-sm text-gray-70">Write rich RFCs in Markdown,<br/>automatically creating a GitHub PR.</p>
                         </div>
                         <div className="flex-1">
-                            <div className="mb-2 h-0.5 w-12" style={{ backgroundColor: "var(--magenta)" }} />
+                            <div className="mb-2 h-0.5 w-12 bg-magenta" />
                             <div className="text-2xl font-serif text-foreground">2. Discuss</div>
                             <p className="mt-1 text-sm text-gray-70">Comment line-by-line,<br/>Google Docs-style.</p>
                         </div>
                         <div className="flex-1">
-                            <div className="mb-2 h-0.5 w-12" style={{ backgroundColor: "var(--yellow)" }} />
+                            <div className="mb-2 h-0.5 w-12 bg-yellow" />
                             <div className="text-2xl font-serif text-foreground">3. Decide<sup className="text-xs ml-0.5 font-sans font-medium text-gray-50">SOON</sup></div>
                             <p className="mt-1 text-sm text-gray-70">Reach conclusions ASAP<br/>thanks to Slack notifications.</p>
                         </div>

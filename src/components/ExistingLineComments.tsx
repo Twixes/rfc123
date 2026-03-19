@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { motion } from "motion/react";
 import { CommentMarkdown } from "@/components/CommentMarkdown";
 import { CommentPermalink } from "@/components/CommentPermalink";
+import { RelativeTime } from "@/components/RelativeTime";
 import type { CommentThread } from "@/lib/comment-threads";
 
 interface ExistingLineCommentsProps {
@@ -95,8 +96,8 @@ export function ExistingLineComments({
           className="flex w-full items-center gap-2 p-3 sm:p-4 text-left cursor-pointer hover:bg-gray-5 transition-colors rounded-md"
         >
           <span
-            className="shrink-0 text-xs font-medium tracking-wide transition-all"
-            style={{ color: "var(--magenta)", opacity: isHovered ? 1 : 0.7 }}
+            className="comment-line-badge shrink-0 text-xs font-medium tracking-wide transition-all"
+            style={{ "--comment-opacity": isHovered ? 1 : 0.7 } as React.CSSProperties}
           >
             L{lineNumber}
           </span>
@@ -131,8 +132,8 @@ export function ExistingLineComments({
           <button
             type="button"
             onClick={onToggleCollapse}
-            className="block text-xs font-medium tracking-wide transition-all hover:opacity-70 cursor-pointer"
-            style={{ color: "var(--magenta)", opacity: isHovered ? 1 : 0.7 }}
+            className="comment-line-badge block text-xs font-medium tracking-wide transition-all hover:opacity-70 cursor-pointer"
+            style={{ "--comment-opacity": isHovered ? 1 : 0.7 } as React.CSSProperties}
           >
             Line {lineNumber}
             {hasMultipleThreads && (
@@ -196,12 +197,7 @@ export function ExistingLineComments({
                       <span className="text-xs font-medium text-foreground">
                         {comment.user}
                       </span>
-                      <span className="text-xs text-gray-50">
-                        {new Date(comment.createdAt).toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                        })}
-                      </span>
+                      <RelativeTime date={comment.createdAt} className="text-xs text-gray-50" />
                       <CommentPermalink commentId={comment.id} />
                     </div>
                     <CommentMarkdown content={comment.body} />

@@ -30,10 +30,7 @@ export function LineCommentBox({
   return (
     <motion.div
       ref={commentBoxRef}
-      className="lg:absolute static border rounded-md bg-surface p-3 sm:p-4 w-full lg:w-[400px]"
-      style={{
-        borderColor: "var(--cyan)",
-      }}
+      className="lg:absolute static border border-cyan rounded-md bg-surface p-3 sm:p-4 w-full lg:w-[400px]"
       initial={{ top: position }}
       animate={{ top: position }}
       transition={{ type: "spring", stiffness: 400, damping: 35 }}

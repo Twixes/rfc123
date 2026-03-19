@@ -249,11 +249,11 @@ export function ExistingLineComments({
                   </div>
                 </div>
               ) : (
-                <div className="px-3 pb-3 pt-1 flex items-center justify-between">
+                <div className="px-3 pb-3 pt-1 flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => onStartReply(thread.id)}
-                    className="rounded-md border border-gray-20 bg-surface px-2.5 py-1 text-[11px] font-medium text-gray-50 transition-all hover:bg-gray-5 hover:text-foreground"
+                    className="grow rounded-md border border-gray-20 bg-surface px-2.5 py-1 text-[11px] font-medium text-gray-50 transition-all hover:bg-gray-5 hover:text-foreground"
                   >
                     Reply
                   </button>

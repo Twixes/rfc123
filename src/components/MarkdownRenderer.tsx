@@ -31,12 +31,12 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
             return <ClickableImage src={proxiedSrc as string | undefined} alt={(alt as string) ?? ""} {...props} />;
           },
           h1: ({ children }) => (
-            <h1 className="mb-3 mt-6 pb-2 border-b border-gray-20 text-3xl font-sans! font-semibold! tracking-tight leading-tight text-foreground">
+            <h1 className="mb-3 mt-4 py-2 border-b border-gray-20 text-3xl font-sans! font-semibold! tracking-tight leading-tight text-foreground">
               {children}
             </h1>
           ),
           h2: ({ children }) => (
-            <h2 className="mb-3 mt-5 pb-2 border-b border-gray-20 text-2xl font-sans! font-semibold! tracking-tight leading-tight text-foreground">
+            <h2 className="mb-3 mt-3 py-2 border-b border-gray-20 text-2xl font-sans! font-semibold! tracking-tight leading-tight text-foreground">
               {children}
             </h2>
           ),

@@ -177,7 +177,7 @@ export function ExistingLineComments({
             <div key={thread.id}>
               {/* Thread separator for second thread onward */}
               {threadIndex > 0 && (
-                <div className="mx-3 border-t border-dashed border-gray-20 my-2" />
+                <div className="border-t border-dashed border-gray-20 mt-2 mb-6 mx-2" />
               )}
               <div className="space-y-3 px-3">
                 {thread.comments.map((comment) => (

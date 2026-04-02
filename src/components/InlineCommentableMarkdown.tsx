@@ -5,11 +5,11 @@ import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
+import type { Comment } from "@/lib/github";
 import {
   isRelativeMarkdownAssetSrc,
   resolveMarkdownImageRepoPath,
-  type Comment,
-} from "@/lib/github";
+} from "@/lib/markdown-assets";
 import type { CommentThread } from "@/lib/comment-threads";
 import { groupIntoThreads } from "@/lib/comment-threads";
 import { rehypeLineMarkers } from "@/lib/rehype-line-markers";
@@ -171,7 +171,8 @@ export function InlineCommentableMarkdown({
   const [activeLineIndex, setActiveLineIndex] = useState<number | null>(null);
   const [hoveredLineIndex, setHoveredLineIndex] = useState<number | null>(null);
   const [hoveredCommentLineIndex, setHoveredCommentLineIndex] = useState<number | null>(null);
-  const [commentText, setCommentText] = useState("");
+  /** Only set when opening the line comment box (e.g. quoted selection), not on each keystroke. */
+  const [lineCommentInitialDraft, setLineCommentInitialDraft] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedText, setSelectedText] = useState<string>("");
   const [collapsedLines, setCollapsedLines] = useState<Set<number> | null>(null);
@@ -184,7 +185,8 @@ export function InlineCommentableMarkdown({
   const [lineRanges, setLineRanges] = useState<Map<number, number>>(new Map());
   const [lineAlias, setLineAlias] = useState<Map<number, number>>(new Map());
   const [replyTarget, setReplyTarget] = useState<ReplyTarget | null>(null);
-  const [replyText, setReplyText] = useState("");
+  /** Only set when opening reply UI (e.g. quoted selection), not on each keystroke. */
+  const [replyInitialDraft, setReplyInitialDraft] = useState("");
   const lineRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
   const markdownRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -407,7 +409,7 @@ export function InlineCommentableMarkdown({
 
       if (commentsByLine.has(lineNumber)) {
         setActiveLineIndex(null);
-        setCommentText("");
+        setLineCommentInitialDraft("");
         setSelectedText("");
 
         if (isMultiLineBlock) {
@@ -426,7 +428,7 @@ export function InlineCommentableMarkdown({
             } else {
               setReplyTarget({ type: "newThread", line: lineNumber });
             }
-            setReplyText("");
+            setReplyInitialDraft("");
           }
         } else {
           // Single-line element: toggle collapse/expand
@@ -442,12 +444,12 @@ export function InlineCommentableMarkdown({
               } else {
                 setReplyTarget(null);
               }
-              setReplyText("");
+              setReplyInitialDraft("");
             } else {
               updated.add(lineNumber);
               if (replyTarget?.line === lineNumber) {
                 setReplyTarget(null);
-                setReplyText("");
+                setReplyInitialDraft("");
               }
             }
             return updated;
@@ -456,13 +458,13 @@ export function InlineCommentableMarkdown({
       } else {
         if (activeLineIndex === lineIndex) {
           setActiveLineIndex(null);
-          setCommentText("");
+          setLineCommentInitialDraft("");
           setSelectedText("");
         } else {
           setReplyTarget(null);
-          setReplyText("");
+          setReplyInitialDraft("");
           setActiveLineIndex(lineIndex);
-          setCommentText("");
+          setLineCommentInitialDraft("");
           setSelectedText("");
         }
       }
@@ -562,7 +564,7 @@ export function InlineCommentableMarkdown({
     }
 
     recalcPositions();
-  }, [lineOffsets, commentsByLine, activeLineIndex, replyTarget, replyText, commentText, resolvedCollapsedLines]);
+  }, [lineOffsets, commentsByLine, activeLineIndex, replyTarget, resolvedCollapsedLines]);
 
   // Compute SVG arrow paths from each comment to its line (only on lg when sidebar is beside content)
   const recalcArrows = useCallback(() => {
@@ -790,24 +792,24 @@ export function InlineCommentableMarkdown({
         } else {
           setReplyTarget({ type: "newThread", line: lineNumber });
         }
-        setReplyText(`> ${selectedText}\n`);
+        setReplyInitialDraft(`> ${selectedText}\n`);
         setSelectedText(selectedText);
       } else {
         setActiveLineIndex(lineIndex);
-        setCommentText(`> ${selectedText}\n`);
+        setLineCommentInitialDraft(`> ${selectedText}\n`);
         setSelectedText(selectedText);
       }
       selection.removeAllRanges(); // Clear the selection
     }
   }
 
-  async function handleSubmit(lineIndex: number) {
-    if (!commentText.trim()) return;
+  async function handleSubmit(lineIndex: number, body: string) {
+    if (!body.trim()) return;
 
     setIsSubmitting(true);
     try {
-      await onCommentSubmit(lineIndex + 1, commentText);
-      setCommentText("");
+      await onCommentSubmit(lineIndex + 1, body);
+      setLineCommentInitialDraft("");
       setActiveLineIndex(null);
       setSelectedText("");
     } catch (error) {
@@ -818,14 +820,14 @@ export function InlineCommentableMarkdown({
     }
   }
 
-  async function handleReplySubmit() {
-    if (!replyTarget || !replyText.trim()) return;
+  async function handleReplySubmit(body: string) {
+    if (!replyTarget || !body.trim()) return;
 
     setIsSubmitting(true);
     try {
       const threadId = replyTarget.type === "thread" ? replyTarget.threadId : undefined;
-      await onCommentSubmit(replyTarget.line, replyText, threadId);
-      setReplyText("");
+      await onCommentSubmit(replyTarget.line, body, threadId);
+      setReplyInitialDraft("");
       setReplyTarget(null);
     } catch (error) {
       console.error("Error submitting reply:", error);
@@ -1152,20 +1154,19 @@ export function InlineCommentableMarkdown({
           <LineCommentBox
             lineNumber={activeLineIndex + 1}
             endLineNumber={lineRanges.get(activeLineIndex + 1)}
-            commentText={commentText}
+            initialDraft={lineCommentInitialDraft}
             isSubmitting={isSubmitting}
             position={
               commentPositions.get(-1) ||
               lineOffsets.get(activeLineIndex + 1) ||
               0
             }
-            onCommentTextChange={setCommentText}
             onClose={() => {
               setActiveLineIndex(null);
-              setCommentText("");
+              setLineCommentInitialDraft("");
               setSelectedText("");
             }}
-            onSubmit={() => handleSubmit(activeLineIndex)}
+            onSubmit={(body) => handleSubmit(activeLineIndex, body)}
             commentBoxRef={(el) => {
               if (el) {
                 commentBoxRefs.current.set(-1, el);
@@ -1187,22 +1188,21 @@ export function InlineCommentableMarkdown({
               position={getCommentPosition(lineNumber)}
               replyingToThreadId={replyTarget?.line === lineNumber && replyTarget.type === "thread" ? replyTarget.threadId : null}
               isStartingNewThread={replyTarget?.line === lineNumber && replyTarget.type === "newThread"}
-              replyText={replyTarget?.line === lineNumber ? replyText : ""}
+              replyInitialDraft={replyTarget?.line === lineNumber ? replyInitialDraft : ""}
               isSubmitting={isSubmitting}
               isCollapsed={resolvedCollapsedLines.has(lineNumber)}
               highlightedCommentId={highlightedCommentId}
-              onReplyTextChange={setReplyText}
               onStartReply={(threadId) => {
                 setReplyTarget({ type: "thread", line: lineNumber, threadId });
-                setReplyText("");
+                setReplyInitialDraft("");
               }}
               onStartNewThread={() => {
                 setReplyTarget({ type: "newThread", line: lineNumber });
-                setReplyText("");
+                setReplyInitialDraft("");
               }}
               onCancelReply={() => {
                 setReplyTarget(null);
-                setReplyText("");
+                setReplyInitialDraft("");
               }}
               onSubmitReply={handleReplySubmit}
               onToggleCollapse={() => {

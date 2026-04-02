@@ -48,7 +48,7 @@ The app interacts with GitHub PRs that contain `.md` files (RFC content can live
 - **`listRFCs()`** - Fetches all PRs from target repo, filters for RFC markdown files, returns list with comment counts
 - **`getRFCDetail()`** - Fetches specific PR with markdown content, comments, and reviewer information
 - **`postComment()`** - Posts either a review comment (on specific line/path) or general issue comment
-- **Path helpers** (same module) - `normalizeRepoPath`, `resolveMarkdownImageRepoPath`, `isRelativeMarkdownAssetSrc` resolve repo-relative image paths the same way GitHub does (relative to the markdown file, or repo root when there is no `.md` file)
+- **Path helpers** (`src/lib/markdown-assets.ts`, re-exported from `github.ts`) - `normalizeRepoPath`, `resolveMarkdownImageRepoPath`, `isRelativeMarkdownAssetSrc` resolve repo-relative image paths the same way GitHub does (relative to the markdown file, or repo root when there is no `.md` file). Kept in a separate module so client components do not import server-only `github.ts`.
 
 Key interfaces:
 - `RFC` - Basic PR metadata with comment counts
@@ -123,7 +123,8 @@ The app uses Next.js server actions for mutations where applicable:
 
 ## Key Files to Understand
 
-- `src/lib/github.ts` - All GitHub API interactions and markdown-relative path helpers for assets
+- `src/lib/github.ts` - All GitHub API interactions (re-exports path helpers from `markdown-assets.ts`)
+- `src/lib/markdown-assets.ts` - Pure repo-relative image path helpers (client-safe; do not import `github.ts` from client components)
 - `src/lib/asset-mime.ts` - MIME type for proxied repo assets (sniffing, not filename-only)
 - `src/lib/rehype-line-markers.ts` - Line position tracking mechanism
 - `src/components/InlineCommentableMarkdown.tsx` - Core commenting UI and positioning logic

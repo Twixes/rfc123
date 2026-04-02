@@ -1,16 +1,17 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { motion } from "motion/react";
 
 interface LineCommentBoxProps {
   lineNumber: number;
   endLineNumber?: number;
-  commentText: string;
+  /** Seed when the box opens (e.g. quoted selection). Kept in parent only for open/close, not per keystroke. */
+  initialDraft: string;
   isSubmitting: boolean;
   position: number;
-  onCommentTextChange: (text: string) => void;
   onClose: () => void;
-  onSubmit: () => void;
+  onSubmit: (body: string) => void;
   commentBoxRef: (el: HTMLDivElement | null) => void;
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
@@ -19,16 +20,20 @@ interface LineCommentBoxProps {
 export function LineCommentBox({
   lineNumber,
   endLineNumber,
-  commentText,
+  initialDraft,
   isSubmitting,
   position,
-  onCommentTextChange,
   onClose,
   onSubmit,
   commentBoxRef,
   onMouseEnter,
   onMouseLeave,
 }: LineCommentBoxProps) {
+  const [draft, setDraft] = useState(initialDraft);
+  useEffect(() => {
+    setDraft(initialDraft);
+  }, [initialDraft, lineNumber, endLineNumber]);
+
   const isRange = endLineNumber != null && endLineNumber > lineNumber;
   return (
     <motion.div
@@ -66,8 +71,8 @@ export function LineCommentBox({
         </button>
       </div>
       <textarea
-        value={commentText}
-        onChange={(e) => onCommentTextChange(e.target.value)}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
         placeholder="Add a comment..."
         className="w-full resize-none border border-gray-30 rounded-sm bg-surface px-3 py-2 text-sm text-foreground placeholder-gray-50 focus:outline-none focus:ring-2 focus:ring-cyan focus:border-transparent"
         rows={4}
@@ -78,7 +83,7 @@ export function LineCommentBox({
             onClose();
           }
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-            onSubmit();
+            onSubmit(draft);
           }
         }}
       />
@@ -97,8 +102,8 @@ export function LineCommentBox({
           </button>
           <button
             type="button"
-            onClick={onSubmit}
-            disabled={!commentText.trim() || isSubmitting}
+            onClick={() => onSubmit(draft)}
+            disabled={!draft.trim() || isSubmitting}
             className="rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-surface transition-all hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-30"
           >
             {isSubmitting ? "Posting..." : "Comment"}

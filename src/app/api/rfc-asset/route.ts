@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import { contentTypeForAsset } from "@/lib/asset-mime";
-import { getOctokit, normalizeRepoPath } from "@/lib/github";
+import { getOctokit } from "@/lib/github";
+import { normalizeRepoPath } from "@/lib/markdown-assets";
 
 export async function GET(request: Request) {
   const session = await auth();

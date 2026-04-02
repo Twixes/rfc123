@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useRef } from "react";
 import { motion } from "motion/react";
 import { CommentMarkdown } from "@/components/CommentMarkdown";
 import { CommentPermalink } from "@/components/CommentPermalink";
 import { RelativeTime } from "@/components/RelativeTime";
+import { ReplyDraftForm } from "@/components/ReplyDraftForm";
 import type { CommentThread } from "@/lib/comment-threads";
 
 interface ExistingLineCommentsProps {
@@ -14,15 +14,15 @@ interface ExistingLineCommentsProps {
   position: number;
   replyingToThreadId: number | null;
   isStartingNewThread: boolean;
-  replyText: string;
+  /** Seed when reply UI opens (e.g. quoted selection). Not updated per keystroke. */
+  replyInitialDraft: string;
   isSubmitting: boolean;
   isCollapsed: boolean;
   highlightedCommentId?: number | null;
-  onReplyTextChange: (text: string) => void;
   onStartReply: (threadId: number) => void;
   onStartNewThread: () => void;
   onCancelReply: () => void;
-  onSubmitReply: () => void;
+  onSubmitReply: (body: string) => void;
   onToggleCollapse: () => void;
   commentBoxRef: (el: HTMLDivElement | null) => void;
   /** Ref to the expandable content block; used to measure final height before animation */
@@ -39,11 +39,10 @@ export function ExistingLineComments({
   position,
   replyingToThreadId,
   isStartingNewThread,
-  replyText,
+  replyInitialDraft,
   isSubmitting,
   isCollapsed,
   highlightedCommentId,
-  onReplyTextChange,
   onStartReply,
   onStartNewThread,
   onCancelReply,
@@ -55,33 +54,14 @@ export function ExistingLineComments({
   onMouseEnter,
   onMouseLeave,
 }: ExistingLineCommentsProps) {
-  const replyTextareaRef = useRef<HTMLTextAreaElement>(null);
-  const newThreadTextareaRef = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    if (replyingToThreadId != null && !isCollapsed) {
-      const id = requestAnimationFrame(() => {
-        replyTextareaRef.current?.focus();
-      });
-      return () => cancelAnimationFrame(id);
-    }
-  }, [replyingToThreadId, isCollapsed]);
-
-  useEffect(() => {
-    if (isStartingNewThread && !isCollapsed) {
-      const id = requestAnimationFrame(() => {
-        newThreadTextareaRef.current?.focus();
-      });
-      return () => cancelAnimationFrame(id);
-    }
-  }, [isStartingNewThread, isCollapsed]);
-
   const allComments = threads.flatMap((t) => t.comments);
   const totalCommentCount = allComments.length;
   const firstComment = threads[0]?.comments[0];
   const hasMultipleThreads = threads.length > 1;
   const isRange = endLineNumber != null && endLineNumber > lineNumber;
-  const lineLabel = isRange ? `${lineNumber}–${endLineNumber}` : String(lineNumber);
+  const lineLabel = isRange
+    ? `${lineNumber}–${endLineNumber}`
+    : String(lineNumber);
 
   return (
     <motion.div
@@ -101,13 +81,22 @@ export function ExistingLineComments({
         >
           <span
             className="comment-line-badge shrink-0 text-xs font-medium tracking-wide transition-all"
-            style={{ "--comment-opacity": isHovered ? 1 : 0.7 } as React.CSSProperties}
+            style={
+              {
+                "--comment-opacity": isHovered ? 1 : 0.7,
+              } as React.CSSProperties
+            }
           >
             L{lineLabel}
           </span>
           <span className="min-w-0 flex-1 truncate text-xs text-gray-70">
-            <span className="font-medium text-gray-90">{firstComment?.user}: </span>
-            {firstComment?.body.replace(/^>\s.*\n?/gm, "").replace(/\n/g, " ").trim()}
+            <span className="font-medium text-gray-90">
+              {firstComment?.user}:{" "}
+            </span>
+            {firstComment?.body
+              .replace(/^>\s.*\n?/gm, "")
+              .replace(/\n/g, " ")
+              .trim()}
           </span>
           <span className="shrink-0 text-[10px] text-gray-50">
             {hasMultipleThreads
@@ -137,7 +126,11 @@ export function ExistingLineComments({
             type="button"
             onClick={onToggleCollapse}
             className="comment-line-badge block text-xs font-medium tracking-wide transition-all hover:opacity-70 cursor-pointer"
-            style={{ "--comment-opacity": isHovered ? 1 : 0.7 } as React.CSSProperties}
+            style={
+              {
+                "--comment-opacity": isHovered ? 1 : 0.7,
+              } as React.CSSProperties
+            }
           >
             Lines {lineLabel}
             {hasMultipleThreads && (
@@ -172,7 +165,10 @@ export function ExistingLineComments({
 
       <motion.div
         initial={false}
-        animate={{ height: isCollapsed ? 0 : "auto", opacity: isCollapsed ? 0 : 1 }}
+        animate={{
+          height: isCollapsed ? 0 : "auto",
+          opacity: isCollapsed ? 0 : 1,
+        }}
         transition={{ type: "spring", stiffness: 400, damping: 35 }}
         className="overflow-hidden"
       >
@@ -201,7 +197,10 @@ export function ExistingLineComments({
                       <span className="text-xs font-medium text-foreground">
                         {comment.user}
                       </span>
-                      <RelativeTime date={comment.createdAt} className="text-xs text-gray-50" />
+                      <RelativeTime
+                        date={comment.createdAt}
+                        className="text-xs text-gray-50"
+                      />
                       <CommentPermalink commentId={comment.id} />
                     </div>
                     <CommentMarkdown content={comment.body} />
@@ -211,46 +210,16 @@ export function ExistingLineComments({
               {/* Per-thread reply */}
               {replyingToThreadId === thread.id ? (
                 <div className="p-3 sm:p-4 pt-2">
-                  <textarea
-                    ref={replyTextareaRef}
-                    value={replyText}
-                    onChange={(e) => onReplyTextChange(e.target.value)}
+                  <ReplyDraftForm
+                    key={`reply-${thread.id}`}
+                    initialDraft={replyInitialDraft}
+                    isSubmitting={isSubmitting}
                     placeholder="Reply to this thread..."
-                    className="w-full resize-none border border-gray-30 rounded-sm bg-surface px-3 py-2 text-sm text-foreground placeholder-gray-50 focus:outline-none focus:ring-2 focus:ring-cyan focus:border-transparent"
-                    rows={4}
-                    disabled={isSubmitting}
-                    onKeyDown={(e) => {
-                      if (e.key === "Escape") {
-                        onCancelReply();
-                      }
-                      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                        onSubmitReply();
-                      }
-                    }}
+                    submitLabel="Reply"
+                    shouldFocus={!isCollapsed}
+                    onCancel={onCancelReply}
+                    onSubmit={onSubmitReply}
                   />
-                  <div className="mt-1 flex items-center justify-between">
-                    <span className="text-xs text-gray-50">
-                      ⌘+Enter to submit
-                    </span>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={onCancelReply}
-                        disabled={isSubmitting}
-                        className="rounded-md border border-gray-20 bg-surface px-3 py-1.5 text-xs font-medium text-foreground transition-all hover:bg-gray-5 disabled:opacity-30"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        onClick={onSubmitReply}
-                        disabled={!replyText.trim() || isSubmitting}
-                        className="rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-surface transition-all hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-30"
-                      >
-                        {isSubmitting ? "Posting..." : "Reply"}
-                      </button>
-                    </div>
-                  </div>
                 </div>
               ) : (
                 <div className="px-3 pb-3 pt-1 flex items-center gap-2">
@@ -261,15 +230,16 @@ export function ExistingLineComments({
                   >
                     Reply
                   </button>
-                  {threadIndex === threads.length - 1 && !isStartingNewThread && (
-                    <button
-                      type="button"
-                      onClick={onStartNewThread}
-                      className="rounded-md border border-dashed border-gray-20 bg-surface px-2.5 py-1 text-[11px] font-medium text-gray-50 transition-all hover:bg-gray-5 hover:text-foreground hover:border-gray-30"
-                    >
-                      + New thread
-                    </button>
-                  )}
+                  {threadIndex === threads.length - 1 &&
+                    !isStartingNewThread && (
+                      <button
+                        type="button"
+                        onClick={onStartNewThread}
+                        className="rounded-md border border-dashed border-gray-20 bg-surface px-2.5 py-1 text-[11px] font-medium text-gray-50 transition-all hover:bg-gray-5 hover:text-foreground hover:border-gray-30"
+                      >
+                        + New thread
+                      </button>
+                    )}
                 </div>
               )}
             </div>
@@ -278,47 +248,20 @@ export function ExistingLineComments({
           {/* New thread form */}
           {isStartingNewThread && (
             <div className="p-3 sm:p-4 pt-2 border-t border-dashed border-gray-20 mt-2">
-              <p className="mb-2 text-[11px] font-medium text-gray-50">New thread</p>
-              <textarea
-                ref={newThreadTextareaRef}
-                value={replyText}
-                onChange={(e) => onReplyTextChange(e.target.value)}
+              <p className="mb-2 text-[11px] font-medium text-gray-50">
+                New thread
+              </p>
+              <ReplyDraftForm
+                key="new-thread"
+                initialDraft={replyInitialDraft}
+                isSubmitting={isSubmitting}
                 placeholder="Start a new thread..."
-                className="w-full resize-none border border-gray-30 rounded-sm bg-surface px-3 py-2 text-sm text-foreground placeholder-gray-50 focus:outline-none focus:ring-2 focus:ring-cyan focus:border-transparent"
-                rows={4}
-                disabled={isSubmitting}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") {
-                    onCancelReply();
-                  }
-                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                    onSubmitReply();
-                  }
-                }}
+                submitLabel="Comment"
+                shouldFocus={!isCollapsed}
+                actionsRowClassName="mt-3"
+                onCancel={onCancelReply}
+                onSubmit={onSubmitReply}
               />
-              <div className="mt-3 flex items-center justify-between">
-                <span className="text-xs text-gray-50">
-                  ⌘+Enter to submit
-                </span>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={onCancelReply}
-                    disabled={isSubmitting}
-                    className="rounded-md border border-gray-20 bg-surface px-3 py-1.5 text-xs font-medium text-foreground transition-all hover:bg-gray-5 disabled:opacity-30"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onSubmitReply}
-                    disabled={!replyText.trim() || isSubmitting}
-                    className="rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-surface transition-all hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-30"
-                  >
-                    {isSubmitting ? "Posting..." : "Comment"}
-                  </button>
-                </div>
-              </div>
             </div>
           )}
         </div>

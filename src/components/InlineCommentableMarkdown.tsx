@@ -5,7 +5,11 @@ import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
-import type { Comment } from "@/lib/github";
+import {
+  isRelativeMarkdownAssetSrc,
+  resolveMarkdownImageRepoPath,
+  type Comment,
+} from "@/lib/github";
 import type { CommentThread } from "@/lib/comment-threads";
 import { groupIntoThreads } from "@/lib/comment-threads";
 import { rehypeLineMarkers } from "@/lib/rehype-line-markers";
@@ -142,6 +146,10 @@ type ReplyTarget =
 interface InlineCommentableMarkdownProps {
   content: string;
   prNumber: number;
+  owner: string;
+  repo: string;
+  markdownFilePath: string | null;
+  headRef: string;
   comments: Comment[];
   commentsLoading?: boolean;
   highlightedCommentId?: number | null;
@@ -151,6 +159,10 @@ interface InlineCommentableMarkdownProps {
 export function InlineCommentableMarkdown({
   content,
   prNumber,
+  owner,
+  repo,
+  markdownFilePath,
+  headRef,
   comments,
   commentsLoading,
   highlightedCommentId,
@@ -1049,18 +1061,37 @@ export function InlineCommentableMarkdown({
       ),
       img: ({ node: _node, src, alt, ...props }: MDProps<"img">) => {
         let proxiedSrc = src;
-        try {
-          if (typeof src === "string") {
-            const url = new URL(src);
-            if (url.hostname === "github.com" && url.pathname.startsWith("/user-attachments/")) {
-              proxiedSrc = `/api/github-image?url=${encodeURIComponent(src)}`;
+        if (typeof src === "string") {
+          if (isRelativeMarkdownAssetSrc(src) && headRef) {
+            const repoPath = resolveMarkdownImageRepoPath(markdownFilePath, src);
+            if (repoPath) {
+              proxiedSrc = `/api/rfc-asset?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}&ref=${encodeURIComponent(headRef)}&path=${encodeURIComponent(repoPath)}`;
+            }
+          } else {
+            try {
+              const url = new URL(src);
+              if (url.hostname === "github.com" && url.pathname.startsWith("/user-attachments/")) {
+                proxiedSrc = `/api/github-image?url=${encodeURIComponent(src)}`;
+              }
+            } catch {
+              /* keep src */
             }
           }
-        } catch {}
+        }
         return <ClickableImage src={proxiedSrc as string | undefined} alt={(alt as string) ?? ""} {...props} />;
       },
     }),
-    [commentsByLine, handleLineClick, handleMouseEnterLine, handleMouseLeaveLine, renderProfilePictures],
+    [
+      commentsByLine,
+      handleLineClick,
+      handleMouseEnterLine,
+      handleMouseLeaveLine,
+      renderProfilePictures,
+      owner,
+      repo,
+      markdownFilePath,
+      headRef,
+    ],
   );
 
   // Calculate the minimum height needed for the main content area to accommodate all comments

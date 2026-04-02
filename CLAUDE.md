@@ -48,19 +48,24 @@ The app interacts with GitHub PRs that contain `.md` files (RFC content can live
 - **`listRFCs()`** - Fetches all PRs from target repo, filters for RFC markdown files, returns list with comment counts
 - **`getRFCDetail()`** - Fetches specific PR with markdown content, comments, and reviewer information
 - **`postComment()`** - Posts either a review comment (on specific line/path) or general issue comment
+- **Path helpers** (same module) - `normalizeRepoPath`, `resolveMarkdownImageRepoPath`, `isRelativeMarkdownAssetSrc` resolve repo-relative image paths the same way GitHub does (relative to the markdown file, or repo root when there is no `.md` file)
 
 Key interfaces:
 - `RFC` - Basic PR metadata with comment counts
-- `RFCDetail` - Extended RFC with markdown content, comments, and reviewers
+- `RFCDetail` - Extended RFC with markdown content, `markdownFilePath`, `headRef` (PR head branch for fetching repo files), comments, and reviewers
 - `Comment` - Individual comment with optional line/path for inline comments
 
 ### Routing Structure
 
 - `/` - Landing page (src/app/page.tsx)
 - `/rfcs` - Homepage listing all RFCs (src/app/rfcs/page.tsx)
-- `/rfcs/[number]` - Individual RFC detail page (src/app/rfcs/[number]/page.tsx)
+- `/rfcs/[owner]/[repo]/[number]/[[...slug]]` - Individual RFC detail (optional slug segment for readable URLs; src/app/rfcs/[owner]/[repo]/[number]/[[...slug]]/page.tsx)
+- `/invite` - Pre-auth landing for deep links to RFC pages (src/app/invite/page.tsx)
 - `/api/auth/[...nextauth]` - NextAuth authentication endpoints
-- `/api/comment` - POST endpoint for submitting comments (currently unused, replaced by server actions)
+- `/api/rfcs/*` - JSON APIs for RFC list/detail and comments
+- `/api/comment` - POST endpoint for submitting comments
+- `/api/github-image` - GET proxy for allowlisted GitHub-hosted images (e.g. issue/PR uploads on `github.com/user-attachments/...` and `private-user-images.githubusercontent.com`); requires session
+- `/api/rfc-asset` - GET proxy for files in the repo at the PR head ref (used for relative markdown images so private repos work); uses Octokit Contents API; `Content-Type` from `src/lib/asset-mime.ts` (magic bytes + SVG sniff + extension fallback)
 
 ### Inline Commenting System
 
@@ -68,6 +73,7 @@ The core feature is line-by-line commenting on RFC markdown files. This is imple
 
 **InlineCommentableMarkdown** (src/components/InlineCommentableMarkdown.tsx):
 - Main component rendering markdown with line numbers and comment UI
+- Rewrites image `src`: relative paths → `/api/rfc-asset` (repo files at `headRef`); `github.com` user-attachment URLs → `/api/github-image`
 - Uses two-column layout: markdown content + comments sidebar (400px fixed width)
 - Tracks line positions by injecting invisible markers via rehype plugin
 - Supports commenting by clicking line numbers or selecting text
@@ -96,8 +102,8 @@ The core feature is line-by-line commenting on RFC markdown files. This is imple
 
 ### Server Actions
 
-The app uses Next.js server actions for mutations (defined inline in page components):
-- `handleInlineComment()` in src/app/rfcs/[number]/page.tsx - Posts line comments
+The app uses Next.js server actions for mutations where applicable:
+- Inline review comments are posted from the client via `fetch("/api/comment", ...)` in `RFCDetailClient` (src/app/rfcs/[owner]/[repo]/[number]/[[...slug]]/RFCDetailClient.tsx)
 - Log out action in src/app/page.tsx - Handles user logout
 
 ### Styling
@@ -117,8 +123,11 @@ The app uses Next.js server actions for mutations (defined inline in page compon
 
 ## Key Files to Understand
 
-- `src/lib/github.ts` - All GitHub API interactions
+- `src/lib/github.ts` - All GitHub API interactions and markdown-relative path helpers for assets
+- `src/lib/asset-mime.ts` - MIME type for proxied repo assets (sniffing, not filename-only)
 - `src/lib/rehype-line-markers.ts` - Line position tracking mechanism
 - `src/components/InlineCommentableMarkdown.tsx` - Core commenting UI and positioning logic
+- `src/app/api/github-image/route.ts` - Proxy for GitHub attachment image URLs
+- `src/app/api/rfc-asset/route.ts` - Proxy for in-repo files (images, etc.) referenced from RFC markdown
 - `src/auth.ts` - Authentication configuration
 - `src/app/globals.css` - Design system colors and global styles

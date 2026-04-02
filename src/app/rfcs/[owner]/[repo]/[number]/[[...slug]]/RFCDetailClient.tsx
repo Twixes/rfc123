@@ -350,6 +350,10 @@ export default function RFCDetailClient({
           <InlineCommentableMarkdown
             content={rfc.markdownContent}
             prNumber={rfc.number}
+            owner={owner}
+            repo={repo}
+            markdownFilePath={rfc.markdownFilePath}
+            headRef={rfc.headRef}
             comments={lineComments}
             commentsLoading={commentsLoading}
             highlightedCommentId={highlightedCommentId}

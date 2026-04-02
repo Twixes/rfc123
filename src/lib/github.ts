@@ -34,6 +34,8 @@ export interface RFCDetail extends RFC {
     body: string
     markdownContent: string
     markdownFilePath: string | null
+    /** PR head branch ref; used to resolve relative image paths to repo files */
+    headRef: string
     reviewers: Array<{ login: string; avatar: string; yetToReview: boolean }>
     comments: Comment[]
 }
@@ -59,6 +61,54 @@ export async function getOctokit(accessToken: string) {
 
 function cleanTitle(title: string) {
     return title.replace(/(^RFC - |^RFC:? |^Add RFC for |^\[RFC\] | RFC$)/i, "")
+}
+
+/** Normalize a repo-relative path; rejects escape above repo root. */
+export function normalizeRepoPath(path: string): string | null {
+    const segments = path.split("/").filter(Boolean)
+    const stack: string[] = []
+    for (const seg of segments) {
+        if (seg === "..") {
+            if (stack.length === 0) return null
+            stack.pop()
+        } else if (seg !== ".") {
+            stack.push(seg)
+        }
+    }
+    return stack.join("/")
+}
+
+/**
+ * Resolve a markdown image href relative to the RFC markdown file (GitHub behavior).
+ * When there is no markdown file (body-only RFC), paths are relative to the repo root.
+ */
+export function resolveMarkdownImageRepoPath(
+    markdownFilePath: string | null,
+    href: string
+): string | null {
+    const trimmed = href.trim()
+    if (!trimmed) return null
+
+    const baseDir = markdownFilePath?.includes("/")
+        ? markdownFilePath.slice(0, markdownFilePath.lastIndexOf("/"))
+        : ""
+
+    try {
+        const base = `https://rfc-asset.invalid/${baseDir ? `${baseDir}/` : ""}`
+        const resolved = new URL(trimmed, base)
+        const rawPath = resolved.pathname.replace(/^\//, "")
+        return normalizeRepoPath(rawPath)
+    } catch {
+        return null
+    }
+}
+
+/** True for paths that should be resolved against the repo (not absolute http(s) URLs). */
+export function isRelativeMarkdownAssetSrc(src: string): boolean {
+    const s = src.trim()
+    if (!s) return false
+    if (s.startsWith("//")) return false
+    return !/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(s)
 }
 
 export async function listReposWithRFCs(accessToken: string): Promise<RepoOption[]> {
@@ -404,6 +454,7 @@ export async function getRFCDetail(
             files: any[]
             markdownContent: string
             markdownFilePath: string | null
+            headRef: string
             markdownEtag?: string
             reviewers: RFCDetail["reviewers"]
             reviewRequested: boolean
@@ -565,6 +616,7 @@ export async function getRFCDetail(
                     files,
                     markdownContent,
                     markdownFilePath,
+                    headRef: pr.head.ref,
                     reviewers,
                     reviewRequested,
                     markdownEtag,
@@ -592,6 +644,7 @@ export async function getRFCDetail(
             body: pr.body || "",
             markdownContent,
             markdownFilePath,
+            headRef: pr.head.ref,
             reviewers,
             reviewRequested: reviewRequested || false,
             comments: [], // Comments are loaded progressively by the client

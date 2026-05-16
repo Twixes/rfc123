@@ -1,150 +1,177 @@
-import { Octokit } from "octokit"
+import { Octokit } from "octokit";
 import {
-    getCachedJsonData,
-    getCachedJsonDataBatch,
-    setCachedJsonData,
-    setCachedJsonDataBatch,
-} from "./cache"
-import { captureServerException } from "./posthog-server"
+  getCachedJsonData,
+  getCachedJsonDataBatch,
+  setCachedJsonData,
+  setCachedJsonDataBatch,
+} from "./cache";
+import { captureServerException } from "./posthog-server";
+import { randomSuffix } from "./random-suffix"
+import { slugify } from "./slugify";
 
 export interface RepoOption {
-    owner: string
-    name: string
-    fullName: string
+  owner: string;
+  name: string;
+  fullName: string;
 }
 
 export interface RFC {
-    number: number
-    title: string
-    author: string
-    authorAvatar: string
-    status: "open" | "merged" | "closed"
-    createdAt: string
-    updatedAt: string
-    commentCount: number | null
-    inlineCommentCount: number | null
-    regularCommentCount: number
-    url: string
-    owner: string
-    repo: string
-    reviewRequested: boolean
+  number: number;
+  title: string;
+  author: string;
+  authorAvatar: string;
+  status: "open" | "merged" | "closed";
+  createdAt: string;
+  updatedAt: string;
+  commentCount: number | null;
+  inlineCommentCount: number | null;
+  regularCommentCount: number;
+  url: string;
+  owner: string;
+  repo: string;
+  reviewRequested: boolean;
 }
 
 export interface RFCDetail extends RFC {
-    body: string
-    markdownContent: string
-    markdownFilePath: string | null
-    /** PR head branch ref; used to resolve relative image paths to repo files */
-    headRef: string
-    reviewers: Array<{ login: string; avatar: string; yetToReview: boolean }>
-    comments: Comment[]
+  body: string;
+  markdownContent: string;
+  markdownFilePath: string | null;
+  /** PR head branch ref; used to resolve relative image paths to repo files */
+  headRef: string;
+  reviewers: Array<{ login: string; avatar: string; yetToReview: boolean }>;
+  comments: Comment[];
 }
 
 export interface Comment {
-    id: number
-    user: string
-    userAvatar: string
-    body: string
-    createdAt: string
-    path?: string
-    line?: number
-    diffHunk?: string
-    inReplyToId?: number
+  id: number;
+  user: string;
+  userAvatar: string;
+  body: string;
+  createdAt: string;
+  path?: string;
+  line?: number;
+  diffHunk?: string;
+  inReplyToId?: number;
 }
 
-export type { CommentThread } from "./comment-threads"
-export { groupIntoThreads } from "./comment-threads"
+export type { CommentThread } from "./comment-threads";
+export { groupIntoThreads } from "./comment-threads";
 
 export async function getOctokit(accessToken: string) {
-    return new Octokit({ auth: accessToken })
+  return new Octokit({ auth: accessToken });
 }
 
 function cleanTitle(title: string) {
-    return title.replace(/(^RFC - |^RFC:? |^Add RFC for |^\[RFC\] | RFC$)/i, "")
+  return title.replace(/(^RFC - |^RFC:? |^Add RFC for |^\[RFC\] | RFC$)/i, "");
 }
 
 export {
-    isRelativeMarkdownAssetSrc,
-    normalizeRepoPath,
-    resolveMarkdownImageRepoPath,
-} from "./markdown-assets"
+  isRelativeMarkdownAssetSrc,
+  normalizeRepoPath,
+  resolveMarkdownImageRepoPath,
+} from "./markdown-assets";
 
-export async function listReposWithRFCs(accessToken: string): Promise<RepoOption[]> {
-    try {
-        const octokit = await getOctokit(accessToken)
+export async function listReposWithRFCs(
+  accessToken: string,
+): Promise<RepoOption[]> {
+  try {
+    const octokit = await getOctokit(accessToken);
 
-        // Get all repos the user has access to (personal + orgs)
-        const cachedReposWithRFCs = await getCachedJsonData<RepoOption[]>(`repos_with_rfcs:${accessToken}`)
-        if (cachedReposWithRFCs) {
-            return cachedReposWithRFCs
-        }
-
-        const data = await octokit.rest.repos.listForAuthenticatedUser({
-            per_page: 100,
-            sort: "updated",
-            affiliation: "owner,organization_member",
-        })
-        const repos = data.data.map((repo) => ({
-            owner: repo.owner.login,
-            name: repo.name,
-            fullName: repo.full_name,
-        }))
-
-        // Check all repos in parallel for RFC content
-        const checks = repos.map(async (repo) => {
-            let hasRFCs = await getCachedJsonData(`repo_has_rfcs:${repo.owner}:${repo.name}`)
-            if (hasRFCs != null) {
-                return hasRFCs ? repo : null
-            }
-            // Check if repo name suggests it's an RFC repo
-            const nameLower = repo.name.toLowerCase()
-            if (nameLower.includes("rfc") || nameLower.includes("requests-for-comments")) {
-                hasRFCs = true
-                await setCachedJsonData(`repo_has_rfcs:${repo.owner}:${repo.name}`, hasRFCs, 600)
-                return repo
-            }
-            // Otherwise check for known RFC directories
-            const [variantFull, variantShort] = await Promise.allSettled([
-                octokit.rest.repos.getContent({
-                    owner: repo.owner,
-                    repo: repo.name,
-                    path: "requests-for-comments",
-                }),
-                octokit.rest.repos.getContent({
-                    owner: repo.owner,
-                    repo: repo.name,
-                    path: "RFCs",
-                }),
-            ])
-            hasRFCs = variantFull.status === "fulfilled" || variantShort.status === "fulfilled"
-            await setCachedJsonData(`repo_has_rfcs:${repo.owner}:${repo.name}`, hasRFCs, 600)
-            return hasRFCs ? repo : null
-        })
-
-        const results = await Promise.all(checks)
-        const reposWithRFCs = results.filter((repo): repo is RepoOption => repo !== null)
-        await setCachedJsonData(`repos_with_rfcs:${accessToken}`, reposWithRFCs, 600)
-        return reposWithRFCs
-    } catch (error) {
-        captureServerException(error as Error, undefined, {
-            function: "listReposWithRFCs",
-            context: "fetching_repos_with_rfcs",
-        })
-        throw error
+    // Get all repos the user has access to (personal + orgs)
+    const cachedReposWithRFCs = await getCachedJsonData<RepoOption[]>(
+      `repos_with_rfcs:${accessToken}`,
+    );
+    if (cachedReposWithRFCs) {
+      return cachedReposWithRFCs;
     }
+
+    const data = await octokit.rest.repos.listForAuthenticatedUser({
+      per_page: 100,
+      sort: "updated",
+      affiliation: "owner,organization_member",
+    });
+    const repos = data.data.map((repo) => ({
+      owner: repo.owner.login,
+      name: repo.name,
+      fullName: repo.full_name,
+    }));
+
+    // Check all repos in parallel for RFC content
+    const checks = repos.map(async (repo) => {
+      let hasRFCs = await getCachedJsonData(
+        `repo_has_rfcs:${repo.owner}:${repo.name}`,
+      );
+      if (hasRFCs != null) {
+        return hasRFCs ? repo : null;
+      }
+      // Check if repo name suggests it's an RFC repo
+      const nameLower = repo.name.toLowerCase();
+      if (
+        nameLower.includes("rfc") ||
+        nameLower.includes("requests-for-comments")
+      ) {
+        hasRFCs = true;
+        await setCachedJsonData(
+          `repo_has_rfcs:${repo.owner}:${repo.name}`,
+          hasRFCs,
+          600,
+        );
+        return repo;
+      }
+      // Otherwise check for known RFC directories
+      const [variantFull, variantShort] = await Promise.allSettled([
+        octokit.rest.repos.getContent({
+          owner: repo.owner,
+          repo: repo.name,
+          path: "requests-for-comments",
+        }),
+        octokit.rest.repos.getContent({
+          owner: repo.owner,
+          repo: repo.name,
+          path: "RFCs",
+        }),
+      ]);
+      hasRFCs =
+        variantFull.status === "fulfilled" ||
+        variantShort.status === "fulfilled";
+      await setCachedJsonData(
+        `repo_has_rfcs:${repo.owner}:${repo.name}`,
+        hasRFCs,
+        600,
+      );
+      return hasRFCs ? repo : null;
+    });
+
+    const results = await Promise.all(checks);
+    const reposWithRFCs = results.filter(
+      (repo): repo is RepoOption => repo !== null,
+    );
+    await setCachedJsonData(
+      `repos_with_rfcs:${accessToken}`,
+      reposWithRFCs,
+      600,
+    );
+    return reposWithRFCs;
+  } catch (error) {
+    captureServerException(error as Error, undefined, {
+      function: "listReposWithRFCs",
+      context: "fetching_repos_with_rfcs",
+    });
+    throw error;
+  }
 }
 
 export async function listRFCs(
-    accessToken: string,
-    owner: string,
-    repo: string,
-    currentUserLogin: string
+  accessToken: string,
+  owner: string,
+  repo: string,
+  currentUserLogin: string,
 ): Promise<RFC[]> {
-    try {
-        const octokit = await getOctokit(accessToken)
+  try {
+    const octokit = await getOctokit(accessToken);
 
-        // GraphQL query to fetch all PRs with files and comment counts in one request
-        const query = `
+    // GraphQL query to fetch all PRs with files and comment counts in one request
+    const query = `
       query($owner: String!, $repo: String!) {
         repository(owner: $owner, name: $repo) {
           pullRequests(first: 100, orderBy: {field: CREATED_AT, direction: DESC}, states: [OPEN, CLOSED, MERGED]) {
@@ -181,594 +208,981 @@ export async function listRFCs(
           }
         }
       }
-    `
+    `;
 
-        // Check cache first
-        const cacheKey = `rfcs:${owner}:${repo}:graphql`
-        let pulls: any[] = []
-        const cachedPulls = await getCachedJsonData<any[]>(cacheKey)
+    // Check cache first
+    const cacheKey = `rfcs:${owner}:${repo}:graphql`;
+    let pulls: any[] = [];
+    const cachedPulls = await getCachedJsonData<any[]>(cacheKey);
 
-        if (cachedPulls) {
-            pulls = cachedPulls
-        } else {
-            const response: any = await octokit.graphql(query, {
-                owner,
-                repo,
-            })
-            pulls = response.repository.pullRequests.nodes
-            await setCachedJsonData(cacheKey, pulls, 300) // Cache for 5 minutes
-        }
-
-        // Filter PRs that have .md files (RFC content can be in any directory)
-        const rfcPulls = pulls.filter((pr: any) =>
-            pr.files.nodes.some((file: any) => file.path.endsWith(".md"))
-        )
-
-        // Use cached inline comment counts where available, null for misses.
-        // Missing counts are resolved separately via fetchInlineCommentCounts().
-        const commentCountCacheKeys = rfcPulls.map(
-            (pr: any) => `rfc:${owner}:${repo}:${pr.number}:review_comments_count`
-        )
-        const inlineCountByIndex = await getCachedJsonDataBatch<number>(commentCountCacheKeys)
-
-        const rfcPullsWithCounts = rfcPulls.map((pr: any, i: number) => {
-            const reviewRequested = pr.reviewRequests?.nodes?.some(
-                (req: any) => req.requestedReviewer?.login === currentUserLogin
-            )
-
-            return {
-                number: pr.number,
-                title: pr.title,
-                state: pr.state.toLowerCase(),
-                merged_at: pr.mergedAt,
-                created_at: pr.createdAt,
-                updated_at: pr.updatedAt,
-                html_url: pr.url,
-                user: pr.author
-                    ? {
-                          login: pr.author.login,
-                          avatar_url: pr.author.avatarUrl,
-                      }
-                    : null,
-                _inlineCommentCount: inlineCountByIndex[i],
-                _regularCommentCount: pr.comments.totalCount,
-                _reviewRequested: reviewRequested || false,
-            }
-        })
-
-        const filteredPulls = rfcPullsWithCounts
-
-        // Sort: review requested first within each status, then open PRs, then by created date
-        const sortedPulls = filteredPulls.sort((a: any, b: any) => {
-            // First, sort by status (open > merged > closed)
-            if (a.state === "open" && b.state !== "open") return -1
-            if (a.state !== "open" && b.state === "open") return 1
-
-            // Within same status, review requested comes first
-            if (a._reviewRequested && !b._reviewRequested) return -1
-            if (!a._reviewRequested && b._reviewRequested) return 1
-
-            // Finally, sort by created date
-            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        })
-
-        return sortedPulls.map((pr: any) => ({
-            number: pr.number,
-            title: cleanTitle(pr.title),
-            author: pr.user?.login || "unknown",
-            authorAvatar: pr.user?.avatar_url || "",
-            status: pr.merged_at ? "merged" : (pr.state as "open" | "closed"),
-            createdAt: pr.created_at,
-            updatedAt: pr.updated_at,
-            commentCount:
-                pr._inlineCommentCount != null
-                    ? pr._inlineCommentCount + pr._regularCommentCount
-                    : null,
-            inlineCommentCount: pr._inlineCommentCount,
-            regularCommentCount: pr._regularCommentCount,
-            url: pr.html_url,
-            owner,
-            repo,
-            reviewRequested: pr._reviewRequested,
-        }))
-    } catch (error) {
-        captureServerException(error as Error, undefined, {
-            function: "listRFCs",
-            owner,
-            repo,
-            context: "fetching_rfcs",
-        })
-        throw error
+    if (cachedPulls) {
+      pulls = cachedPulls;
+    } else {
+      const response: any = await octokit.graphql(query, {
+        owner,
+        repo,
+      });
+      pulls = response.repository.pullRequests.nodes;
+      await setCachedJsonData(cacheKey, pulls, 300); // Cache for 5 minutes
     }
+
+    // Filter PRs that have .md files (RFC content can be in any directory)
+    const rfcPulls = pulls.filter((pr: any) =>
+      pr.files.nodes.some((file: any) => file.path.endsWith(".md")),
+    );
+
+    // Use cached inline comment counts where available, null for misses.
+    // Missing counts are resolved separately via fetchInlineCommentCounts().
+    const commentCountCacheKeys = rfcPulls.map(
+      (pr: any) => `rfc:${owner}:${repo}:${pr.number}:review_comments_count`,
+    );
+    const inlineCountByIndex = await getCachedJsonDataBatch<number>(
+      commentCountCacheKeys,
+    );
+
+    const rfcPullsWithCounts = rfcPulls.map((pr: any, i: number) => {
+      const reviewRequested = pr.reviewRequests?.nodes?.some(
+        (req: any) => req.requestedReviewer?.login === currentUserLogin,
+      );
+
+      return {
+        number: pr.number,
+        title: pr.title,
+        state: pr.state.toLowerCase(),
+        merged_at: pr.mergedAt,
+        created_at: pr.createdAt,
+        updated_at: pr.updatedAt,
+        html_url: pr.url,
+        user: pr.author
+          ? {
+              login: pr.author.login,
+              avatar_url: pr.author.avatarUrl,
+            }
+          : null,
+        _inlineCommentCount: inlineCountByIndex[i],
+        _regularCommentCount: pr.comments.totalCount,
+        _reviewRequested: reviewRequested || false,
+      };
+    });
+
+    const filteredPulls = rfcPullsWithCounts;
+
+    // Sort: review requested first within each status, then open PRs, then by created date
+    const sortedPulls = filteredPulls.sort((a: any, b: any) => {
+      // First, sort by status (open > merged > closed)
+      if (a.state === "open" && b.state !== "open") return -1;
+      if (a.state !== "open" && b.state === "open") return 1;
+
+      // Within same status, review requested comes first
+      if (a._reviewRequested && !b._reviewRequested) return -1;
+      if (!a._reviewRequested && b._reviewRequested) return 1;
+
+      // Finally, sort by created date
+      return (
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+    });
+
+    return sortedPulls.map((pr: any) => ({
+      number: pr.number,
+      title: cleanTitle(pr.title),
+      author: pr.user?.login || "unknown",
+      authorAvatar: pr.user?.avatar_url || "",
+      status: pr.merged_at ? "merged" : (pr.state as "open" | "closed"),
+      createdAt: pr.created_at,
+      updatedAt: pr.updated_at,
+      commentCount:
+        pr._inlineCommentCount != null
+          ? pr._inlineCommentCount + pr._regularCommentCount
+          : null,
+      inlineCommentCount: pr._inlineCommentCount,
+      regularCommentCount: pr._regularCommentCount,
+      url: pr.html_url,
+      owner,
+      repo,
+      reviewRequested: pr._reviewRequested,
+    }));
+  } catch (error) {
+    captureServerException(error as Error, undefined, {
+      function: "listRFCs",
+      owner,
+      repo,
+      context: "fetching_rfcs",
+    });
+    throw error;
+  }
 }
 
 export async function listAllRFCs(
-    accessToken: string,
-    currentUserLogin: string
+  accessToken: string,
+  currentUserLogin: string,
 ): Promise<RFC[]> {
-    try {
-        // Get all repos with RFC directories
-        const repos = await listReposWithRFCs(accessToken)
+  try {
+    // Get all repos with RFC directories
+    const repos = await listReposWithRFCs(accessToken);
 
-        // Fetch RFCs from all repos in parallel
-        const allRFCsArrays = await Promise.all(
-            repos.map((repo) => listRFCs(accessToken, repo.owner, repo.name, currentUserLogin))
-        )
+    // Fetch RFCs from all repos in parallel
+    const allRFCsArrays = await Promise.all(
+      repos.map((repo) =>
+        listRFCs(accessToken, repo.owner, repo.name, currentUserLogin),
+      ),
+    );
 
-        // Flatten the arrays and sort: review requested first within each status, then open PRs, then by created date
-        const allRFCs = allRFCsArrays.flat()
+    // Flatten the arrays and sort: review requested first within each status, then open PRs, then by created date
+    const allRFCs = allRFCsArrays.flat();
 
-        return allRFCs.sort((a, b) => {
-            // First, sort by status (open > merged > closed)
-            if (a.status === "open" && b.status !== "open") return -1
-            if (a.status !== "open" && b.status === "open") return 1
+    return allRFCs.sort((a, b) => {
+      // First, sort by status (open > merged > closed)
+      if (a.status === "open" && b.status !== "open") return -1;
+      if (a.status !== "open" && b.status === "open") return 1;
 
-            // Within same status, review requested comes first
-            if (a.reviewRequested && !b.reviewRequested) return -1
-            if (!a.reviewRequested && b.reviewRequested) return 1
+      // Within same status, review requested comes first
+      if (a.reviewRequested && !b.reviewRequested) return -1;
+      if (!a.reviewRequested && b.reviewRequested) return 1;
 
-            // Finally, sort by created date
-            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        })
-    } catch (error) {
-        captureServerException(error as Error, undefined, {
-            function: "listAllRFCs",
-            context: "fetching_all_rfcs",
-        })
-        throw error
-    }
+      // Finally, sort by created date
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+  } catch (error) {
+    captureServerException(error as Error, undefined, {
+      function: "listAllRFCs",
+      context: "fetching_all_rfcs",
+    });
+    throw error;
+  }
 }
 
 /** Fetch inline (review) comment counts for specific PRs, caching results. */
 export async function fetchInlineCommentCounts(
-    accessToken: string,
-    owner: string,
-    repo: string,
-    prNumbers: number[]
+  accessToken: string,
+  owner: string,
+  repo: string,
+  prNumbers: number[],
 ): Promise<Record<number, number>> {
-    if (prNumbers.length === 0) return {}
+  if (prNumbers.length === 0) return {};
 
-    try {
-        const octokit = await getOctokit(accessToken)
+  try {
+    const octokit = await getOctokit(accessToken);
 
-        const cacheKeys = prNumbers.map(
-            (n) => `rfc:${owner}:${repo}:${n}:review_comments_count`
-        )
-        const cached = await getCachedJsonDataBatch<number>(cacheKeys)
+    const cacheKeys = prNumbers.map(
+      (n) => `rfc:${owner}:${repo}:${n}:review_comments_count`,
+    );
+    const cached = await getCachedJsonDataBatch<number>(cacheKeys);
 
-        const result: Record<number, number> = {}
-        const toFetch: number[] = []
+    const result: Record<number, number> = {};
+    const toFetch: number[] = [];
 
-        for (let i = 0; i < prNumbers.length; i++) {
-            if (cached[i] != null) {
-                result[prNumbers[i]] = cached[i] as number
-            } else {
-                toFetch.push(prNumbers[i])
-            }
-        }
-
-        if (toFetch.length > 0) {
-            const fetched = await Promise.all(
-                toFetch.map(async (prNumber) => {
-                    const response = await octokit.rest.pulls.listReviewComments({
-                        owner,
-                        repo,
-                        pull_number: prNumber,
-                        per_page: 1,
-                    })
-                    let count = response.data.length
-                    const linkHeader = response.headers.link
-                    if (linkHeader) {
-                        const lastPageMatch = linkHeader.match(/page=(\d+)>; rel="last"/)
-                        if (lastPageMatch) {
-                            count = Number.parseInt(lastPageMatch[1], 10)
-                        }
-                    }
-                    return { prNumber, count }
-                })
-            )
-
-            await setCachedJsonDataBatch(
-                fetched.map(({ prNumber, count }) => ({
-                    key: `rfc:${owner}:${repo}:${prNumber}:review_comments_count`,
-                    value: count,
-                })),
-                300
-            )
-
-            for (const { prNumber, count } of fetched) {
-                result[prNumber] = count
-            }
-        }
-
-        return result
-    } catch (error) {
-        captureServerException(error as Error, undefined, {
-            function: "fetchInlineCommentCounts",
-            owner,
-            repo,
-            prNumbers,
-            context: "fetching_inline_comment_counts",
-        })
-        throw error
+    for (let i = 0; i < prNumbers.length; i++) {
+      if (cached[i] != null) {
+        result[prNumbers[i]] = cached[i] as number;
+      } else {
+        toFetch.push(prNumbers[i]);
+      }
     }
-}
 
-export async function getRFCDetail(
-    accessToken: string,
-    owner: string,
-    repo: string,
-    prNumber: number,
-    currentUserLogin: string
-): Promise<RFCDetail> {
-    try {
-        const t0 = performance.now()
-        const octokit = await getOctokit(accessToken)
-
-        // Check cache for RFC content (PR details + markdown + reviewers)
-        const contentCacheKey = `rfc:${owner}:${repo}:${prNumber}:content`
-        interface CachedRFCContent {
-            pr: any
-            files: any[]
-            markdownContent: string
-            markdownFilePath: string | null
-            headRef: string
-            markdownEtag?: string
-            reviewers: RFCDetail["reviewers"]
-            reviewRequested: boolean
-        }
-        const tContentCache = performance.now()
-        const cachedContent = await getCachedJsonData<CachedRFCContent>(contentCacheKey)
-        console.log(`[getRFCDetail] content cache lookup took ${(performance.now() - tContentCache).toFixed(0)}ms (${cachedContent ? "HIT" : "MISS"})`)
-
-        let pr: any
-        let files: any[] = []
-        let markdownContent = ""
-        let markdownFilePath: string | null = null
-        let reviewers: RFCDetail["reviewers"] = []
-        let reviewRequested = false
-        let cacheValid = false
-
-        // On cache hit: validate markdown freshness with conditional request (304 = free, no rate limit)
-        if (
-            cachedContent &&
-            cachedContent.reviewers !== undefined &&
-            cachedContent.markdownFilePath &&
-            cachedContent.markdownEtag
-        ) {
-            try {
-                const conditionalResp = await octokit.request(
-                    "GET /repos/{owner}/{repo}/contents/{path}",
-                    {
-                        owner,
-                        repo,
-                        path: cachedContent.markdownFilePath,
-                        ref: cachedContent.pr.head.ref,
-                        headers: {
-                            "If-None-Match": cachedContent.markdownEtag,
-                        } as Record<string, string>,
-                    }
-                )
-                if ((conditionalResp.status as number) === 304) {
-                    cacheValid = true
-                }
-            } catch (err: unknown) {
-                const reqErr = err as { status?: number }
-                if (reqErr.status === 304) {
-                    cacheValid = true
-                }
-            }
-            if (cacheValid) {
-                pr = cachedContent.pr
-                files = cachedContent.files
-                markdownContent = cachedContent.markdownContent
-                markdownFilePath = cachedContent.markdownFilePath
-                reviewers = cachedContent.reviewers
-                reviewRequested = cachedContent.reviewRequested
-            }
-        }
-
-        if (!cacheValid) {
-            const tFetch = performance.now()
-
-            // Fetch PR details, files, reviewers, and reviews in parallel
-            const [prResponse, filesResponse, requestedReviewersRes, reviewsRes] = await Promise.all([
-                octokit.rest.pulls.get({
-                    owner,
-                    repo,
-                    pull_number: prNumber,
-                }),
-                octokit.rest.pulls.listFiles({
-                    owner,
-                    repo,
-                    pull_number: prNumber,
-                }),
-                octokit.rest.pulls.listRequestedReviewers({
-                    owner,
-                    repo,
-                    pull_number: prNumber,
-                }),
-                octokit.rest.pulls.listReviews({
-                    owner,
-                    repo,
-                    pull_number: prNumber,
-                }),
-            ])
-
-            pr = prResponse.data
-            files = filesResponse.data
-
-            const markdownFile = files.find((file) => file.filename.endsWith(".md"))
-
-            markdownContent = pr.body || ""
-            markdownFilePath = markdownFile?.filename || null
-
-            let markdownEtag: string | undefined
-            if (markdownFile) {
-                // Fetch the actual content of the markdown file (use request to capture ETag)
-                try {
-                    const tMd = performance.now()
-                    const fileResp = await octokit.request(
-                        "GET /repos/{owner}/{repo}/contents/{path}",
-                        {
-                            owner,
-                            repo,
-                            path: markdownFile.filename,
-                            ref: pr.head.ref,
-                        }
-                    )
-                    console.log(`[getRFCDetail] repos.getContent() for markdown took ${(performance.now() - tMd).toFixed(0)}ms`)
-
-                    const fileContent = fileResp.data as { content?: string }
-                    const rawEtag = fileResp.headers?.["etag"] as string | undefined
-                    if (rawEtag) {
-                        markdownEtag = rawEtag
-                    }
-                    if (fileContent && "content" in fileContent && fileContent.content) {
-                        markdownContent = Buffer.from(fileContent.content, "base64").toString("utf-8")
-                    }
-                } catch (error) {
-                    console.error("Error fetching markdown file:", error)
-                    captureServerException(error as Error, undefined, {
-                        function: "getRFCDetail",
-                        subfunction: "fetch_markdown_content",
-                        owner,
-                        repo,
-                        prNumber,
-                        markdownFile: markdownFile.filename,
-                    })
-                }
-            }
-
-            // Build reviewers list
-            const reviewersAlreadyAccountedFor: Set<string> = new Set()
-            reviewers = []
-            for (const review of reviewsRes.data) {
-                if (review.user && !reviewersAlreadyAccountedFor.has(review.user.login)) {
-                    reviewers.push({
-                        login: review.user.login,
-                        avatar: review.user.avatar_url,
-                        yetToReview: false,
-                    })
-                    reviewersAlreadyAccountedFor.add(review.user.login)
-                }
-            }
-            for (const requestedReviewer of requestedReviewersRes.data.users) {
-                if (!reviewersAlreadyAccountedFor.has(requestedReviewer.login)) {
-                    reviewers.push({
-                        login: requestedReviewer.login,
-                        avatar: requestedReviewer.avatar_url,
-                        yetToReview: true,
-                    })
-                }
-            }
-
-            reviewRequested = requestedReviewersRes.data.users.some((user) => user.login === currentUserLogin)
-
-            console.log(`[getRFCDetail] content fetch (all GH calls) took ${(performance.now() - tFetch).toFixed(0)}ms`)
-            // Cache content + reviewers + ETag for conditional validation
-            await setCachedJsonData(
-                contentCacheKey,
-                {
-                    pr,
-                    files,
-                    markdownContent,
-                    markdownFilePath,
-                    headRef: pr.head.ref,
-                    reviewers,
-                    reviewRequested,
-                    markdownEtag,
-                },
-                300
-            )
-        }
-
-        console.log(`[getRFCDetail] total took ${(performance.now() - t0).toFixed(0)}ms`)
-
-        return {
-            number: pr.number,
-            title: cleanTitle(pr.title),
-            author: pr.user?.login || "unknown",
-            authorAvatar: pr.user?.avatar_url || "",
-            status: pr.merged_at ? "merged" : (pr.state as "open" | "closed"),
-            createdAt: pr.created_at,
-            updatedAt: pr.updated_at,
-            commentCount: pr.comments + pr.review_comments,
-            inlineCommentCount: pr.review_comments,
-            regularCommentCount: pr.comments,
-            url: pr.html_url,
-            owner,
-            repo,
-            body: pr.body || "",
-            markdownContent,
-            markdownFilePath,
-            headRef: pr.head.ref,
-            reviewers,
-            reviewRequested: reviewRequested || false,
-            comments: [], // Comments are loaded progressively by the client
-        }
-    } catch (error) {
-        captureServerException(error as Error, undefined, {
-            function: "getRFCDetail",
-            owner,
-            repo,
-            prNumber,
-            context: "fetching_rfc_detail",
-        })
-        throw error
-    }
-}
-
-export async function postComment(
-    accessToken: string,
-    owner: string,
-    repo: string,
-    prNumber: number,
-    body: string,
-    path?: string,
-    line?: number,
-    replyToCommentId?: number
-): Promise<void> {
-    try {
-        const octokit = await getOctokit(accessToken)
-
-        if (replyToCommentId) {
-            await octokit.rest.pulls.createReplyForReviewComment({
-                owner,
-                repo,
-                pull_number: prNumber,
-                comment_id: replyToCommentId,
-                body,
-            })
-        } else if (path && line) {
-            const { data: pr } = await octokit.rest.pulls.get({
-                owner,
-                repo,
-                pull_number: prNumber,
-            })
-
-            await octokit.rest.pulls.createReviewComment({
-                owner,
-                repo,
-                pull_number: prNumber,
-                body,
-                commit_id: pr.head.sha,
-                path,
-                line,
-            })
-        } else {
-            await octokit.rest.issues.createComment({
-                owner,
-                repo,
-                issue_number: prNumber,
-                body,
-            })
-        }
-    } catch (error) {
-        captureServerException(error as Error, undefined, {
-            function: "postComment",
-            owner,
-            repo,
-            prNumber,
-            path,
-            line,
-            replyToCommentId,
-            context: "posting_comment",
-        })
-        throw error
-    }
-}
-
-interface CurrentUser {
-    login: string
-    avatarUrl: string
-}
-
-export async function getCurrentUser(accessToken: string): Promise<CurrentUser> {
-    try {
-        const t0 = performance.now()
-        const userCacheKey = `user_info:${accessToken}`
-        const cached = await getCachedJsonData<CurrentUser>(userCacheKey)
-
-        if (cached) {
-            console.log(`[getCurrentUser] cache HIT, took ${(performance.now() - t0).toFixed(0)}ms`)
-            return cached
-        }
-
-        // Also check the legacy login-only cache key to avoid an extra GH call during migration
-        const legacyCacheKey = `user:${accessToken}`
-        const cachedLogin = await getCachedJsonData<string>(legacyCacheKey)
-
-        const octokit = await getOctokit(accessToken)
-        const { data: user } = await octokit.rest.users.getAuthenticated()
-        const currentUser: CurrentUser = { login: user.login, avatarUrl: user.avatar_url }
-        await setCachedJsonData(userCacheKey, currentUser, 3600) // Cache for 1 hour
-        // Also update legacy key so getCurrentUserLogin callers benefit
-        if (!cachedLogin) {
-            await setCachedJsonData(legacyCacheKey, user.login, 3600)
-        }
-        console.log(`[getCurrentUser] cache MISS, fetched from GH, took ${(performance.now() - t0).toFixed(0)}ms`)
-        return currentUser
-    } catch (error) {
-        captureServerException(error as Error, undefined, {
-            function: "getCurrentUser",
-            context: "fetching_current_user",
-        })
-        throw error
-    }
-}
-
-export async function getCurrentUserLogin(accessToken: string): Promise<string> {
-    try {
-        const t0 = performance.now()
-        // Check the login-only cache key first (fast path)
-        const legacyCacheKey = `user:${accessToken}`
-        const cachedLogin = await getCachedJsonData<string>(legacyCacheKey)
-
-        if (cachedLogin) {
-            console.log(`[getCurrentUserLogin] cache HIT, took ${(performance.now() - t0).toFixed(0)}ms`)
-            return cachedLogin
-        }
-
-        // Fall through to getCurrentUser which caches both
-        const user = await getCurrentUser(accessToken)
-        console.log(`[getCurrentUserLogin] resolved via getCurrentUser, took ${(performance.now() - t0).toFixed(0)}ms`)
-        return user.login
-    } catch (error) {
-        captureServerException(error as Error, undefined, {
-            function: "getCurrentUserLogin",
-            context: "fetching_current_user",
-        })
-        throw error
-    }
-}
-
-export async function getRFCTitle(
-    accessToken: string,
-    owner: string,
-    repo: string,
-    prNumber: number,
-): Promise<string | null> {
-    try {
-        const t0 = performance.now()
-        // Try the same cache key that getRFCDetail uses
-        const contentCacheKey = `rfc:${owner}:${repo}:${prNumber}:content`
-        const cached = await getCachedJsonData<{ pr: { title: string } }>(contentCacheKey)
-        if (cached) {
-            console.log(`[getRFCTitle] cache HIT, took ${(performance.now() - t0).toFixed(0)}ms`)
-            return cached.pr.title
-        }
-
-        // Cache miss — fetch just the PR title
-        const octokit = await getOctokit(accessToken)
-        const { data: pr } = await octokit.rest.pulls.get({
+    if (toFetch.length > 0) {
+      const fetched = await Promise.all(
+        toFetch.map(async (prNumber) => {
+          const response = await octokit.rest.pulls.listReviewComments({
             owner,
             repo,
             pull_number: prNumber,
-        })
-        console.log(`[getRFCTitle] cache MISS, fetched from GH, took ${(performance.now() - t0).toFixed(0)}ms`)
-        return pr.title
-    } catch {
-        return null
+            per_page: 1,
+          });
+          let count = response.data.length;
+          const linkHeader = response.headers.link;
+          if (linkHeader) {
+            const lastPageMatch = linkHeader.match(/page=(\d+)>; rel="last"/);
+            if (lastPageMatch) {
+              count = Number.parseInt(lastPageMatch[1], 10);
+            }
+          }
+          return { prNumber, count };
+        }),
+      );
+
+      await setCachedJsonDataBatch(
+        fetched.map(({ prNumber, count }) => ({
+          key: `rfc:${owner}:${repo}:${prNumber}:review_comments_count`,
+          value: count,
+        })),
+        300,
+      );
+
+      for (const { prNumber, count } of fetched) {
+        result[prNumber] = count;
+      }
     }
+
+    return result;
+  } catch (error) {
+    captureServerException(error as Error, undefined, {
+      function: "fetchInlineCommentCounts",
+      owner,
+      repo,
+      prNumbers,
+      context: "fetching_inline_comment_counts",
+    });
+    throw error;
+  }
+}
+
+export async function getRFCDetail(
+  accessToken: string,
+  owner: string,
+  repo: string,
+  prNumber: number,
+  currentUserLogin: string,
+): Promise<RFCDetail> {
+  try {
+    const t0 = performance.now();
+    const octokit = await getOctokit(accessToken);
+
+    // Check cache for RFC content (PR details + markdown + reviewers)
+    const contentCacheKey = `rfc:${owner}:${repo}:${prNumber}:content`;
+    interface CachedRFCContent {
+      pr: any;
+      files: any[];
+      markdownContent: string;
+      markdownFilePath: string | null;
+      headRef: string;
+      markdownEtag?: string;
+      reviewers: RFCDetail["reviewers"];
+      reviewRequested: boolean;
+    }
+    const tContentCache = performance.now();
+    const cachedContent =
+      await getCachedJsonData<CachedRFCContent>(contentCacheKey);
+    console.log(
+      `[getRFCDetail] content cache lookup took ${(performance.now() - tContentCache).toFixed(0)}ms (${cachedContent ? "HIT" : "MISS"})`,
+    );
+
+    let pr: any;
+    let files: any[] = [];
+    let markdownContent = "";
+    let markdownFilePath: string | null = null;
+    let reviewers: RFCDetail["reviewers"] = [];
+    let reviewRequested = false;
+    let cacheValid = false;
+
+    // On cache hit: validate markdown freshness with conditional request (304 = free, no rate limit)
+    if (
+      cachedContent &&
+      cachedContent.reviewers !== undefined &&
+      cachedContent.markdownFilePath &&
+      cachedContent.markdownEtag
+    ) {
+      try {
+        const conditionalResp = await octokit.request(
+          "GET /repos/{owner}/{repo}/contents/{path}",
+          {
+            owner,
+            repo,
+            path: cachedContent.markdownFilePath,
+            ref: cachedContent.pr.head.ref,
+            headers: {
+              "If-None-Match": cachedContent.markdownEtag,
+            } as Record<string, string>,
+          },
+        );
+        if ((conditionalResp.status as number) === 304) {
+          cacheValid = true;
+        }
+      } catch (err: unknown) {
+        const reqErr = err as { status?: number };
+        if (reqErr.status === 304) {
+          cacheValid = true;
+        }
+      }
+      if (cacheValid) {
+        pr = cachedContent.pr;
+        files = cachedContent.files;
+        markdownContent = cachedContent.markdownContent;
+        markdownFilePath = cachedContent.markdownFilePath;
+        reviewers = cachedContent.reviewers;
+        reviewRequested = cachedContent.reviewRequested;
+      }
+    }
+
+    if (!cacheValid) {
+      const tFetch = performance.now();
+
+      // Fetch PR details, files, reviewers, and reviews in parallel
+      const [prResponse, filesResponse, requestedReviewersRes, reviewsRes] =
+        await Promise.all([
+          octokit.rest.pulls.get({
+            owner,
+            repo,
+            pull_number: prNumber,
+          }),
+          octokit.rest.pulls.listFiles({
+            owner,
+            repo,
+            pull_number: prNumber,
+          }),
+          octokit.rest.pulls.listRequestedReviewers({
+            owner,
+            repo,
+            pull_number: prNumber,
+          }),
+          octokit.rest.pulls.listReviews({
+            owner,
+            repo,
+            pull_number: prNumber,
+          }),
+        ]);
+
+      pr = prResponse.data;
+      files = filesResponse.data;
+
+      const markdownFile = files.find((file) => file.filename.endsWith(".md"));
+
+      markdownContent = pr.body || "";
+      markdownFilePath = markdownFile?.filename || null;
+
+      let markdownEtag: string | undefined;
+      if (markdownFile) {
+        // Fetch the actual content of the markdown file (use request to capture ETag)
+        try {
+          const tMd = performance.now();
+          const fileResp = await octokit.request(
+            "GET /repos/{owner}/{repo}/contents/{path}",
+            {
+              owner,
+              repo,
+              path: markdownFile.filename,
+              ref: pr.head.ref,
+            },
+          );
+          console.log(
+            `[getRFCDetail] repos.getContent() for markdown took ${(performance.now() - tMd).toFixed(0)}ms`,
+          );
+
+          const fileContent = fileResp.data as { content?: string };
+          const rawEtag = fileResp.headers?.["etag"] as string | undefined;
+          if (rawEtag) {
+            markdownEtag = rawEtag;
+          }
+          if (fileContent && "content" in fileContent && fileContent.content) {
+            markdownContent = Buffer.from(
+              fileContent.content,
+              "base64",
+            ).toString("utf-8");
+          }
+        } catch (error) {
+          console.error("Error fetching markdown file:", error);
+          captureServerException(error as Error, undefined, {
+            function: "getRFCDetail",
+            subfunction: "fetch_markdown_content",
+            owner,
+            repo,
+            prNumber,
+            markdownFile: markdownFile.filename,
+          });
+        }
+      }
+
+      // Build reviewers list
+      const reviewersAlreadyAccountedFor: Set<string> = new Set();
+      reviewers = [];
+      for (const review of reviewsRes.data) {
+        if (
+          review.user &&
+          !reviewersAlreadyAccountedFor.has(review.user.login)
+        ) {
+          reviewers.push({
+            login: review.user.login,
+            avatar: review.user.avatar_url,
+            yetToReview: false,
+          });
+          reviewersAlreadyAccountedFor.add(review.user.login);
+        }
+      }
+      for (const requestedReviewer of requestedReviewersRes.data.users) {
+        if (!reviewersAlreadyAccountedFor.has(requestedReviewer.login)) {
+          reviewers.push({
+            login: requestedReviewer.login,
+            avatar: requestedReviewer.avatar_url,
+            yetToReview: true,
+          });
+        }
+      }
+
+      reviewRequested = requestedReviewersRes.data.users.some(
+        (user) => user.login === currentUserLogin,
+      );
+
+      console.log(
+        `[getRFCDetail] content fetch (all GH calls) took ${(performance.now() - tFetch).toFixed(0)}ms`,
+      );
+      // Cache content + reviewers + ETag for conditional validation
+      await setCachedJsonData(
+        contentCacheKey,
+        {
+          pr,
+          files,
+          markdownContent,
+          markdownFilePath,
+          headRef: pr.head.ref,
+          reviewers,
+          reviewRequested,
+          markdownEtag,
+        },
+        300,
+      );
+    }
+
+    console.log(
+      `[getRFCDetail] total took ${(performance.now() - t0).toFixed(0)}ms`,
+    );
+
+    return {
+      number: pr.number,
+      title: cleanTitle(pr.title),
+      author: pr.user?.login || "unknown",
+      authorAvatar: pr.user?.avatar_url || "",
+      status: pr.merged_at ? "merged" : (pr.state as "open" | "closed"),
+      createdAt: pr.created_at,
+      updatedAt: pr.updated_at,
+      commentCount: pr.comments + pr.review_comments,
+      inlineCommentCount: pr.review_comments,
+      regularCommentCount: pr.comments,
+      url: pr.html_url,
+      owner,
+      repo,
+      body: pr.body || "",
+      markdownContent,
+      markdownFilePath,
+      headRef: pr.head.ref,
+      reviewers,
+      reviewRequested: reviewRequested || false,
+      comments: [], // Comments are loaded progressively by the client
+    };
+  } catch (error) {
+    captureServerException(error as Error, undefined, {
+      function: "getRFCDetail",
+      owner,
+      repo,
+      prNumber,
+      context: "fetching_rfc_detail",
+    });
+    throw error;
+  }
+}
+
+export async function postComment(
+  accessToken: string,
+  owner: string,
+  repo: string,
+  prNumber: number,
+  body: string,
+  path?: string,
+  line?: number,
+  replyToCommentId?: number,
+): Promise<void> {
+  try {
+    const octokit = await getOctokit(accessToken);
+
+    if (replyToCommentId) {
+      await octokit.rest.pulls.createReplyForReviewComment({
+        owner,
+        repo,
+        pull_number: prNumber,
+        comment_id: replyToCommentId,
+        body,
+      });
+    } else if (path && line) {
+      const { data: pr } = await octokit.rest.pulls.get({
+        owner,
+        repo,
+        pull_number: prNumber,
+      });
+
+      await octokit.rest.pulls.createReviewComment({
+        owner,
+        repo,
+        pull_number: prNumber,
+        body,
+        commit_id: pr.head.sha,
+        path,
+        line,
+      });
+    } else {
+      await octokit.rest.issues.createComment({
+        owner,
+        repo,
+        issue_number: prNumber,
+        body,
+      });
+    }
+  } catch (error) {
+    captureServerException(error as Error, undefined, {
+      function: "postComment",
+      owner,
+      repo,
+      prNumber,
+      path,
+      line,
+      replyToCommentId,
+      context: "posting_comment",
+    });
+    throw error;
+  }
+}
+
+interface CurrentUser {
+  login: string;
+  avatarUrl: string;
+}
+
+export async function getCurrentUser(
+  accessToken: string,
+): Promise<CurrentUser> {
+  try {
+    const t0 = performance.now();
+    const userCacheKey = `user_info:${accessToken}`;
+    const cached = await getCachedJsonData<CurrentUser>(userCacheKey);
+
+    if (cached) {
+      console.log(
+        `[getCurrentUser] cache HIT, took ${(performance.now() - t0).toFixed(0)}ms`,
+      );
+      return cached;
+    }
+
+    // Also check the legacy login-only cache key to avoid an extra GH call during migration
+    const legacyCacheKey = `user:${accessToken}`;
+    const cachedLogin = await getCachedJsonData<string>(legacyCacheKey);
+
+    const octokit = await getOctokit(accessToken);
+    const { data: user } = await octokit.rest.users.getAuthenticated();
+    const currentUser: CurrentUser = {
+      login: user.login,
+      avatarUrl: user.avatar_url,
+    };
+    await setCachedJsonData(userCacheKey, currentUser, 3600); // Cache for 1 hour
+    // Also update legacy key so getCurrentUserLogin callers benefit
+    if (!cachedLogin) {
+      await setCachedJsonData(legacyCacheKey, user.login, 3600);
+    }
+    console.log(
+      `[getCurrentUser] cache MISS, fetched from GH, took ${(performance.now() - t0).toFixed(0)}ms`,
+    );
+    return currentUser;
+  } catch (error) {
+    captureServerException(error as Error, undefined, {
+      function: "getCurrentUser",
+      context: "fetching_current_user",
+    });
+    throw error;
+  }
+}
+
+export async function getCurrentUserLogin(
+  accessToken: string,
+): Promise<string> {
+  try {
+    const t0 = performance.now();
+    // Check the login-only cache key first (fast path)
+    const legacyCacheKey = `user:${accessToken}`;
+    const cachedLogin = await getCachedJsonData<string>(legacyCacheKey);
+
+    if (cachedLogin) {
+      console.log(
+        `[getCurrentUserLogin] cache HIT, took ${(performance.now() - t0).toFixed(0)}ms`,
+      );
+      return cachedLogin;
+    }
+
+    // Fall through to getCurrentUser which caches both
+    const user = await getCurrentUser(accessToken);
+    console.log(
+      `[getCurrentUserLogin] resolved via getCurrentUser, took ${(performance.now() - t0).toFixed(0)}ms`,
+    );
+    return user.login;
+  } catch (error) {
+    captureServerException(error as Error, undefined, {
+      function: "getCurrentUserLogin",
+      context: "fetching_current_user",
+    });
+    throw error;
+  }
+}
+
+export async function getRFCTitle(
+  accessToken: string,
+  owner: string,
+  repo: string,
+  prNumber: number,
+): Promise<string | null> {
+  try {
+    const t0 = performance.now();
+    // Try the same cache key that getRFCDetail uses
+    const contentCacheKey = `rfc:${owner}:${repo}:${prNumber}:content`;
+    const cached = await getCachedJsonData<{ pr: { title: string } }>(
+      contentCacheKey,
+    );
+    if (cached) {
+      console.log(
+        `[getRFCTitle] cache HIT, took ${(performance.now() - t0).toFixed(0)}ms`,
+      );
+      return cached.pr.title;
+    }
+
+    // Cache miss — fetch just the PR title
+    const octokit = await getOctokit(accessToken);
+    const { data: pr } = await octokit.rest.pulls.get({
+      owner,
+      repo,
+      pull_number: prNumber,
+    });
+    console.log(
+      `[getRFCTitle] cache MISS, fetched from GH, took ${(performance.now() - t0).toFixed(0)}ms`,
+    );
+    return pr.title;
+  } catch {
+    return null;
+  }
+}
+
+export interface WritableRepo extends RepoOption {
+  /** True if the authenticated user can push to this repo. */
+  canPush: boolean;
+  /** True if the repo is in a known RFC directory (or its name suggests so). */
+  hasRFCs: boolean;
+  /** True if the repo is owned by an organization rather than a user. */
+  isOrg: boolean;
+  /** The repo's default branch (e.g. "main"). */
+  defaultBranch: string;
+}
+
+/**
+ * List repos the authenticated user has any access to, annotated with push
+ * permission and whether the repo already hosts RFCs. Used by the "Create RFC"
+ * flow's repo picker, which needs more info than the read-only RFC list does.
+ */
+export async function listWritableRepos(
+  accessToken: string,
+): Promise<WritableRepo[]> {
+  try {
+    const octokit = await getOctokit(accessToken);
+
+    const cacheKey = `writable_repos:${accessToken}`;
+    const cached = await getCachedJsonData<WritableRepo[]>(cacheKey);
+    if (cached) return cached;
+
+    // Paginate to catch users with many repos (default is 30/page).
+    const data = await octokit.paginate(
+      octokit.rest.repos.listForAuthenticatedUser,
+      {
+        per_page: 100,
+        sort: "updated",
+        affiliation: "owner,organization_member,collaborator",
+      },
+    );
+
+    // Determine which repos already host RFCs, in parallel, using the same
+    // heuristic as listReposWithRFCs (name or directory).
+    const annotated = await Promise.all(
+      data.map(async (repo) => {
+        const owner = repo.owner.login;
+        const name = repo.name;
+        const nameLower = name.toLowerCase();
+        let hasRFCs: boolean | null = await getCachedJsonData(
+          `repo_has_rfcs:${owner}:${name}`,
+        );
+        if (hasRFCs == null) {
+          if (
+            nameLower.includes("rfc") ||
+            nameLower.includes("requests-for-comments")
+          ) {
+            hasRFCs = true;
+          } else {
+            const [variantFull, variantShort] = await Promise.allSettled([
+              octokit.rest.repos.getContent({
+                owner,
+                repo: name,
+                path: "requests-for-comments",
+              }),
+              octokit.rest.repos.getContent({
+                owner,
+                repo: name,
+                path: "RFCs",
+              }),
+            ]);
+            hasRFCs =
+              variantFull.status === "fulfilled" ||
+              variantShort.status === "fulfilled";
+          }
+          await setCachedJsonData(
+            `repo_has_rfcs:${owner}:${name}`,
+            hasRFCs,
+            600,
+          );
+        }
+
+        return {
+          owner,
+          name,
+          fullName: repo.full_name,
+          canPush: repo.permissions?.push ?? false,
+          hasRFCs: !!hasRFCs,
+          isOrg: repo.owner.type === "Organization",
+          defaultBranch: repo.default_branch || "main",
+        } satisfies WritableRepo;
+      }),
+    );
+
+    // Sort: RFC repos first (familiar territory), then by last updated.
+    annotated.sort((a, b) => {
+      if (a.hasRFCs !== b.hasRFCs) return a.hasRFCs ? -1 : 1;
+      return 0;
+    });
+
+    await setCachedJsonData(cacheKey, annotated, 300);
+    return annotated;
+  } catch (error) {
+    captureServerException(error as Error, undefined, {
+      function: "listWritableRepos",
+      context: "fetching_writable_repos",
+    });
+    throw error;
+  }
+}
+
+export interface UserSearchResult {
+  login: string;
+  avatarUrl: string;
+}
+
+/**
+ * Search GitHub users by login or name fragment. Used by the reviewer picker
+ * on the create-RFC page; returns at most 10 users to keep the dropdown small.
+ */
+export async function searchUsers(
+  accessToken: string,
+  query: string,
+): Promise<UserSearchResult[]> {
+  if (!query.trim()) return [];
+  try {
+    const octokit = await getOctokit(accessToken);
+    const { data } = await octokit.rest.search.users({
+      q: `${query} in:login`,
+      per_page: 10,
+    });
+    return data.items.map((u) => ({
+      login: u.login,
+      avatarUrl: u.avatar_url,
+    }));
+  } catch (error) {
+    captureServerException(error as Error, undefined, {
+      function: "searchUsers",
+      query,
+      context: "searching_users",
+    });
+    return [];
+  }
+}
+
+export interface CreateRFCInput {
+  accessToken: string;
+  owner: string;
+  repo: string;
+  title: string;
+  /** Body of the .md file the RFC will live in. */
+  rfcBody: string;
+  /** Auto-generated PR description (separate from the RFC body itself). */
+  prBody: string;
+  /** Slug derived from the title; used for filename and branch. */
+  slug: string;
+  /** GitHub login of the current user; used in the branch name. */
+  username: string;
+  /** Optional reviewers to request on the new PR. */
+  reviewers: string[];
+  /** Open as draft PR. */
+  draft: boolean;
+}
+
+export interface CreateRFCResult {
+  number: number;
+  owner: string;
+  repo: string;
+  branch: string;
+  filePath: string;
+  htmlUrl: string;
+}
+
+/**
+ * Create an RFC in `owner/repo`: branch off the default branch, commit the
+ * markdown file, open a PR, request reviewers. On branch/file collision,
+ * appends a random 4-letter suffix to both name and filename so they stay
+ * aligned. Throws a typed error with `status` if write access is missing.
+ */
+export async function createRFC(
+  input: CreateRFCInput,
+): Promise<CreateRFCResult> {
+  const {
+    accessToken,
+    owner,
+    repo,
+    title,
+    rfcBody,
+    prBody,
+    slug,
+    username,
+    reviewers,
+    draft,
+  } = input;
+
+  const octokit = await getOctokit(accessToken);
+
+  try {
+    // 1. Get the repo's default branch and check write access.
+    const { data: repoInfo } = await octokit.rest.repos.get({ owner, repo });
+    if (!repoInfo.permissions?.push) {
+      const err = new Error(
+        "You do not have write access to this repository.",
+      ) as Error & {
+        code?: string;
+      };
+      err.code = "no_write_access";
+      throw err;
+    }
+    const defaultBranch = repoInfo.default_branch;
+
+    // 2. Get the SHA of the default branch tip.
+    const { data: baseRef } = await octokit.rest.git.getRef({
+      owner,
+      repo,
+      ref: `heads/${defaultBranch}`,
+    });
+    const baseSha = baseRef.object.sha;
+
+    // 3. Choose branch / file path. If either collides, append the same
+    //    random 4-letter suffix to both so they stay aligned. Slugify the
+    //    username defensively — GitHub logins are already URL-safe, but the
+    //    client preview passes display names which may contain spaces/caps.
+    const baseBranch = `rfc/${slugify(username)}/${slug}`;
+    const baseFilePath = `requests-for-comments/${slug}.md`;
+
+    let branchName = baseBranch;
+    let filePath = baseFilePath;
+    let collision = await hasBranchOrFile(
+      octokit,
+      owner,
+      repo,
+      branchName,
+      filePath,
+      defaultBranch,
+    );
+    let attempts = 0;
+    while (collision && attempts < 5) {
+      const suffix = randomSuffix();
+      branchName = `${baseBranch}-${suffix}`;
+      filePath = `requests-for-comments/${slug}-${suffix}.md`;
+      collision = await hasBranchOrFile(
+        octokit,
+        owner,
+        repo,
+        branchName,
+        filePath,
+        defaultBranch,
+      );
+      attempts++;
+    }
+    if (collision) {
+      throw new Error(
+        "Could not find a free branch/file name after 5 attempts.",
+      );
+    }
+
+    // 4. Create the branch from the default-branch SHA.
+    await octokit.rest.git.createRef({
+      owner,
+      repo,
+      ref: `refs/heads/${branchName}`,
+      sha: baseSha,
+    });
+
+    // 5. Commit the markdown file on the new branch.
+    await octokit.rest.repos.createOrUpdateFileContents({
+      owner,
+      repo,
+      path: filePath,
+      message: `RFC: ${title}`,
+      content: Buffer.from(rfcBody, "utf-8").toString("base64"),
+      branch: branchName,
+    });
+
+    // 6. Open the PR.
+    const { data: pr } = await octokit.rest.pulls.create({
+      owner,
+      repo,
+      title,
+      head: branchName,
+      base: defaultBranch,
+      body: prBody,
+      draft,
+    });
+
+    // 7. Request reviewers (best effort — don't fail the whole create if a
+    //    reviewer can't be requested, e.g. they're not a repo collaborator).
+    if (reviewers.length > 0) {
+      try {
+        await octokit.rest.pulls.requestReviewers({
+          owner,
+          repo,
+          pull_number: pr.number,
+          reviewers,
+        });
+      } catch (error) {
+        captureServerException(error as Error, undefined, {
+          function: "createRFC",
+          subfunction: "requestReviewers",
+          owner,
+          repo,
+          prNumber: pr.number,
+          reviewers,
+        });
+      }
+    }
+
+    return {
+      number: pr.number,
+      owner,
+      repo,
+      branch: branchName,
+      filePath,
+      htmlUrl: pr.html_url,
+    };
+  } catch (error) {
+    captureServerException(error as Error, undefined, {
+      function: "createRFC",
+      owner,
+      repo,
+      title,
+      context: "creating_rfc",
+    });
+    throw error;
+  }
+}
+
+async function hasBranchOrFile(
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  branch: string,
+  filePath: string,
+  defaultBranch: string,
+): Promise<boolean> {
+  const [branchRes, fileRes] = await Promise.allSettled([
+    octokit.rest.git.getRef({ owner, repo, ref: `heads/${branch}` }),
+    octokit.rest.repos.getContent({
+      owner,
+      repo,
+      path: filePath,
+      ref: defaultBranch,
+    }),
+  ]);
+  return branchRes.status === "fulfilled" || fileRes.status === "fulfilled";
 }

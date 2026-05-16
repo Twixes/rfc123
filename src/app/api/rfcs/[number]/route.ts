@@ -8,7 +8,9 @@ export async function GET(
 ) {
   const t0 = performance.now();
   const session = await auth();
-  console.log(`[API /rfcs/[number]] auth() took ${(performance.now() - t0).toFixed(0)}ms`);
+  console.log(
+    `[API /rfcs/[number]] auth() took ${(performance.now() - t0).toFixed(0)}ms`,
+  );
   const { number } = await params;
 
   if (!(session as { accessToken?: string })?.accessToken) {
@@ -16,11 +18,13 @@ export async function GET(
   }
 
   const accessToken = (session as unknown as { accessToken: string })
-  .accessToken;
+    .accessToken;
 
   const t1 = performance.now();
   const currentUserLogin = await getCurrentUserLogin(accessToken);
-  console.log(`[API /rfcs/[number]] getCurrentUserLogin() took ${(performance.now() - t1).toFixed(0)}ms`);
+  console.log(
+    `[API /rfcs/[number]] getCurrentUserLogin() took ${(performance.now() - t1).toFixed(0)}ms`,
+  );
 
   const { searchParams } = new URL(request.url);
   const owner = searchParams.get("owner");
@@ -42,8 +46,12 @@ export async function GET(
       Number(number),
       currentUserLogin,
     );
-    console.log(`[API /rfcs/[number]] getRFCDetail() took ${(performance.now() - t2).toFixed(0)}ms`);
-    console.log(`[API /rfcs/[number]] total took ${(performance.now() - t0).toFixed(0)}ms`);
+    console.log(
+      `[API /rfcs/[number]] getRFCDetail() took ${(performance.now() - t2).toFixed(0)}ms`,
+    );
+    console.log(
+      `[API /rfcs/[number]] total took ${(performance.now() - t0).toFixed(0)}ms`,
+    );
     return NextResponse.json(rfc);
   } catch (error) {
     console.error("Error fetching RFC detail:", error);

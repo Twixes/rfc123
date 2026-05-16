@@ -10,8 +10,10 @@
     "format": "biome format --write"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^3.0.64",
     "@auth/core": "^0.41.0",
     "@upstash/redis": "^1.35.6",
+    "ai": "^6.0.184",
     "highlight.js": "^11.11.1",
     "mermaid": "^11.12.3",
     "motion": "^12.38.0",

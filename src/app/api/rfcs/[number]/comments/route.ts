@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { getOctokit } from "@/lib/github";
 import type { Comment } from "@/lib/github";
+import { getOctokit } from "@/lib/github";
 
 export async function GET(
   request: Request,

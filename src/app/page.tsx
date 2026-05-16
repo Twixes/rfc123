@@ -16,7 +16,7 @@ export default async function LandingPage() {
                     <div className="mb-6 flex flex-col sm:flex-row gap-6 sm:gap-8 border-b border-gray-20 pb-6">
                         <div className="flex-1">
                             <div className="mb-2 h-0.5 w-12 bg-cyan" />
-                            <div className="text-2xl font-serif text-foreground">1. Draft<sup className="text-xs ml-0.5 font-sans font-medium text-gray-50">SOON</sup></div>
+                            <div className="text-2xl font-serif text-foreground">1. Draft</div>
                             <p className="mt-1 text-sm text-gray-70">Write rich RFCs in Markdown,<br/>automatically creating a GitHub PR.</p>
                         </div>
                         <div className="flex-1">
@@ -40,12 +40,12 @@ export default async function LandingPage() {
                                 </div>
                                 <div>
                                     <p className="text-sm text-foreground">
-                                        <strong>Create a GitHub repository</strong> with a{" "}
+                                        <strong>Sign in with GitHub</strong> and click{" "}
                                         <code className="bg-gray-5 border border-gray-20 rounded-sm px-1.5 py-0.5 font-mono text-xs">
-                                            requests-for-comments/
-                                        </code>{" "}
-                                        directory. Then create a pull request with a Markdown file in that directory.
-                                        This is your RFC draft.
+                                            New RFC
+                                        </code>
+                                        . Pick a repo, write your proposal in Markdown, and tag
+                                        reviewers — RFC123 opens the PR for you.
                                     </p>
                                 </div>
                             </div>
@@ -55,12 +55,13 @@ export default async function LandingPage() {
                                 </div>
                                 <div>
                                     <p className="text-sm text-foreground">
-                                        <strong>Sign into RFC123</strong> with your GitHub account. RFC123 will discover
-                                        all PRs from your repositories containing a{" "}
+                                        <strong>Already have RFCs?</strong> RFC123 discovers PRs
+                                        with Markdown files in your repositories automatically.
+                                        Repos with a{" "}
                                         <code className="bg-gray-5 border border-gray-20 rounded-sm px-1.5 py-0.5 font-mono text-xs">
                                             requests-for-comments/
                                         </code>{" "}
-                                        directory with Markdown files.
+                                        directory are surfaced first.
                                     </p>
                                 </div>
                             </div>
@@ -99,6 +100,12 @@ export default async function LandingPage() {
                                         className="flex items-center rounded-md bg-foreground px-4 py-2 text-sm font-medium text-surface transition-all hover:opacity-80 cursor-pointer"
                                     >
                                         View RFCs
+                                    </Link>
+                                    <Link
+                                        href="/rfcs/new"
+                                        className="flex items-center rounded-md border border-gray-30 bg-surface px-4 py-2 text-sm font-medium text-foreground transition-all hover:bg-gray-5 cursor-pointer"
+                                    >
+                                        New RFC
                                     </Link>
                                     {session.user && (
                                         <AccountDropdown user={session.user} />

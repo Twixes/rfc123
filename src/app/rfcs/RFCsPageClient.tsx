@@ -249,7 +249,7 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
 
   return (
     <div className="mx-auto min-h-screen max-w-240 px-4 sm:px-8 py-6 sm:py-12">
-      <header className="mb-8 sm:mb-12 flex flex-col sm:flex-row items-start sm:items-start justify-between gap-4">
+      <header className="mb-8 sm:mb-10 flex flex-col sm:flex-row items-start sm:items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl sm:text-5xl font-serif font-normal text-foreground">
             <Link href="/" className="hover:opacity-70 transition-opacity">
@@ -258,9 +258,34 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
           </h1>
           <div className="mt-3">{repoSelectorElement}</div>
         </div>
-        {session?.user && (
-          <AccountDropdown user={session.user} />
-        )}
+        <div className="flex items-center gap-3">
+          <Link
+            href={
+              selectedRepo
+                ? `/rfcs/new?owner=${encodeURIComponent(selectedRepo.owner)}&repo=${encodeURIComponent(selectedRepo.name)}`
+                : "/rfcs/new"
+            }
+            className="rounded-md bg-foreground px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium text-surface transition-all hover:opacity-80 cursor-pointer flex items-center gap-1.5"
+          >
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden
+            >
+              <title>New</title>
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 4v16m8-8H4"
+              />
+            </svg>
+            New RFC
+          </Link>
+          {session?.user && <AccountDropdown user={session.user} />}
+        </div>
       </header>
 
       {!isLoading && rfcs && rfcs.length > 0 && (

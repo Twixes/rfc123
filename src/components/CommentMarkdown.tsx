@@ -13,7 +13,7 @@ interface CommentMarkdownProps {
 
 export function CommentMarkdown({ content }: CommentMarkdownProps) {
   return (
-    <div className="text-sm leading-relaxed text-gray-90">
+    <div className="text-sm text-gray-90">
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMentions]}
         rehypePlugins={[rehypeRaw, rehypeHighlight]}
@@ -46,7 +46,7 @@ export function CommentMarkdown({ content }: CommentMarkdownProps) {
             </h3>
           ),
           p: ({ children }) => (
-            <p className="my-1 leading-relaxed text-gray-90">{children}</p>
+            <p className="my-1 text-gray-90">{children}</p>
           ),
           a: ({ href, children }) => (
             <a
@@ -68,7 +68,7 @@ export function CommentMarkdown({ content }: CommentMarkdownProps) {
               {children}
             </ol>
           ),
-          li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+          li: ({ children }) => <li>{children}</li>,
           code: ({ className, children, ...props }) => {
             const isInline = !className;
             if (isInline) {

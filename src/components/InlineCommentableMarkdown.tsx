@@ -890,7 +890,7 @@ export function InlineCommentableMarkdown({
         const lineNumber = (props as any)["data-line-element"];
         return (
           <p
-            className={`relative my-2 leading-relaxed ${lineNumber ? "cursor-pointer" : ""} ${lineNumber && commentsByLine.has(lineNumber) ? "pr-8" : ""}`}
+            className={`relative my-2 ${lineNumber ? "cursor-pointer" : ""} ${lineNumber && commentsByLine.has(lineNumber) ? "pr-8" : ""}`}
             onClick={() => lineNumber && handleLineClick(lineNumber)}
             onMouseEnter={() => lineNumber && handleMouseEnterLine(lineNumber)}
             onMouseLeave={handleMouseLeaveLine}
@@ -939,7 +939,7 @@ export function InlineCommentableMarkdown({
         const lineNumber = (props as any)["data-line-element"];
         return (
           <li
-            className={`relative leading-relaxed text-gray-90 ${lineNumber ? "cursor-pointer" : ""} ${lineNumber && commentsByLine.has(lineNumber) ? "pr-8" : ""}`}
+            className={`relative text-gray-90 ${lineNumber ? "cursor-pointer" : ""} ${lineNumber && commentsByLine.has(lineNumber) ? "pr-8" : ""}`}
             onClick={() => lineNumber && handleLineClick(lineNumber)}
             onMouseEnter={() => lineNumber && handleMouseEnterLine(lineNumber)}
             onMouseLeave={handleMouseLeaveLine}

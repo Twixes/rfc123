@@ -46,7 +46,7 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
             </h3>
           ),
           p: ({ children }) => (
-            <p className="my-2 leading-relaxed text-gray-90">{children}</p>
+            <p className="my-2 text-gray-90">{children}</p>
           ),
           a: ({ href, children }) => (
             <a

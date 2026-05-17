@@ -77,7 +77,7 @@ export default function RepoSelector({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.15 }}
-            className="absolute top-full left-0 mt-2 w-80 bg-surface border border-gray-20 rounded-md z-50"
+            className="absolute top-full left-0 mt-1 w-80 bg-surface border border-gray-20 rounded-md z-50"
           >
           <div className="p-3 border-b border-gray-20">
             <input

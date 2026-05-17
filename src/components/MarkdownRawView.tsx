@@ -22,7 +22,7 @@ export function MarkdownRawView({ content }: MarkdownRawViewProps) {
 
   return (
     <pre className="overflow-x-auto rounded border border-gray-30 bg-gray-90 p-4">
-      <code ref={codeRef} className="language-markdown text-sm leading-relaxed">
+      <code ref={codeRef} className="language-markdown text-sm">
         {content}
       </code>
     </pre>

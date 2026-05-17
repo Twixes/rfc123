@@ -50,11 +50,12 @@ export default function AccountDropdown({ user }: AccountDropdownProps) {
       <AnimatePresence>
         {open && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
+            initial={{ opacity: 0, scale: 0.95, y: -4 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: -4 }}
             transition={{ duration: 0.15 }}
-            className="absolute right-0 mt-2 w-40 rounded-md border border-gray-20 bg-surface z-50"
+            style={{ transformOrigin: "top right" }}
+            className="absolute top-full right-0 mt-1 w-40 rounded-md border border-gray-20 bg-surface z-50"
           >
             {user.name && (
               <div className="px-3 py-2 text-xs text-gray-50 border-b border-gray-20 truncate">

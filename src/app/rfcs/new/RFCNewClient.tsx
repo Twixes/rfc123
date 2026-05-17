@@ -334,7 +334,7 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
                   rows={24}
                   spellCheck
                   placeholder="Write your RFC in Markdown…"
-                  className="block w-full bg-transparent px-5 sm:px-6 py-4 text-sm text-foreground placeholder-gray-50 focus:outline-none font-mono leading-relaxed resize-y"
+                  className="block w-full bg-transparent px-5 sm:px-6 py-4 text-sm text-foreground placeholder-gray-50 focus:outline-none font-mono resize-y"
                 />
               ) : (
                 <div className="px-5 sm:px-6 py-4 min-h-[24rem]">

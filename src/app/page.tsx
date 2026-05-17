@@ -9,7 +9,7 @@ export default async function LandingPage() {
         <div className="flex min-h-screen items-center justify-center px-4 sm:px-8 py-8 sm:py-0">
             <div className="w-full max-w-4xl">
                 <div className="border border-gray-20 rounded-md bg-surface p-4 sm:p-8">
-                    <h1 className="font-serif font-normal text-4xl sm:text-6xl text-foreground">RFC123</h1>
+                    <h1 className="font-serif font-normal text-4xl sm:text-6xl text-foreground mb-2">RFC123</h1>
 
                     <p className="mb-6 text-lg sm:text-xl font-light leading-tight text-gray-70">The RFC platform for teams.</p>
 

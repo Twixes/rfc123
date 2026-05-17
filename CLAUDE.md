@@ -133,3 +133,17 @@ The app uses Next.js server actions for mutations where applicable:
 - `src/app/api/rfc-asset/route.ts` - Proxy for in-repo files (images, etc.) referenced from RFC markdown
 - `src/auth.ts` - Authentication configuration
 - `src/app/globals.css` - Design system colors and global styles
+
+<!-- convex-ai-start -->
+
+This project uses [Convex](https://convex.dev) as its backend.
+
+When working on Convex code, **always read
+`convex/_generated/ai/guidelines.md` first** for important guidelines on
+how to correctly use Convex APIs and patterns. The file contains rules that
+override what you may have learned about Convex from training data.
+
+Convex agent skills for common tasks can be installed by running
+`npx convex ai-files install`.
+
+<!-- convex-ai-end -->

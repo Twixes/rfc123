@@ -6,7 +6,7 @@ import {
   setCachedJsonDataBatch,
 } from "./cache";
 import { captureServerException } from "./posthog-server";
-import { randomSuffix } from "./random-suffix"
+import { randomSuffix } from "./random-suffix";
 import { slugify } from "./slugify";
 
 export interface RepoOption {
@@ -21,6 +21,7 @@ export interface RFC {
   author: string;
   authorAvatar: string;
   status: "open" | "merged" | "closed";
+  isDraft: boolean;
   createdAt: string;
   updatedAt: string;
   commentCount: number | null;
@@ -29,7 +30,10 @@ export interface RFC {
   url: string;
   owner: string;
   repo: string;
+  /** True if the current viewer is tagged as a reviewer (direct or via team). */
   reviewRequested: boolean;
+  /** Team slugs (e.g. ["posthog/web"]) requested as reviewers. */
+  requestedTeamSlugs: string[];
 }
 
 export interface RFCDetail extends RFC {
@@ -61,6 +65,31 @@ export async function getOctokit(accessToken: string) {
   return new Octokit({ auth: accessToken });
 }
 
+/**
+ * Read the OAuth scopes granted to `accessToken` from GitHub's
+ * `X-OAuth-Scopes` response header. Cached for an hour. Used so callers can
+ * gracefully degrade GraphQL queries that touch fields gated behind scopes
+ * the token does not have (e.g. `Team.slug` / `Team.organization` need
+ * `read:org`).
+ */
+export async function getGrantedScopes(accessToken: string): Promise<string[]> {
+  const cacheKey = `granted_scopes:${accessToken}`;
+  const cached = await getCachedJsonData<string[]>(cacheKey);
+  if (cached) return cached;
+
+  const octokit = await getOctokit(accessToken);
+  const response = await octokit.rest.users.getAuthenticated();
+  const header = (response.headers as Record<string, string | undefined>)[
+    "x-oauth-scopes"
+  ];
+  const scopes = (header ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  await setCachedJsonData(cacheKey, scopes, 3600);
+  return scopes;
+}
+
 function cleanTitle(title: string) {
   return title.replace(/(^RFC - |^RFC:? |^Add RFC for |^\[RFC\] | RFC$)/i, "");
 }
@@ -85,16 +114,44 @@ export async function listReposWithRFCs(
       return cachedReposWithRFCs;
     }
 
-    const data = await octokit.rest.repos.listForAuthenticatedUser({
+    // Paginate so users in orgs with hundreds of repos aren't capped at the
+    // 100 most-recently-updated. Without this, dedicated-but-quiet RFC repos
+    // (e.g. `requests-for-comments-internal`) silently fall off the list.
+    //
+    // `octokit.paginate` walks pages sequentially. We instead fetch page 1,
+    // read the `Link: …; rel="last"` header to learn the total page count,
+    // then fire the remaining pages in parallel via `Promise.all` — same
+    // trick used for review-comment counts further down.
+    const listParams = {
       per_page: 100,
-      sort: "updated",
-      affiliation: "owner,organization_member",
-    });
-    const repos = data.data.map((repo) => ({
-      owner: repo.owner.login,
-      name: repo.name,
-      fullName: repo.full_name,
-    }));
+      sort: "updated" as const,
+      affiliation: "owner,organization_member,collaborator",
+    };
+    const firstPage =
+      await octokit.rest.repos.listForAuthenticatedUser(listParams);
+    const linkHeader = firstPage.headers.link;
+    const lastPageMatch = linkHeader?.match(/[?&]page=(\d+)>; rel="last"/);
+    const lastPage = lastPageMatch
+      ? Number.parseInt(lastPageMatch[1], 10)
+      : 1;
+    const restPages =
+      lastPage > 1
+        ? await Promise.all(
+            Array.from({ length: lastPage - 1 }, (_, i) =>
+              octokit.rest.repos.listForAuthenticatedUser({
+                ...listParams,
+                page: i + 2,
+              }),
+            ),
+          )
+        : [];
+    const repos = [firstPage, ...restPages].flatMap((r) =>
+      r.data.map((repo) => ({
+        owner: repo.owner.login,
+        name: repo.name,
+        fullName: repo.full_name,
+      })),
+    );
 
     // Check all repos in parallel for RFC content
     const checks = repos.map(async (repo) => {
@@ -166,11 +223,21 @@ export async function listRFCs(
   owner: string,
   repo: string,
   currentUserLogin: string,
+  opts: { withTeamFields?: boolean } = {},
 ): Promise<RFC[]> {
   try {
     const octokit = await getOctokit(accessToken);
+    const withTeamFields = opts.withTeamFields ?? true;
 
-    // GraphQL query to fetch all PRs with files and comment counts in one request
+    // GraphQL query to fetch all PRs with files and comment counts in one request.
+    // The Team fragment is gated behind GitHub's `read:org` scope — callers
+    // without that scope must omit it or GitHub returns INSUFFICIENT_SCOPES.
+    const teamFragment = withTeamFields
+      ? `... on Team {
+                      slug
+                      organization { login }
+                    }`
+      : "";
     const query = `
       query($owner: String!, $repo: String!) {
         repository(owner: $owner, name: $repo) {
@@ -179,6 +246,7 @@ export async function listRFCs(
               number
               title
               state
+              isDraft
               createdAt
               updatedAt
               mergedAt
@@ -201,6 +269,7 @@ export async function listRFCs(
                     ... on User {
                       login
                     }
+                    ${teamFragment}
                   }
                 }
               }
@@ -210,8 +279,9 @@ export async function listRFCs(
       }
     `;
 
-    // Check cache first
-    const cacheKey = `rfcs:${owner}:${repo}:graphql`;
+    // Check cache first. Key includes the team-fields variant so we don't
+    // serve a no-team-slugs payload to a caller that has `read:org`.
+    const cacheKey = `rfcs:${owner}:${repo}:graphql:${withTeamFields ? "with-teams" : "no-teams"}`;
     let pulls: any[] = [];
     const cachedPulls = await getCachedJsonData<any[]>(cacheKey);
 
@@ -244,11 +314,22 @@ export async function listRFCs(
       const reviewRequested = pr.reviewRequests?.nodes?.some(
         (req: any) => req.requestedReviewer?.login === currentUserLogin,
       );
+      const requestedTeamSlugs: string[] =
+        pr.reviewRequests?.nodes
+          ?.map((req: any) => {
+            const r = req.requestedReviewer;
+            if (r?.slug && r?.organization?.login) {
+              return `${r.organization.login}/${r.slug}`;
+            }
+            return null;
+          })
+          .filter((s: string | null): s is string => !!s) ?? [];
 
       return {
         number: pr.number,
         title: pr.title,
         state: pr.state.toLowerCase(),
+        isDraft: !!pr.isDraft,
         merged_at: pr.mergedAt,
         created_at: pr.createdAt,
         updated_at: pr.updatedAt,
@@ -262,6 +343,7 @@ export async function listRFCs(
         _inlineCommentCount: inlineCountByIndex[i],
         _regularCommentCount: pr.comments.totalCount,
         _reviewRequested: reviewRequested || false,
+        _requestedTeamSlugs: requestedTeamSlugs,
       };
     });
 
@@ -289,6 +371,7 @@ export async function listRFCs(
       author: pr.user?.login || "unknown",
       authorAvatar: pr.user?.avatar_url || "",
       status: pr.merged_at ? "merged" : (pr.state as "open" | "closed"),
+      isDraft: pr.isDraft,
       createdAt: pr.created_at,
       updatedAt: pr.updated_at,
       commentCount:
@@ -301,6 +384,7 @@ export async function listRFCs(
       owner,
       repo,
       reviewRequested: pr._reviewRequested,
+      requestedTeamSlugs: pr._requestedTeamSlugs ?? [],
     }));
   } catch (error) {
     captureServerException(error as Error, undefined, {
@@ -313,9 +397,55 @@ export async function listRFCs(
   }
 }
 
+/**
+ * Fetch the team memberships of the authenticated user, formatted as
+ * `"org-login/team-slug"`. Used by the briefing flow so we can credit
+ * team-requested reviews to members.
+ *
+ * GitHub paginates `user.teams` at 100/page; we cap at a few pages because
+ * realistically nobody is on hundreds of teams and we don't want to hammer
+ * the API from a cron.
+ */
+export async function listUserTeams(accessToken: string): Promise<string[]> {
+  try {
+    const octokit = await getOctokit(accessToken);
+    const teams = await octokit.paginate(
+      octokit.rest.teams.listForAuthenticatedUser,
+      {
+        per_page: 100,
+      },
+    );
+    return teams.map((t) => `${t.organization.login}/${t.slug}`);
+  } catch (error) {
+    captureServerException(error as Error, undefined, {
+      function: "listUserTeams",
+      context: "fetching_user_teams",
+    });
+    return [];
+  }
+}
+
+/**
+ * Return the RFCs the user (or any of their teams) is currently requested
+ * to review and that are open and not in draft. Used by the daily briefing.
+ */
+export function filterRFCsAwaitingReview(
+  rfcs: RFC[],
+  userTeams: string[],
+): RFC[] {
+  const teamSet = new Set(userTeams);
+  return rfcs.filter((rfc) => {
+    if (rfc.status !== "open") return false;
+    if (rfc.isDraft) return false;
+    if (rfc.reviewRequested) return true;
+    return rfc.requestedTeamSlugs.some((slug) => teamSet.has(slug));
+  });
+}
+
 export async function listAllRFCs(
   accessToken: string,
   currentUserLogin: string,
+  opts: { withTeamFields?: boolean } = {},
 ): Promise<RFC[]> {
   try {
     // Get all repos with RFC directories
@@ -324,7 +454,7 @@ export async function listAllRFCs(
     // Fetch RFCs from all repos in parallel
     const allRFCsArrays = await Promise.all(
       repos.map((repo) =>
-        listRFCs(accessToken, repo.owner, repo.name, currentUserLogin),
+        listRFCs(accessToken, repo.owner, repo.name, currentUserLogin, opts),
       ),
     );
 
@@ -645,6 +775,7 @@ export async function getRFCDetail(
       author: pr.user?.login || "unknown",
       authorAvatar: pr.user?.avatar_url || "",
       status: pr.merged_at ? "merged" : (pr.state as "open" | "closed"),
+      isDraft: !!pr.draft,
       createdAt: pr.created_at,
       updatedAt: pr.updated_at,
       commentCount: pr.comments + pr.review_comments,
@@ -659,6 +790,10 @@ export async function getRFCDetail(
       headRef: pr.head.ref,
       reviewers,
       reviewRequested: reviewRequested || false,
+      // RFCDetail doesn't need teams for now (it's used for the page view,
+      // where direct review-requested is what matters). Empty for parity
+      // with the RFC type.
+      requestedTeamSlugs: [],
       comments: [], // Comments are loaded progressively by the client
     };
   } catch (error) {
@@ -734,6 +869,7 @@ export async function postComment(
 }
 
 interface CurrentUser {
+  id: number;
   login: string;
   avatarUrl: string;
 }
@@ -746,7 +882,7 @@ export async function getCurrentUser(
     const userCacheKey = `user_info:${accessToken}`;
     const cached = await getCachedJsonData<CurrentUser>(userCacheKey);
 
-    if (cached) {
+    if (cached && cached.id) {
       console.log(
         `[getCurrentUser] cache HIT, took ${(performance.now() - t0).toFixed(0)}ms`,
       );
@@ -760,6 +896,7 @@ export async function getCurrentUser(
     const octokit = await getOctokit(accessToken);
     const { data: user } = await octokit.rest.users.getAuthenticated();
     const currentUser: CurrentUser = {
+      id: user.id,
       login: user.login,
       avatarUrl: user.avatar_url,
     };

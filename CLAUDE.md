@@ -36,7 +36,7 @@ RFC123 is a Next.js application for reviewing GitHub pull requests containing RF
 ### Authentication Flow
 
 The app uses NextAuth with GitHub OAuth (src/auth.ts):
-- Requests `read:user user:email repo` GitHub scopes
+- Requests `read:user user:email repo read:org` GitHub scopes (`read:org` is required to resolve team-review-request slugs in the GraphQL `listRFCs` query and team memberships for the briefing)
 - Stores GitHub access token in JWT session for API calls
 - Access token is required to fetch PR data and post comments
 - Unauthenticated users are redirected to `/api/auth/signin`
@@ -147,3 +147,40 @@ Convex agent skills for common tasks can be installed by running
 `npx convex ai-files install`.
 
 <!-- convex-ai-end -->
+
+### Convex usage in this project
+
+Convex stores user notification preferences and Slack workspace installs
+(`convex/schema.ts`). The Next.js app calls Convex from server routes via
+`ConvexHttpClient` (see `src/lib/convex.ts`), passing
+`SECRET_KEY` as the first argument to every public function. We
+do not use Convex Auth or the client-side reactive provider yet — that's a
+follow-up.
+
+### Daily Slack briefing
+
+Two parts:
+
+- **Convex cron** (`convex/crons.ts`, `convex/notifications.ts`) — fires
+  hourly on the hour and POSTs to `${NEXTAUTH_URL}/api/internal/run-briefing`
+  with `SECRET_KEY`. `NEXTAUTH_URL` doubles as the single source of truth
+  for the externally-visible app URL (set on Convex too via
+  `npx convex env set NEXTAUTH_URL <https://...>`).
+- **Next.js worker** (`src/app/api/internal/run-briefing/route.ts`) —
+  fetches enabled users from Convex, decides who is due (per-user IANA
+  timezone, skip weekends, idempotent via `lastSentYmdLocal`), pulls each
+  one's open non-draft RFCs awaiting their review (direct or
+  team-requested), sends a Slack DM via the bot token of their active
+  workspace.
+
+Slack OAuth lives at `/api/slack/install` and
+`/api/slack/oauth/callback`. The Slack app manifest is at
+`slack-app-manifest.json` (paste into "Create app from manifest" on
+api.slack.com/apps to bootstrap).
+
+#### TODOs (not done in the initial briefing PR)
+
+- Move GitHub token handling from OAuth-token-in-Convex to a GitHub App
+  with installation tokens (smaller blast radius if Convex is breached).
+- Migrate auth to Convex Auth so we can drop the shared-secret gating and
+  use `ConvexProviderWithAuth` on the client for reactive queries.

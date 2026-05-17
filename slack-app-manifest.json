@@ -1,0 +1,43 @@
+{
+  "_metadata": {
+    "major_version": 1,
+    "minor_version": 1
+  },
+  "display_information": {
+    "name": "RFC123",
+    "description": "Daily briefings of RFCs awaiting your review.",
+    "background_color": "#1a1a1a",
+    "long_description": "RFC123 helps teams ship better RFCs faster. This Slack app sends you a daily briefing of every open, non-draft RFC where you (or your GitHub team) are tagged as a reviewer, so decisions don't slip."
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "RFC123",
+      "always_online": true
+    }
+  },
+  "oauth_config": {
+    "redirect_urls": [
+      "https://rfc123.app/api/slack/oauth/callback",
+      "https://rfc123.ngrok.dev/api/slack/oauth/callback"
+    ],
+    "scopes": {
+      "user": [
+        "openid",
+        "email",
+        "profile"
+      ],
+      "bot": [
+        "chat:write",
+        "im:write",
+        "users:read",
+        "users:read.email",
+        "team:read"
+      ]
+    }
+  },
+  "settings": {
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": false
+  }
+}

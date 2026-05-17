@@ -28,12 +28,16 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
   );
   const [selectedRepo, setSelectedRepo] = useState<RepoOption | null>(null);
   const rfcsAbortControllerRef = useRef<AbortController | null>(null);
-  const [selectedStatuses, setSelectedStatuses] = useState<
-    Set<RFC["status"]>
-  >(new Set(["open"]));
+  const [selectedStatuses, setSelectedStatuses] = useState<Set<RFC["status"]>>(
+    new Set(["open"]),
+  );
   const [selectedAuthor, setSelectedAuthor] = useState<string | null>(null);
   const [authorDropdownOpen, setAuthorDropdownOpen] = useState(false);
   const [authorSearchQuery, setAuthorSearchQuery] = useState("");
+  // Server tells us via `X-RFC123-Missing-Scopes` when the user's GitHub
+  // token lacks a scope we now need (read:org, for team-requested reviews).
+  // We render the list in degraded mode and prompt re-auth via a banner.
+  const [missingScopes, setMissingScopes] = useState<string[]>([]);
   const authorDropdownRef = useRef<HTMLDivElement>(null);
   const authorInputRef = useRef<HTMLInputElement>(null);
 
@@ -121,6 +125,15 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
       );
       const data: RFC[] = await response.json();
       if (controller.signal.aborted) return;
+      const missingHeader = response.headers.get("X-RFC123-Missing-Scopes");
+      setMissingScopes(
+        missingHeader
+          ? missingHeader
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : [],
+      );
       setRfcs(data);
       setIsLoading(false);
 
@@ -159,18 +172,19 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
           string,
           number
         >;
-        setRfcs((prev) =>
-          prev?.map((rfc) => {
-            const count = allCounts[rfc.number];
-            if (count !== undefined && rfc.inlineCommentCount === null) {
-              return {
-                ...rfc,
-                inlineCommentCount: count,
-                commentCount: count + rfc.regularCommentCount,
-              };
-            }
-            return rfc;
-          }) ?? null,
+        setRfcs(
+          (prev) =>
+            prev?.map((rfc) => {
+              const count = allCounts[rfc.number];
+              if (count !== undefined && rfc.inlineCommentCount === null) {
+                return {
+                  ...rfc,
+                  inlineCommentCount: count,
+                  commentCount: count + rfc.regularCommentCount,
+                };
+              }
+              return rfc;
+            }) ?? null,
         );
       }
     } catch (error) {
@@ -288,6 +302,26 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
         </div>
       </header>
 
+      {missingScopes.length > 0 && (
+        <div className="mb-6 border border-magenta/30 bg-magenta-light rounded-md px-4 py-3 text-sm text-foreground flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <span>
+            Your GitHub sign-in predates a feature that needs the{" "}
+            <code className="font-mono text-xs">
+              {missingScopes.join(", ")}
+            </code>{" "}
+            scope, so team-requested reviews aren&rsquo;t shown.{" "}
+            <a
+              href="/api/auth/signout"
+              className="underline font-medium text-magenta hover:no-underline"
+            >
+              Log out
+            </a>{" "}
+            and sign back in to fix this — GitHub will ask you to grant the new
+            scope.
+          </span>
+        </div>
+      )}
+
       {!isLoading && rfcs && rfcs.length > 0 && (
         <div className="mb-6 flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-1.5">
@@ -306,11 +340,13 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
                           ? "border-yellow bg-yellow-light"
                           : "border-gray-30 bg-gray-5"
                       : "bg-transparent opacity-40 hover:opacity-70 " +
-                        (status === "open"
-                          ? "border-cyan"
-                          : status === "merged"
-                            ? "border-yellow"
-                            : "border-gray-30")
+                        (
+                          status === "open"
+                            ? "border-cyan"
+                            : status === "merged"
+                              ? "border-yellow"
+                              : "border-gray-30"
+                        )
                   }`}
                 >
                   {status}
@@ -470,68 +506,66 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
                   index === 0 ? "border-t border-gray-20" : ""
                 } ${rfc.reviewRequested ? "bg-yellow-light" : ""}`}
               >
-              <div className="flex items-start justify-between gap-4 sm:gap-6">
-                <div className="flex-1 min-w-0">
-                  <div className="mb-2 flex flex-wrap items-center gap-2 sm:gap-3">
-                    <h2 className="text-4xl font-medium text-foreground break-words font-serif">
-                      {rfc.title}
-                    </h2>
-                    {rfc.reviewRequested && (
+                <div className="flex items-start justify-between gap-4 sm:gap-6">
+                  <div className="flex-1 min-w-0">
+                    <div className="mb-2 flex flex-wrap items-center gap-2 sm:gap-3">
+                      <h2 className="text-4xl font-medium text-foreground break-words font-serif">
+                        {rfc.title}
+                      </h2>
+                      {rfc.reviewRequested && (
+                        <span className="border border-magenta bg-magenta-light text-foreground rounded-sm px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium uppercase tracking-wider flex-shrink-0">
+                          Review Requested
+                        </span>
+                      )}
                       <span
-                        className="border border-magenta bg-magenta-light text-foreground rounded-sm px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium uppercase tracking-wider flex-shrink-0"
+                        className={`border rounded-sm px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium uppercase tracking-wider flex-shrink-0 text-foreground ${
+                          rfc.status === "open"
+                            ? "border-cyan bg-cyan-light"
+                            : rfc.status === "merged"
+                              ? "border-yellow bg-yellow-light"
+                              : "border-gray-30 bg-gray-5"
+                        }`}
                       >
-                        Review Requested
-                      </span>
-                    )}
-                    <span
-                      className={`border rounded-sm px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium uppercase tracking-wider flex-shrink-0 text-foreground ${
-                        rfc.status === "open"
-                          ? "border-cyan bg-cyan-light"
-                          : rfc.status === "merged"
-                            ? "border-yellow bg-yellow-light"
-                            : "border-gray-30 bg-gray-5"
-                      }`}
-                    >
-                      {rfc.status}
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-[10px] sm:text-xs text-gray-50">
-                    <span className="font-medium">
-                      {rfc.owner}/{rfc.repo}
-                    </span>
-                    <div className="flex items-center gap-1.5 sm:gap-2">
-                      <div className="h-4 w-4 sm:h-5 sm:w-5 rounded-full overflow-hidden border border-gray-20">
-                        <img
-                          src={rfc.authorAvatar}
-                          alt={rfc.author}
-                          className="h-full w-full"
-                        />
-                      </div>
-                      <span className="truncate max-w-24 sm:max-w-none">
-                        {rfc.author}
+                        {rfc.status}
                       </span>
                     </div>
-                    <span>#{rfc.number}</span>
-                    <span className="hidden sm:inline">
-                      <RelativeTime date={rfc.createdAt} />
-                    </span>
-                    {rfc.inlineCommentCount === null ? (
-                      <span className="border-l border-gray-30 pl-2 sm:pl-4">
-                        <span className="inline-block h-3 w-16 animate-pulse rounded bg-gray-20" />
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-[10px] sm:text-xs text-gray-50">
+                      <span className="font-medium">
+                        {rfc.owner}/{rfc.repo}
                       </span>
-                    ) : rfc.inlineCommentCount > 0 ? (
-                      <span className="border-l border-gray-30 pl-2 sm:pl-4">
-                        {rfc.inlineCommentCount} inline
+                      <div className="flex items-center gap-1.5 sm:gap-2">
+                        <div className="h-4 w-4 sm:h-5 sm:w-5 rounded-full overflow-hidden border border-gray-20">
+                          <img
+                            src={rfc.authorAvatar}
+                            alt={rfc.author}
+                            className="h-full w-full"
+                          />
+                        </div>
+                        <span className="truncate max-w-24 sm:max-w-none">
+                          {rfc.author}
+                        </span>
+                      </div>
+                      <span>#{rfc.number}</span>
+                      <span className="hidden sm:inline">
+                        <RelativeTime date={rfc.createdAt} />
                       </span>
-                    ) : null}
-                    {rfc.regularCommentCount > 0 && (
-                      <span className="border-l border-gray-30 pl-2 sm:pl-4">
-                        {rfc.regularCommentCount} general
-                      </span>
-                    )}
+                      {rfc.inlineCommentCount === null ? (
+                        <span className="border-l border-gray-30 pl-2 sm:pl-4">
+                          <span className="inline-block h-3 w-16 animate-pulse rounded bg-gray-20" />
+                        </span>
+                      ) : rfc.inlineCommentCount > 0 ? (
+                        <span className="border-l border-gray-30 pl-2 sm:pl-4">
+                          {rfc.inlineCommentCount} inline
+                        </span>
+                      ) : null}
+                      {rfc.regularCommentCount > 0 && (
+                        <span className="border-l border-gray-30 pl-2 sm:pl-4">
+                          {rfc.regularCommentCount} general
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
               </Link>
             </motion.div>
           ))}

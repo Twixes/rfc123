@@ -4,6 +4,7 @@ import {
   createRFC,
   getCurrentUser,
   getCurrentUserLogin,
+  getGrantedScopes,
   listAllRFCs,
   listRFCs,
 } from "@/lib/github";
@@ -23,14 +24,27 @@ export async function GET(request: Request) {
   try {
     const accessToken = (session as unknown as { accessToken: string })
       .accessToken;
-    const currentUserLogin = await getCurrentUserLogin(accessToken);
-    if (!owner || !repo) {
-      const rfcs = await listAllRFCs(accessToken, currentUserLogin);
-      return NextResponse.json(rfcs);
-    }
-
-    const rfcs = await listRFCs(accessToken, owner, repo, currentUserLogin);
-    return NextResponse.json(rfcs);
+    const [currentUserLogin, scopes] = await Promise.all([
+      getCurrentUserLogin(accessToken),
+      getGrantedScopes(accessToken),
+    ]);
+    const hasReadOrg = scopes.includes("read:org");
+    // Sentinel header the client reads to decide whether to render the
+    // "please re-auth for full features" banner. We still return RFCs in
+    // the degraded mode — direct review requests work; team-requested ones
+    // are silently dropped until the user signs back in with `read:org`.
+    const headers = hasReadOrg
+      ? undefined
+      : { "X-RFC123-Missing-Scopes": "read:org" };
+    const rfcs =
+      !owner || !repo
+        ? await listAllRFCs(accessToken, currentUserLogin, {
+            withTeamFields: hasReadOrg,
+          })
+        : await listRFCs(accessToken, owner, repo, currentUserLogin, {
+            withTeamFields: hasReadOrg,
+          });
+    return NextResponse.json(rfcs, { headers });
   } catch (error) {
     console.error("Error fetching RFCs:", error);
     return NextResponse.json(

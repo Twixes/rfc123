@@ -42,17 +42,29 @@ export async function GET(request: Request) {
       type?: string;
       encoding?: string;
       content?: string;
-      size?: number;
+      sha?: string;
     };
 
-    if (data.type !== "file" || data.encoding !== "base64" || !data.content) {
+    if (data.type !== "file" || !data.sha) {
       return new Response("Not a file", { status: 404 });
     }
 
-    const buffer = Buffer.from(data.content, "base64");
+    // Contents API returns empty content for files >1MB; fall back to Git Blob API.
+    const base64 =
+      data.encoding === "base64" && data.content
+        ? data.content
+        : (
+            await octokit.rest.git.getBlob({
+              owner,
+              repo,
+              file_sha: data.sha,
+            })
+          ).data.content;
+
+    const buffer = Buffer.from(base64, "base64");
     const contentType = contentTypeForAsset(buffer, path);
 
-    return new Response(buffer, {
+    return new Response(new Uint8Array(buffer), {
       headers: {
         "Content-Type": contentType,
         "Cache-Control": "private, max-age=3600",

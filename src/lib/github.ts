@@ -448,7 +448,8 @@ export async function getRFCDetail(
       headRef: string;
       markdownEtag?: string;
       reviewers: RFCDetail["reviewers"];
-      reviewRequested: boolean;
+      /** Logins of users with a pending review request — used to derive `reviewRequested` per-user. */
+      requestedReviewerLogins: string[];
     }
     const tContentCache = performance.now();
     const cachedContent =
@@ -462,7 +463,7 @@ export async function getRFCDetail(
     let markdownContent = "";
     let markdownFilePath: string | null = null;
     let reviewers: RFCDetail["reviewers"] = [];
-    let reviewRequested = false;
+    let requestedReviewerLogins: string[] = [];
     let cacheValid = false;
 
     // On cache hit: validate markdown freshness with conditional request (304 = free, no rate limit)
@@ -500,7 +501,7 @@ export async function getRFCDetail(
         markdownContent = cachedContent.markdownContent;
         markdownFilePath = cachedContent.markdownFilePath;
         reviewers = cachedContent.reviewers;
-        reviewRequested = cachedContent.reviewRequested;
+        requestedReviewerLogins = cachedContent.requestedReviewerLogins ?? [];
       }
     }
 
@@ -608,8 +609,8 @@ export async function getRFCDetail(
         }
       }
 
-      reviewRequested = requestedReviewersRes.data.users.some(
-        (user) => user.login === currentUserLogin,
+      requestedReviewerLogins = requestedReviewersRes.data.users.map(
+        (user) => user.login,
       );
 
       console.log(
@@ -625,12 +626,14 @@ export async function getRFCDetail(
           markdownFilePath,
           headRef: pr.head.ref,
           reviewers,
-          reviewRequested,
+          requestedReviewerLogins,
           markdownEtag,
         },
         300,
       );
     }
+
+    const reviewRequested = requestedReviewerLogins.includes(currentUserLogin);
 
     console.log(
       `[getRFCDetail] total took ${(performance.now() - t0).toFixed(0)}ms`,

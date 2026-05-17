@@ -30,20 +30,22 @@ export async function GET(
       (session as unknown as { accessToken: string }).accessToken,
     );
 
-    // Get review comments
-    const { data: reviewComments } =
-      await octokit.rest.pulls.listReviewComments({
+    // Paginate so PRs with >30 inline comments don't drop later ones —
+    // missing parents would also break reply-threading in groupIntoThreads.
+    const [reviewComments, issueComments] = await Promise.all([
+      octokit.paginate(octokit.rest.pulls.listReviewComments, {
         owner,
         repo,
         pull_number: Number(number),
-      });
-
-    // Get issue comments
-    const { data: issueComments } = await octokit.rest.issues.listComments({
-      owner,
-      repo,
-      issue_number: Number(number),
-    });
+        per_page: 100,
+      }),
+      octokit.paginate(octokit.rest.issues.listComments, {
+        owner,
+        repo,
+        issue_number: Number(number),
+        per_page: 100,
+      }),
+    ]);
 
     const comments: Comment[] = [
       ...reviewComments.map((c) => ({

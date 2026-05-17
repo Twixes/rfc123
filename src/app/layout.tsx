@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { Geist, Instrument_Serif } from "next/font/google";
+import { Geist } from "next/font/google";
+import localFont from "next/font/local";
 import { PostHogProvider } from "@/providers/PostHogProvider";
 import "./globals.css";
 
@@ -8,11 +9,20 @@ const geist = Geist({
   subsets: ["latin"],
 });
 
-const instrumentSerif = Instrument_Serif({
-  variable: "--font-instrument-serif",
-  weight: "400",
-  style: ["normal", "italic"],
-  subsets: ["latin"],
+const lSerif = localFont({
+  src: [
+    {
+      path: "./fonts/L-Regular.woff2",
+      weight: "400",
+      style: "normal",
+    },
+    {
+      path: "./fonts/L-Bold.woff2",
+      weight: "700",
+      style: "normal",
+    },
+  ],
+  variable: "--font-l-serif",
   display: "swap",
 });
 
@@ -31,9 +41,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body
-        className={`${geist.variable} ${instrumentSerif.variable} antialiased`}
-      >
+      <body className={`${geist.variable} ${lSerif.variable} antialiased`}>
         <PostHogProvider>{children}</PostHogProvider>
       </body>
     </html>

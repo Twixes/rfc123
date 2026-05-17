@@ -110,7 +110,7 @@ The app uses Next.js server actions for mutations where applicable:
 
 - Uses Tailwind CSS 4 with custom CSS variables defined in src/app/globals.css
 - Design feel: paper-like — slightly tinted neutral `--background` with `bg-surface` (white) cards sitting on top, 1px hairline borders (`border-gray-20`), `rounded-md` cards
-- Typography: serif headings via `--font-instrument-serif` (Instrument Serif, used for `h1`/`h2` and `font-serif` utilities); body and `h3`+ in sans via `--font-geist` (Geist)
+- Typography: serif headings via `--font-l-serif` (a locally hosted Lastik at `src/app/fonts/L-Variable.woff2`, used for `h1`/`h2` and `font-serif` utilities); body and `h3`+ in sans via `--font-geist` (Geist)
 - Accent colors (`--cyan`, `--magenta`, `--yellow` and their `-light` variants) are muted and used sparingly for status, highlights, and focus rings — not as primary surfaces
 - Line hover effect: yellow left border + gray background
 

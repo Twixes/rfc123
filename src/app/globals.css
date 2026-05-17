@@ -85,7 +85,7 @@
   --color-gray-70: var(--gray-70);
   --color-gray-90: var(--gray-90);
   --font-sans: var(--font-geist);
-  --font-serif: var(--font-instrument-serif);
+  --font-serif: var(--font-l-serif);
   --font-mono: ui-monospace, "SF Mono", Monaco, "Cascadia Code", "Cascadia Mono", "Roboto Mono", Menlo, Consolas, "Liberation Mono", monospace;
 }
 
@@ -101,17 +101,17 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-/* Editorial typography – Instrument Serif for top-level headings only */
+/* Editorial typography – Lastik for top-level headings only */
 h1 {
-  font-family: var(--font-instrument-serif), Georgia, serif;
+  font-family: var(--font-l-serif), Georgia, serif;
   font-weight: 400;
   font-size: 3rem;
   line-height: 1.1;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.02em;
 }
 
 h2 {
-  font-family: var(--font-instrument-serif), Georgia, serif;
+  font-family: var(--font-l-serif), Georgia, serif;
   font-weight: 400;
   font-size: 2.25rem;
   line-height: 1.15;

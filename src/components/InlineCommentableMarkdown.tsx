@@ -845,7 +845,7 @@ export function InlineCommentableMarkdown({
         const lineNumber = (props as any)["data-line-element"];
         return (
           <h1
-            className={`relative mb-3 mt-4 py-2 border-b border-gray-20 text-3xl font-sans! font-semibold! tracking-tight leading-tight text-foreground ${lineNumber ? "cursor-pointer" : ""} ${lineNumber && commentsByLine.has(lineNumber) ? "pr-8" : ""}`}
+            className={`relative mb-3 mt-4 py-2 border-b border-gray-20 text-4xl font-serif! font-normal! tracking-tight leading-tight text-foreground ${lineNumber ? "cursor-pointer" : ""} ${lineNumber && commentsByLine.has(lineNumber) ? "pr-8" : ""}`}
             onClick={() => lineNumber && handleLineClick(lineNumber)}
             onMouseEnter={() => lineNumber && handleMouseEnterLine(lineNumber)}
             onMouseLeave={handleMouseLeaveLine}
@@ -860,7 +860,7 @@ export function InlineCommentableMarkdown({
         const lineNumber = (props as any)["data-line-element"];
         return (
           <h2
-            className={`relative mb-3 mt-3 py-2 border-b border-gray-20 text-2xl font-sans! font-semibold! tracking-tight leading-tight text-foreground ${lineNumber ? "cursor-pointer" : ""} ${lineNumber && commentsByLine.has(lineNumber) ? "pr-8" : ""}`}
+            className={`relative mb-3 mt-3 py-2 border-b border-gray-20 text-3xl font-serif! font-normal! tracking-tight leading-tight text-foreground ${lineNumber ? "cursor-pointer" : ""} ${lineNumber && commentsByLine.has(lineNumber) ? "pr-8" : ""}`}
             onClick={() => lineNumber && handleLineClick(lineNumber)}
             onMouseEnter={() => lineNumber && handleMouseEnterLine(lineNumber)}
             onMouseLeave={handleMouseLeaveLine}
@@ -915,6 +915,9 @@ export function InlineCommentableMarkdown({
         <strong className="font-semibold" {...props}>
           {children}
         </strong>
+      ),
+      hr: ({ node: _node, ...props }: MDProps<"hr">) => (
+        <hr className="my-6 border-0 border-t-2 border-gray-20" {...props} />
       ),
       ul: ({ children, node: _node, ...props }: MDProps<"ul">) => {
         const { "data-line-element": _stripped, ...rest } = props as any;

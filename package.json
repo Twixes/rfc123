@@ -12,7 +12,9 @@
   "dependencies": {
     "@ai-sdk/openai": "^3.0.64",
     "@auth/core": "^0.41.0",
+    "@headlessui/react": "^2.2.10",
     "@upstash/redis": "^1.35.6",
+    "@vvo/tzdb": "^6.198.0",
     "ai": "^6.0.184",
     "convex": "^1.39.1",
     "highlight.js": "^11.11.1",

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import { useEffect, useRef, useState } from "react";
 
 interface AccountDropdownProps {
   user: {
@@ -22,7 +22,8 @@ export default function AccountDropdown({ user }: AccountDropdownProps) {
     }
     if (open) {
       document.addEventListener("mousedown", handleClickOutside);
-      return () => document.removeEventListener("mousedown", handleClickOutside);
+      return () =>
+        document.removeEventListener("mousedown", handleClickOutside);
     }
   }, [open]);
 
@@ -56,16 +57,22 @@ export default function AccountDropdown({ user }: AccountDropdownProps) {
             className="absolute right-0 mt-2 w-40 rounded-md border border-gray-20 bg-surface z-50"
           >
             {user.name && (
-            <div className="px-3 py-2 text-xs text-gray-50 border-b border-gray-20 truncate">
-              {user.name}
-            </div>
-          )}
-          <a
-            href="/api/auth/signout"
-            className="block px-3 py-2 text-sm text-foreground hover:bg-gray-5 transition-colors"
-          >
-            Log out
-          </a>
+              <div className="px-3 py-2 text-xs text-gray-50 border-b border-gray-20 truncate">
+                {user.name}
+              </div>
+            )}
+            <a
+              href="/settings"
+              className="block px-3 py-2 text-sm text-foreground hover:bg-gray-5 transition-colors"
+            >
+              Settings
+            </a>
+            <a
+              href="/api/auth/signout"
+              className="block px-3 py-2 text-sm text-foreground hover:bg-gray-5 transition-colors border-t border-gray-20"
+            >
+              Log out
+            </a>
           </motion.div>
         )}
       </AnimatePresence>

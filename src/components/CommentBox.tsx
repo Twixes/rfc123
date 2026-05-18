@@ -19,6 +19,7 @@ export function CommentBox({
 }: CommentBoxProps) {
   const [comment, setComment] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -53,34 +54,60 @@ export function CommentBox({
     }
   }
 
+  const hasDraft = comment.length > 0;
+  const isActive = isFocused || hasDraft;
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-3">
+    <form
+      onSubmit={handleSubmit}
+      className={`rounded-md border bg-surface transition-colors ${
+        isActive
+          ? "border-cyan/60 shadow-[0_1px_0_0_rgba(0,0,0,0.02)]"
+          : "border-gray-20"
+      }`}
+    >
       <textarea
         value={comment}
         onChange={(e) => setComment(e.target.value)}
-        placeholder="Add a comment..."
-        className="w-full border border-gray-30 rounded-sm bg-surface px-3 py-2 text-sm text-foreground placeholder-gray-50 focus:outline-none focus:ring-2 focus:ring-cyan focus:border-transparent"
-        rows={4}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
+        placeholder="Add a general comment…"
+        className="w-full resize-none rounded-md bg-transparent px-4 py-3 text-sm text-foreground placeholder-gray-40 focus:outline-none"
+        rows={isActive ? 4 : 2}
         disabled={isSubmitting}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+            void handleSubmit(e as unknown as React.FormEvent);
+          }
+        }}
       />
-      <div className="flex gap-3">
-        <button
-          type="submit"
-          disabled={!comment.trim() || isSubmitting}
-          className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-surface transition-all hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-30"
-        >
-          {isSubmitting ? "Posting..." : "Post general comment"}
-        </button>
-        {onCancel && (
+      <div
+        className={`flex items-center justify-between gap-3 border-t border-gray-10 px-4 py-2.5 transition-opacity ${
+          isActive ? "opacity-100" : "opacity-60"
+        }`}
+      >
+        <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-gray-40">
+          ⌘ + Enter to post
+        </span>
+        <div className="flex gap-2">
+          {onCancel && (
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={isSubmitting}
+              className="rounded-md px-3 py-1.5 text-xs font-medium text-gray-50 transition-colors hover:bg-gray-5 hover:text-foreground disabled:opacity-30 cursor-pointer"
+            >
+              Cancel
+            </button>
+          )}
           <button
-            type="button"
-            onClick={onCancel}
-            disabled={isSubmitting}
-            className="rounded-md border border-gray-20 bg-surface px-4 py-2 text-sm font-medium text-foreground transition-all hover:bg-gray-5 disabled:cursor-not-allowed disabled:opacity-30"
+            type="submit"
+            disabled={!comment.trim() || isSubmitting}
+            className="rounded-md bg-foreground px-3.5 py-1.5 text-xs font-medium text-surface transition-all hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-30 cursor-pointer"
           >
-            Cancel
+            {isSubmitting ? "Posting…" : "Post comment"}
           </button>
-        )}
+        </div>
       </div>
     </form>
   );

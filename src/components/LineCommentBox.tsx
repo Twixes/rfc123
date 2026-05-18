@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { motion } from "motion/react";
+import { useEffect, useRef, useState } from "react";
 
 interface LineCommentBoxProps {
   lineNumber: number;
@@ -17,6 +17,13 @@ interface LineCommentBoxProps {
   onMouseLeave?: () => void;
 }
 
+const SPRING = {
+  type: "spring" as const,
+  stiffness: 360,
+  damping: 36,
+  mass: 0.6,
+};
+
 export function LineCommentBox({
   lineNumber,
   endLineNumber,
@@ -30,29 +37,41 @@ export function LineCommentBox({
   onMouseLeave,
 }: LineCommentBoxProps) {
   const [draft, setDraft] = useState(initialDraft);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
   useEffect(() => {
     setDraft(initialDraft);
   }, [initialDraft, lineNumber, endLineNumber]);
 
   const isRange = endLineNumber != null && endLineNumber > lineNumber;
+  const lineLabel = isRange
+    ? `${lineNumber}–${endLineNumber}`
+    : String(lineNumber);
+
   return (
     <motion.div
       ref={commentBoxRef}
-      className="lg:absolute static border border-cyan rounded-md bg-surface p-3 sm:p-4 w-full lg:w-[400px]"
-      initial={{ top: position }}
-      animate={{ top: position }}
-      transition={{ type: "spring", stiffness: 400, damping: 35 }}
+      className="lg:absolute static w-full lg:w-[400px] rounded-md bg-surface border border-cyan/70 shadow-[0_1px_0_0_rgba(0,0,0,0.02),0_10px_28px_-14px_rgba(57,144,168,0.35)]"
+      initial={{ top: position, opacity: 0, y: -2 }}
+      animate={{ top: position, opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -2 }}
+      transition={SPRING}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      <div className="mb-3 flex items-center justify-between">
-        <span className="text-xs font-medium tracking-wide text-gray-50">
-          {isRange ? `Lines ${lineNumber}–${endLineNumber}` : `Line ${lineNumber}`}
+      <div className="flex items-center justify-between py-2.5 pl-3.5 pr-2.5">
+        <span className="inline-flex items-baseline gap-2 font-mono text-[10px] uppercase tracking-[0.12em] text-cyan">
+          <span
+            className="inline-block h-1 w-1 rounded-full bg-cyan"
+            aria-hidden
+          />
+          New note on line {lineLabel}
         </span>
         <button
           type="button"
           onClick={onClose}
-          className="rounded border border-gray-20 bg-surface p-1 transition-all hover:bg-gray-5"
+          className="rounded p-1 text-gray-40 transition-colors hover:bg-gray-5 hover:text-foreground cursor-pointer"
+          aria-label="Close"
         >
           <svg
             className="h-3 w-3"
@@ -70,44 +89,48 @@ export function LineCommentBox({
           </svg>
         </button>
       </div>
-      <textarea
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        placeholder="Add a comment..."
-        className="w-full resize-none border border-gray-30 rounded-sm bg-surface px-3 py-2 text-sm text-foreground placeholder-gray-50 focus:outline-none focus:ring-2 focus:ring-cyan focus:border-transparent"
-        rows={4}
-        autoFocus
-        disabled={isSubmitting}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") {
-            onClose();
-          }
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-            onSubmit(draft);
-          }
-        }}
-      />
-      <div className="mt-3 flex items-center justify-between">
-        <span className="text-xs text-gray-50">
-          ⌘+Enter to submit
-        </span>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={isSubmitting}
-            className="rounded-md border border-gray-20 bg-surface px-3 py-1.5 text-xs font-medium text-foreground transition-all hover:bg-gray-5 disabled:opacity-30"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => onSubmit(draft)}
-            disabled={!draft.trim() || isSubmitting}
-            className="rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-surface transition-all hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-30"
-          >
-            {isSubmitting ? "Posting..." : "Comment"}
-          </button>
+
+      <div className="px-3.5 pb-3 pt-0.5">
+        <textarea
+          ref={textareaRef}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="Add a comment…"
+          className="w-full resize-none rounded-sm border border-gray-20 bg-surface px-3 py-2 text-sm text-foreground placeholder-gray-40 transition-shadow focus:outline-none focus:border-cyan focus:ring-2 focus:ring-cyan/20"
+          rows={4}
+          autoFocus
+          disabled={isSubmitting}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              onClose();
+            }
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+              onSubmit(draft);
+            }
+          }}
+        />
+        <div className="mt-2.5 flex items-center justify-between">
+          <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-gray-40">
+            ⌘ + Enter to send
+          </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isSubmitting}
+              className="rounded-md px-3 py-1.5 text-xs font-medium text-gray-50 transition-colors hover:bg-gray-5 hover:text-foreground disabled:opacity-30 cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => onSubmit(draft)}
+              disabled={!draft.trim() || isSubmitting}
+              className="rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-surface transition-all hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-30 cursor-pointer"
+            >
+              {isSubmitting ? "Sending…" : "Comment"}
+            </button>
+          </div>
         </div>
       </div>
     </motion.div>

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { GeneralCommentsSection } from "@/components/GeneralCommentsSection";
 import { InlineCommentableMarkdown } from "@/components/InlineCommentableMarkdown";
 import { MarkdownRawView } from "@/components/MarkdownRawView";
+import RFCDetailLoadingSkeleton from "@/components/RFCDetailLoadingSkeleton";
 import { RFCMetadataHeader } from "@/components/RFCMetadataHeader";
 import RFCsTopBar from "@/components/RFCsTopBar";
 import type { Comment, RFCDetail } from "@/lib/github";
@@ -205,115 +206,17 @@ export default function RFCDetailClient({
 
   if (isLoading) {
     return (
-      <div className="mx-auto max-w-360 min-h-screen px-4 sm:px-8 py-6 sm:py-12">
-        <RFCsTopBar
-          user={{ name: currentUser, image: currentUserAvatar }}
-        />
-
-        {/* RFCMetadataHeader Skeleton */}
-        <div className="mb-4 border border-gray-20 rounded-md bg-surface p-4 sm:p-8">
-          <div className="mb-2 flex items-start justify-between gap-4">
-            <div className="flex items-baseline gap-4">
-              <div className="h-5 w-20 animate-pulse rounded bg-gray-20" />
-              <div className="h-7 w-16 animate-pulse rounded-sm border border-gray-20 bg-gray-5" />
-            </div>
-            <div className="h-10 w-40 animate-pulse rounded-md border border-gray-20 bg-gray-10" />
-          </div>
-
-          <div className="mb-6 h-10 w-3/4 animate-pulse rounded bg-gray-20" />
-
-          <div className="grid grid-cols-1 gap-x-8 gap-y-6 border-t border-gray-20 pt-6 sm:grid-cols-2 lg:grid-cols-4">
-            <div>
-              <div className="mb-2 h-3 w-16 animate-pulse rounded bg-gray-20" />
-              <div className="flex items-center gap-2">
-                <div className="h-6 w-6 animate-pulse rounded-full bg-gray-20" />
-                <div className="h-4 w-24 animate-pulse rounded bg-gray-20" />
-              </div>
-            </div>
-
-            <div>
-              <div className="mb-2 h-3 w-20 animate-pulse rounded bg-gray-20" />
-              <div className="flex items-center gap-2">
-                <div className="h-6 w-6 animate-pulse rounded-full bg-gray-20" />
-                <div className="h-6 w-6 animate-pulse rounded-full bg-gray-20" />
-                <div className="h-6 w-6 animate-pulse rounded-full bg-gray-20" />
-              </div>
-            </div>
-
-            <div>
-              <div className="mb-2 h-3 w-16 animate-pulse rounded bg-gray-20" />
-              <div className="h-4 w-28 animate-pulse rounded bg-gray-20" />
-            </div>
-
-            <div>
-              <div className="mb-2 h-3 w-28 animate-pulse rounded bg-gray-20" />
-              <div className="h-4 w-8 animate-pulse rounded bg-gray-20" />
-            </div>
-          </div>
-        </div>
-
-        {/* Markdown Content Skeleton */}
-        <div className="border border-gray-20 rounded-md bg-surface p-4 sm:p-8">
-          <div className="space-y-4">
-            <div className="h-6 w-full animate-pulse rounded bg-gray-20" />
-            <div className="h-6 w-5/6 animate-pulse rounded bg-gray-20" />
-            <div className="h-6 w-full animate-pulse rounded bg-gray-20" />
-            <div className="h-6 w-4/5 animate-pulse rounded bg-gray-20" />
-
-            <div className="py-4" />
-
-            <div className="h-6 w-full animate-pulse rounded bg-gray-20" />
-            <div className="h-6 w-full animate-pulse rounded bg-gray-20" />
-            <div className="h-6 w-3/4 animate-pulse rounded bg-gray-20" />
-
-            <div className="py-4" />
-
-            <div className="h-32 w-full animate-pulse rounded border border-gray-20 bg-gray-5" />
-
-            <div className="py-4" />
-
-            <div className="h-6 w-full animate-pulse rounded bg-gray-20" />
-            <div className="h-6 w-5/6 animate-pulse rounded bg-gray-20" />
-            <div className="h-6 w-full animate-pulse rounded bg-gray-20" />
-          </div>
-        </div>
-
-        {/* General Comments Section Skeleton */}
-        <div className="mt-8 border border-gray-20 rounded-md bg-surface p-4 sm:p-8">
-          <div className="mb-6 h-8 w-48 animate-pulse rounded bg-gray-20" />
-
-          <div className="space-y-6">
-            {[...Array(3)].map((_, index) => (
-              <div
-                key={index}
-                className="border-b border-gray-20 pb-6 last:border-0"
-              >
-                <div className="mb-4 flex items-start gap-3">
-                  <div className="h-8 w-8 animate-pulse rounded-full bg-gray-20" />
-                  <div className="flex-1">
-                    <div className="mb-2 h-4 w-32 animate-pulse rounded bg-gray-20" />
-                    <div className="h-3 w-24 animate-pulse rounded bg-gray-20" />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <div className="h-4 w-full animate-pulse rounded bg-gray-20" />
-                  <div className="h-4 w-5/6 animate-pulse rounded bg-gray-20" />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+      <RFCDetailLoadingSkeleton
+        user={{ name: currentUser, image: currentUserAvatar }}
+      />
     );
   }
 
   if (error || !rfc) {
     return (
       <div className="mx-auto max-w-360 min-h-screen px-4 sm:px-8 py-6 sm:py-12">
-        <RFCsTopBar
-          user={{ name: currentUser, image: currentUserAvatar }}
-        />
-        <div className="text-center text-red-500 py-12">
+        <RFCsTopBar user={{ name: currentUser, image: currentUserAvatar }} />
+        <div className="py-12 text-center text-sm text-magenta">
           {error || "Failed to load RFC"}
         </div>
       </div>
@@ -329,12 +232,12 @@ export default function RFCDetailClient({
     <div className="mx-auto max-w-360 min-h-screen px-4 sm:px-8 py-6 sm:py-12">
       <RFCsTopBar user={{ name: currentUser, image: currentUserAvatar }} />
 
-      <RFCMetadataHeader rfc={rfc} />
+      <RFCMetadataHeader
+        rfc={rfc}
+        actions={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
+      />
 
-      <div className="relative border border-gray-20 rounded-md bg-surface p-4 sm:p-8">
-        <div className="absolute top-4 right-4 sm:top-8 sm:right-8 z-10">
-          <ViewModeToggle value={viewMode} onChange={setViewMode} />
-        </div>
+      <div className="relative border-t border-gray-20 pt-8">
         {viewMode === "pretty" ? (
           <InlineCommentableMarkdown
             content={rfc.markdownContent}

@@ -1,117 +1,131 @@
-import type { RFCDetail } from "@/lib/github";
+import type { ReactNode } from "react";
 import { ProfilePictures } from "@/components/ProfilePictures";
 import { RelativeTime } from "@/components/RelativeTime";
+import type { RFCDetail } from "@/lib/github";
 
 interface RFCMetadataHeaderProps {
   rfc: RFCDetail;
+  /** Optional inline controls rendered in the right-hand action cluster (e.g. view mode toggle). */
+  actions?: ReactNode;
 }
 
-export function RFCMetadataHeader({ rfc }: RFCMetadataHeaderProps) {
+const STATUS_TONE: Record<RFCDetail["status"], { dot: string; label: string }> =
+  {
+    open: { dot: "bg-cyan", label: "Open" },
+    merged: { dot: "bg-yellow", label: "Merged" },
+    closed: { dot: "bg-gray-40", label: "Closed" },
+  };
+
+export function RFCMetadataHeader({ rfc, actions }: RFCMetadataHeaderProps) {
+  const tone = STATUS_TONE[rfc.status];
+
   return (
-    <div className="mb-4 border border-gray-20 rounded-md bg-surface p-4 sm:p-8">
-      <div className="mb-2 flex flex-col sm:flex-row items-start sm:justify-between gap-3 sm:gap-4">
-        <div className="flex items-baseline gap-2 sm:gap-4 flex-wrap">
-          <span className="text-xs sm:text-sm font-medium tracking-widest text-gray-40 uppercase">
-            RFC {rfc.number}
-          </span>
-          {rfc.reviewRequested && (
-            <span
-              className="border border-magenta bg-magenta-light text-foreground rounded-sm px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-xs font-medium uppercase tracking-wider"
-            >
-              Review Requested
-            </span>
-          )}
+    <section className="mb-6">
+      {/* Eyebrow row: small caps status + RFC number, right-aligned outbound link */}
+      <div className="mb-6 flex items-center gap-3">
+        <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-gray-50">
+          RFC #{rfc.number}
+        </span>
+        <span className="h-px flex-1 bg-gray-20" />
+        <span className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.18em] text-gray-70">
           <span
-            className={`border rounded-sm px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-xs font-medium uppercase tracking-wider text-foreground ${
-              rfc.status === "open"
-                ? "border-cyan bg-cyan-light"
-                : rfc.status === "merged"
-                  ? "border-yellow bg-yellow-light"
-                  : "border-gray-30 bg-gray-5"
-            }`}
-          >
-            {rfc.status}
+            className={`inline-block h-1.5 w-1.5 rounded-full ${tone.dot}`}
+            aria-hidden
+          />
+          {tone.label}
+        </span>
+        {rfc.reviewRequested && (
+          <span className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.18em] text-magenta">
+            <span
+              className="inline-block h-1.5 w-1.5 rounded-full bg-magenta"
+              aria-hidden
+            />
+            Review requested
           </span>
-        </div>
+        )}
         <a
           href={rfc.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-2 rounded-md border border-gray-20 bg-surface px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-foreground transition-all hover:bg-gray-5 w-full sm:w-auto justify-center"
+          className="ml-1 inline-flex items-center gap-1 text-[11px] uppercase tracking-[0.18em] text-gray-50 transition-colors hover:text-foreground"
         >
-          View on GitHub
+          GitHub
           <svg
-            className="h-3 sm:h-4 w-3 sm:w-4"
+            className="h-3 w-3"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
-            aria-hidden="true"
+            role="img"
+            aria-label="Open in new tab"
           >
+            <title>Open in new tab</title>
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
               strokeWidth={2}
-              d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+              d="M14 4h6m0 0v6m0-6L10 14M6 6h4M6 6v12a2 2 0 002 2h12"
             />
           </svg>
         </a>
       </div>
 
-      <h1 className="mb-6 text-3xl sm:text-5xl font-serif font-normal tracking-tight text-foreground">
-        {rfc.title}
-      </h1>
+      {/* Title block */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <h1 className="max-w-3xl text-balance text-3xl sm:text-5xl font-serif font-normal leading-[1.05] tracking-tight text-foreground">
+          {rfc.title}
+        </h1>
+        {actions && <div className="shrink-0 sm:pb-1.5">{actions}</div>}
+      </div>
 
-      <div className="grid grid-cols-1 gap-x-8 gap-y-6 border-t border-gray-20 pt-6 sm:grid-cols-2 lg:grid-cols-4">
-        <div>
-          <dt className="mb-2 text-xs font-medium uppercase tracking-widest text-gray-40">
-            Author
-          </dt>
+      {/* Byline – author, time, comments, reviewers, all on one quiet line */}
+      <dl className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-3 text-sm text-gray-70">
+        <div className="flex items-center gap-2">
+          <dt className="sr-only">Author</dt>
           <dd className="flex items-center gap-2">
-            <div className="h-6 w-6 rounded-full overflow-hidden border border-gray-20">
-              <img
-                src={rfc.authorAvatar}
-                alt={rfc.author}
-                className="h-full w-full"
-              />
-            </div>
-            <span className="text-sm font-medium text-foreground">{rfc.author}</span>
+            <img
+              src={rfc.authorAvatar}
+              alt={rfc.author}
+              className="h-5 w-5 rounded-full border border-gray-20"
+            />
+            <span className="font-medium text-foreground">{rfc.author}</span>
           </dd>
         </div>
 
-        {rfc.reviewers.length > 0 && (
-          <div>
-            <dt className="mb-2 text-xs font-medium uppercase tracking-widest text-gray-40">
-              Reviewers
-            </dt>
-            <dd>
-              <ProfilePictures
-                users={rfc.reviewers.map((r) => ({
-                  name: r.login,
-                  avatar: r.avatar,
-                }))}
-              />
-            </dd>
-          </div>
-        )}
+        <span className="h-3 w-px bg-gray-20" aria-hidden />
 
-        <div>
-          <dt className="mb-2 text-xs font-medium uppercase tracking-widest text-gray-40">
-            Updated
-          </dt>
-          <dd className="text-sm font-medium text-foreground">
+        <div className="flex items-center gap-1.5">
+          <dt className="text-gray-50">Updated</dt>
+          <dd className="text-foreground">
             <RelativeTime date={rfc.updatedAt} />
           </dd>
         </div>
 
-        <div>
-          <dt className="mb-2 text-xs font-medium uppercase tracking-widest text-gray-40">
-            Comments total
-          </dt>
-          <dd className="text-sm font-medium text-foreground">
-            {rfc.commentCount ?? "–"}
+        <span className="h-3 w-px bg-gray-20" aria-hidden />
+
+        <div className="flex items-center gap-1.5">
+          <dt className="text-gray-50">Comments</dt>
+          <dd className="font-mono tabular-nums text-foreground">
+            {rfc.commentCount ?? "—"}
           </dd>
         </div>
-      </div>
-    </div>
+
+        {rfc.reviewers.length > 0 && (
+          <>
+            <span className="h-3 w-px bg-gray-20" aria-hidden />
+            <div className="flex items-center gap-2">
+              <dt className="text-gray-50">Reviewing</dt>
+              <dd>
+                <ProfilePictures
+                  users={rfc.reviewers.map((r) => ({
+                    name: r.login,
+                    avatar: r.avatar,
+                  }))}
+                />
+              </dd>
+            </div>
+          </>
+        )}
+      </dl>
+    </section>
   );
 }

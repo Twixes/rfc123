@@ -1,0 +1,17 @@
+{
+  "name": "rfc123-skills",
+  "displayName": "RFC123 Skills",
+  "version": "0.1.0",
+  "description": "Agent skills for collaborating on engineering RFCs through the RFC123 MCP server – drafting, synthesizing discussion, registering decisions, and more.",
+  "homepage": "https://github.com/PostHog/rfc-123",
+  "skills": [
+    "skills/draft-rfc",
+    "skills/synthesize-discussion",
+    "skills/propose-revision",
+    "skills/compare-alternatives",
+    "skills/extract-action-items",
+    "skills/suggest-reviewers",
+    "skills/register-decision",
+    "skills/resolve-threads"
+  ]
+}

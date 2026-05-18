@@ -49,4 +49,48 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_user_and_team", ["userId", "teamId"]),
+
+  // OAuth 2.1 + Dynamic Client Registration clients for the /mcp endpoint.
+  // Each registered MCP client (Claude.ai, ChatGPT, an IDE, …) gets one row.
+  // We don't store `clientSecret` for public clients; for confidential clients
+  // we store a SHA-256 hash.
+  mcpClients: defineTable({
+    clientId: v.string(),
+    clientSecretHash: v.optional(v.string()),
+    clientName: v.string(),
+    redirectUris: v.array(v.string()),
+    tokenEndpointAuthMethod: v.string(), // "none" (public) | "client_secret_post"
+    grantTypes: v.array(v.string()),
+    responseTypes: v.array(v.string()),
+    scope: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_client_id", ["clientId"]),
+
+  // Short-lived authorization codes minted by /authorize and consumed once at
+  // /token. PKCE-required (S256). Codes expire in ~10 minutes.
+  mcpAuthCodes: defineTable({
+    code: v.string(),
+    clientId: v.string(),
+    userId: v.id("users"),
+    redirectUri: v.string(),
+    codeChallenge: v.string(),
+    codeChallengeMethod: v.string(),
+    scope: v.optional(v.string()),
+    expiresAt: v.number(),
+    consumed: v.boolean(),
+  }).index("by_code", ["code"]),
+
+  // Opaque MCP access tokens. The MCP server hands these to clients; we look
+  // them up on every /mcp request to resolve the acting user. The user row
+  // still holds the user's GitHub access token used to drive GitHub API calls.
+  mcpAccessTokens: defineTable({
+    token: v.string(),
+    clientId: v.string(),
+    userId: v.id("users"),
+    scope: v.optional(v.string()),
+    expiresAt: v.number(),
+    revokedAt: v.optional(v.number()),
+  })
+    .index("by_token", ["token"])
+    .index("by_user", ["userId"]),
 });

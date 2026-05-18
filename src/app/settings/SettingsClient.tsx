@@ -183,7 +183,7 @@ export default function SettingsClient({
     <div
       className="border border-gray-20 rounded-md bg-surface p-6 sm:p-8"
     >
-      <div className="mb-3 h-0.5 w-12 bg-cyan" />
+      <div className="mb-3 h-0.75 w-12 bg-cyan" />
       <h1 className="text-foreground">Settings</h1>
       <p className="mt-2 mb-6 text-gray-70">
         Configure connection to Slack, and a daily nudge there on the RFCs

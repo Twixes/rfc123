@@ -34,7 +34,30 @@ export interface RFC {
   reviewRequested: boolean;
   /** Team slugs (e.g. ["posthog/web"]) requested as reviewers. */
   requestedTeamSlugs: string[];
+  /** Issue/PR labels — agents/managers use these for filtering and to derive
+   *  `hasDecision` (set by rfc123_register_decision). */
+  labels: string[];
+  /** GitHub's aggregate review decision. `null` if no reviews submitted yet. */
+  reviewDecision: "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED" | null;
+  /** True if any label matches the "decision-registered" convention. Lets a
+   *  manager scan portfolios for un-decided RFCs without fetching bodies. */
+  hasDecision: boolean;
 }
+
+export interface DecisionBlock {
+  date: string;
+  decidedBy: string | null;
+  decision: string;
+  rationale: string | null;
+}
+
+/** Per-reviewer verdict, derived from PR reviews + pending requests. */
+export type ReviewerVerdict =
+  | "APPROVED"
+  | "CHANGES_REQUESTED"
+  | "COMMENTED"
+  | "DISMISSED"
+  | "PENDING";
 
 export interface RFCDetail extends RFC {
   body: string;
@@ -42,8 +65,77 @@ export interface RFCDetail extends RFC {
   markdownFilePath: string | null;
   /** PR head branch ref; used to resolve relative image paths to repo files */
   headRef: string;
-  reviewers: Array<{ login: string; avatar: string; yetToReview: boolean }>;
+  /** Head commit SHA — agents/UI use this for line-anchored review APIs. */
+  headSha: string;
+  reviewers: Array<{
+    login: string;
+    avatar: string;
+    yetToReview: boolean;
+    /** Last review verdict from this reviewer, or PENDING when still requested. */
+    state: ReviewerVerdict;
+    submittedAt: string | null;
+  }>;
+  /** Decision blocks parsed out of the body's `## Decisions` section, in
+   *  document order. Empty when no decision has been registered. */
+  decisionBlocks: DecisionBlock[];
+  /** GitHub's coarse merge state: clean / blocked / behind / unstable / dirty / unknown. */
+  mergeStateStatus: string | null;
+  /** Boolean GitHub merge-readiness (null = not yet computed). */
+  mergeable: boolean | null;
   comments: Comment[];
+}
+
+/** Standard label name used to mark "this RFC has a registered decision". */
+export const DECISION_LABEL = "decision-registered";
+
+/**
+ * Pull every `### Decision (YYYY-MM-DD[ by @login])` heading out of the body
+ * along with the text and optional `**Rationale:** ...` line that follows.
+ * Strict on the heading format because that's what `registerDecision` emits.
+ */
+export function parseDecisionBlocks(body: string): DecisionBlock[] {
+  const out: DecisionBlock[] = [];
+  const lines = body.split("\n");
+  let inFence = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.startsWith("```")) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+    const m = line.match(/^###\s+Decision\s+\((\d{4}-\d{2}-\d{2})(?:\s+by\s+@([\w-]+))?\)/);
+    if (!m) continue;
+    const date = m[1];
+    const decidedBy = m[2] ?? null;
+    let j = i + 1;
+    while (j < lines.length && lines[j].trim() === "") j++;
+    let decision = "";
+    while (
+      j < lines.length &&
+      !/^###?\s/.test(lines[j]) &&
+      !/^\*\*Rationale:\*\*/.test(lines[j])
+    ) {
+      decision += (decision ? "\n" : "") + lines[j];
+      j++;
+    }
+    let rationale: string | null = null;
+    if (j < lines.length && /^\*\*Rationale:\*\*/.test(lines[j])) {
+      rationale = lines[j].replace(/^\*\*Rationale:\*\*\s*/, "");
+      j++;
+      while (j < lines.length && !/^###?\s/.test(lines[j])) {
+        if (lines[j].trim() !== "") rationale += "\n" + lines[j];
+        j++;
+      }
+    }
+    out.push({
+      date,
+      decidedBy,
+      decision: decision.trim(),
+      rationale: rationale?.trim() || null,
+    });
+  }
+  return out;
 }
 
 export interface Comment {
@@ -251,6 +343,10 @@ export async function listRFCs(
               updatedAt
               mergedAt
               url
+              reviewDecision
+              labels(first: 20) {
+                nodes { name }
+              }
               author {
                 login
                 avatarUrl
@@ -281,7 +377,7 @@ export async function listRFCs(
 
     // Check cache first. Key includes the team-fields variant so we don't
     // serve a no-team-slugs payload to a caller that has `read:org`.
-    const cacheKey = `rfcs:${owner}:${repo}:graphql:${withTeamFields ? "with-teams" : "no-teams"}`;
+    const cacheKey = `rfcs:${owner}:${repo}:graphql:${withTeamFields ? "with-teams" : "no-teams"}:v2`;
     let pulls: any[] = [];
     const cachedPulls = await getCachedJsonData<any[]>(cacheKey);
 
@@ -325,6 +421,8 @@ export async function listRFCs(
           })
           .filter((s: string | null): s is string => !!s) ?? [];
 
+      const labels: string[] =
+        pr.labels?.nodes?.map((n: any) => n.name).filter(Boolean) ?? [];
       return {
         number: pr.number,
         title: pr.title,
@@ -344,6 +442,8 @@ export async function listRFCs(
         _regularCommentCount: pr.comments.totalCount,
         _reviewRequested: reviewRequested || false,
         _requestedTeamSlugs: requestedTeamSlugs,
+        _labels: labels,
+        _reviewDecision: pr.reviewDecision ?? null,
       };
     });
 
@@ -385,6 +485,9 @@ export async function listRFCs(
       repo,
       reviewRequested: pr._reviewRequested,
       requestedTeamSlugs: pr._requestedTeamSlugs ?? [],
+      labels: pr._labels ?? [],
+      reviewDecision: pr._reviewDecision ?? null,
+      hasDecision: (pr._labels ?? []).includes(DECISION_LABEL),
     }));
   } catch (error) {
     captureServerException(error as Error, undefined, {
@@ -568,8 +671,10 @@ export async function getRFCDetail(
     const t0 = performance.now();
     const octokit = await getOctokit(accessToken);
 
-    // Check cache for RFC content (PR details + markdown + reviewers)
-    const contentCacheKey = `rfc:${owner}:${repo}:${prNumber}:content`;
+    // Check cache for RFC content (PR details + markdown + reviewers).
+    // The `:v2` suffix invalidates pre-enrichment shapes that lacked
+    // per-reviewer state + submittedAt.
+    const contentCacheKey = `rfc:${owner}:${repo}:${prNumber}:content:v2`;
     interface CachedRFCContent {
       pr: any;
       files: any[];
@@ -713,21 +818,49 @@ export async function getRFCDetail(
         }
       }
 
-      // Build reviewers list
-      const reviewersAlreadyAccountedFor: Set<string> = new Set();
-      reviewers = [];
+      // Build reviewers list — take the *latest* review state per user so the
+      // displayed verdict reflects "where are they now" not "where were they
+      // when they first commented".
+      const latestByLogin = new Map<
+        string,
+        { state: ReviewerVerdict; submittedAt: string | null; avatar: string }
+      >();
+      const reviewStateMap: Record<string, ReviewerVerdict> = {
+        APPROVED: "APPROVED",
+        CHANGES_REQUESTED: "CHANGES_REQUESTED",
+        COMMENTED: "COMMENTED",
+        DISMISSED: "DISMISSED",
+      };
       for (const review of reviewsRes.data) {
+        if (!review.user) continue;
+        const mapped = reviewStateMap[review.state as string];
+        if (!mapped) continue;
+        const existing = latestByLogin.get(review.user.login);
+        const submittedAt = review.submitted_at ?? null;
         if (
-          review.user &&
-          !reviewersAlreadyAccountedFor.has(review.user.login)
+          !existing ||
+          (submittedAt &&
+            existing.submittedAt &&
+            new Date(submittedAt) > new Date(existing.submittedAt))
         ) {
-          reviewers.push({
-            login: review.user.login,
+          latestByLogin.set(review.user.login, {
+            state: mapped,
+            submittedAt,
             avatar: review.user.avatar_url,
-            yetToReview: false,
           });
-          reviewersAlreadyAccountedFor.add(review.user.login);
         }
+      }
+      reviewers = [];
+      const reviewersAlreadyAccountedFor: Set<string> = new Set();
+      for (const [login, info] of latestByLogin.entries()) {
+        reviewers.push({
+          login,
+          avatar: info.avatar,
+          yetToReview: false,
+          state: info.state,
+          submittedAt: info.submittedAt,
+        });
+        reviewersAlreadyAccountedFor.add(login);
       }
       for (const requestedReviewer of requestedReviewersRes.data.users) {
         if (!reviewersAlreadyAccountedFor.has(requestedReviewer.login)) {
@@ -735,6 +868,8 @@ export async function getRFCDetail(
             login: requestedReviewer.login,
             avatar: requestedReviewer.avatar_url,
             yetToReview: true,
+            state: "PENDING",
+            submittedAt: null,
           });
         }
       }
@@ -765,6 +900,11 @@ export async function getRFCDetail(
 
     const reviewRequested = requestedReviewerLogins.includes(currentUserLogin);
 
+    const labels: string[] = (pr.labels ?? [])
+      .map((l: any) => l.name)
+      .filter(Boolean);
+    const decisionBlocks = parseDecisionBlocks(markdownContent);
+
     console.log(
       `[getRFCDetail] total took ${(performance.now() - t0).toFixed(0)}ms`,
     );
@@ -788,12 +928,20 @@ export async function getRFCDetail(
       markdownContent,
       markdownFilePath,
       headRef: pr.head.ref,
+      headSha: pr.head.sha,
       reviewers,
       reviewRequested: reviewRequested || false,
       // RFCDetail doesn't need teams for now (it's used for the page view,
       // where direct review-requested is what matters). Empty for parity
       // with the RFC type.
       requestedTeamSlugs: [],
+      labels,
+      reviewDecision: null,
+      hasDecision:
+        labels.includes(DECISION_LABEL) || decisionBlocks.length > 0,
+      decisionBlocks,
+      mergeStateStatus: (pr.mergeable_state as string | null) ?? null,
+      mergeable: pr.mergeable ?? null,
       comments: [], // Comments are loaded progressively by the client
     };
   } catch (error) {
@@ -817,6 +965,7 @@ export async function postComment(
   path?: string,
   line?: number,
   replyToCommentId?: number,
+  range?: { startLine?: number; side?: "LEFT" | "RIGHT"; startSide?: "LEFT" | "RIGHT" },
 ): Promise<void> {
   try {
     const octokit = await getOctokit(accessToken);
@@ -844,6 +993,9 @@ export async function postComment(
         commit_id: pr.head.sha,
         path,
         line,
+        side: range?.side,
+        start_line: range?.startLine,
+        start_side: range?.startSide,
       });
     } else {
       await octokit.rest.issues.createComment({
@@ -1141,6 +1293,10 @@ export interface CreateRFCInput {
   reviewers: string[];
   /** Open as draft PR. */
   draft: boolean;
+  /** Override the RFC directory (default: auto-detect from existing layout). */
+  directory?: string;
+  /** Override the branch name (default: `rfc/<username>/<slug>`). */
+  branchName?: string;
 }
 
 export interface CreateRFCResult {
@@ -1150,6 +1306,40 @@ export interface CreateRFCResult {
   branch: string;
   filePath: string;
   htmlUrl: string;
+  draft: boolean;
+  /** The directory the RFC was committed to (auto-detected or explicit). */
+  directory: string;
+}
+
+/**
+ * Detect the conventional RFC directory in a repo by probing well-known
+ * locations. Returns `requests-for-comments` as the default for new repos so
+ * the layout stays consistent with the rest of the ecosystem.
+ */
+export async function detectRfcDirectory(
+  accessToken: string,
+  owner: string,
+  repo: string,
+): Promise<string> {
+  const cacheKey = `repo_rfc_dir:${owner}:${repo}`;
+  const cached = await getCachedJsonData<string>(cacheKey);
+  if (cached) return cached;
+  const octokit = await getOctokit(accessToken);
+  const candidates = ["requests-for-comments", "RFCs", "rfcs", "docs/rfcs"];
+  for (const path of candidates) {
+    try {
+      const res = await octokit.rest.repos.getContent({ owner, repo, path });
+      if (Array.isArray(res.data)) {
+        await setCachedJsonData(cacheKey, path, 3600);
+        return path;
+      }
+    } catch {
+      // not present — try next
+    }
+  }
+  const fallback = "requests-for-comments";
+  await setCachedJsonData(cacheKey, fallback, 3600);
+  return fallback;
 }
 
 /**
@@ -1202,8 +1392,10 @@ export async function createRFC(
     //    random 4-letter suffix to both so they stay aligned. Slugify the
     //    username defensively – GitHub logins are already URL-safe, but the
     //    client preview passes display names which may contain spaces/caps.
-    const baseBranch = `rfc/${slugify(username)}/${slug}`;
-    const baseFilePath = `requests-for-comments/${slug}.md`;
+    const directory =
+      input.directory ?? (await detectRfcDirectory(accessToken, owner, repo));
+    const baseBranch = input.branchName ?? `rfc/${slugify(username)}/${slug}`;
+    const baseFilePath = `${directory}/${slug}.md`;
 
     let branchName = baseBranch;
     let filePath = baseFilePath;
@@ -1219,7 +1411,7 @@ export async function createRFC(
     while (collision && attempts < 5) {
       const suffix = randomSuffix();
       branchName = `${baseBranch}-${suffix}`;
-      filePath = `requests-for-comments/${slug}-${suffix}.md`;
+      filePath = `${directory}/${slug}-${suffix}.md`;
       collision = await hasBranchOrFile(
         octokit,
         owner,
@@ -1294,6 +1486,8 @@ export async function createRFC(
       branch: branchName,
       filePath,
       htmlUrl: pr.html_url,
+      draft,
+      directory,
     };
   } catch (error) {
     captureServerException(error as Error, undefined, {

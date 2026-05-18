@@ -10,6 +10,7 @@
 
 import type * as crons from "../crons.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as mcpOAuth from "../mcpOAuth.js";
 import type * as notifications from "../notifications.js";
 import type * as slack from "../slack.js";
 import type * as users from "../users.js";
@@ -23,6 +24,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   "lib/auth": typeof lib_auth;
+  mcpOAuth: typeof mcpOAuth;
   notifications: typeof notifications;
   slack: typeof slack;
   users: typeof users;

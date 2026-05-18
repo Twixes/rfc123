@@ -64,12 +64,12 @@ export default async function LandingPage() {
             </h1>
 
             <div className="flex items-center gap-2 flex-wrap justify-end">
+              <ConnectAgentButton
+                variant="secondary"
+                label="Connect agent"
+              />
               {session ? (
                 <>
-                  <ConnectAgentButton
-                    variant="secondary"
-                    label="Connect agent"
-                  />
                   <Link href="/rfcs" className={SECONDARY_BTN}>
                     <ListIcon />
                     View RFCs
@@ -88,7 +88,7 @@ export default async function LandingPage() {
                   }}
                 >
                   <button type="submit" className={PRIMARY_BTN}>
-                    Sign in with GitHub
+                    Sign in/up with GitHub
                   </button>
                 </form>
               )}

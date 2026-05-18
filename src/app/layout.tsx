@@ -31,7 +31,7 @@ export const metadata: Metadata = {
     template: "%s - RFC123",
     default: "RFC123",
   },
-  description: "The RFC platform for teams: 1. draft, 2. discuss, 3. decide.",
+  description: "The agent-native RFC platform for teams: 1. draft, 2. discuss, 3. decide.",
 };
 
 export default function RootLayout({

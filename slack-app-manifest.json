@@ -1,7 +1,7 @@
 {
   "display_information": {
       "name": "RFC123",
-      "description": "The RFC platform for teams.",
+      "description": "The agent-native RFC platform for teams.",
       "background_color": "#5b9eb5",
       "long_description": "RFC123 helps teams ship better RFCs faster. This Slack app sends you a daily briefing of every open, non-draft RFC where you (or your GitHub team) are tagged as a reviewer, so decisions don't slip."
   },

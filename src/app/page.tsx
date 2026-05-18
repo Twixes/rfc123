@@ -96,7 +96,7 @@ export default async function LandingPage() {
           </div>
 
           <p className="mb-4 text-lg sm:text-xl font-light leading-tight text-gray-70">
-            The{" "}
+            The agent-native{" "}
             <abbr title="Request for Comments" className="cursor-help">
               RFC
             </abbr>{" "}

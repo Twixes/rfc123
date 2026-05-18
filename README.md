@@ -1,6 +1,6 @@
 # RFC123
 
-The RFC platform for teams.
+The agent-native RFC platform for teams.
 
 1. Draft
 2. Discuss

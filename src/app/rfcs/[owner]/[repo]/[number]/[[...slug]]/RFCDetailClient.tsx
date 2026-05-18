@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { DiscussWithAgentButton } from "@/components/DiscussWithAgentButton";
 import { GeneralCommentsSection } from "@/components/GeneralCommentsSection";
 import { InlineCommentableMarkdown } from "@/components/InlineCommentableMarkdown";
 import { MarkdownRawView } from "@/components/MarkdownRawView";
@@ -234,7 +235,18 @@ export default function RFCDetailClient({
 
       <RFCMetadataHeader
         rfc={rfc}
-        actions={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
+        actions={
+          <div className="flex items-center gap-2">
+            <DiscussWithAgentButton
+              owner={owner}
+              repo={repo}
+              prNumber={rfc.number}
+              title={rfc.title}
+              author={rfc.author}
+            />
+            <ViewModeToggle value={viewMode} onChange={setViewMode} />
+          </div>
+        }
       />
 
       <div className="relative border-t border-gray-20 pt-8">

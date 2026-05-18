@@ -13,7 +13,7 @@ const userArgs = {
 /**
  * Upsert the user's identity + GitHub token. Called from NextAuth's JWT
  * callback so the token stays fresh in Convex. Creates the row on first
- * sign-in with sensible defaults (notifications off, 9 AM UTC) — the user
+ * sign-in with sensible defaults (notifications off, 9 AM UTC) – the user
  * sets a real timezone the first time they open /settings.
  */
 export const upsertFromGithub = mutation({
@@ -98,7 +98,7 @@ export const saveNotificationPrefs = mutation({
 
 /**
  * Flip the digest on. Called by the Slack OAuth callback after a successful
- * install/link — the act of connecting Slack is itself opt-in.
+ * install/link – the act of connecting Slack is itself opt-in.
  */
 export const enableNotifications = mutation({
   args: { secret: v.string(), githubUserId: v.number() },
@@ -119,7 +119,7 @@ export const enableNotifications = mutation({
 
 /**
  * Called by the briefing worker. Returns every user with notifications
- * enabled — the worker re-derives each one's local clock to decide who is
+ * enabled – the worker re-derives each one's local clock to decide who is
  * actually due right now. Bounded; this is a small users table.
  */
 export const listEnabledUsersWithActiveLink = query({

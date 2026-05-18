@@ -21,7 +21,7 @@ import { LineCommentBox } from "@/components/LineCommentBox";
 import { ExistingLineComments } from "@/components/ExistingLineComments";
 import { ProfilePictures } from "@/components/ProfilePictures";
 
-// Module-level constants — stable references across all renders and instances.
+// Module-level constants – stable references across all renders and instances.
 type PluginList = NonNullable<React.ComponentProps<typeof ReactMarkdown>["rehypePlugins"]>;
 const REMARK_PLUGINS: PluginList = [
   remarkGfm,
@@ -84,7 +84,7 @@ const LineNumbersColumn = memo(function LineNumbersColumn({
         const lineNumber = index + 1;
 
         // Only show line numbers for lines that have rendered content (DOM marker) or comments.
-        // Blank lines have no marker, so they would bunch up — hide them.
+        // Blank lines have no marker, so they would bunch up – hide them.
         const hasMarker = linesWithMarkers.has(lineNumber);
         const hasComments = commentsByLine.has(lineNumber);
         if (!hasMarker && !hasComments) return null;
@@ -282,7 +282,7 @@ export function InlineCommentableMarkdown({
     }
 
     // Interpolate offsets ONLY for blank lines that have comments (so comment boxes can be positioned).
-    // Do NOT interpolate for other blank lines — they have no rendered content, so no marker exists,
+    // Do NOT interpolate for other blank lines – they have no rendered content, so no marker exists,
     // and showing their line numbers would bunch up in the gutter.
     // Alias omitted lines (no marker) with comments to the latest preceding line with rendered content.
     const alias = new Map<number, number>();
@@ -341,7 +341,7 @@ export function InlineCommentableMarkdown({
     setLineAlias(alias);
   }, [lines, commentsByLine, activeLineIndex]);
 
-  // Stable hover callbacks — identity never changes, so they can be in memoized components
+  // Stable hover callbacks – identity never changes, so they can be in memoized components
   const handleMouseEnterLine = useCallback((lineNumber: number) => {
     setHoveredLineIndex(lineNumber - 1);
   }, []);
@@ -349,7 +349,7 @@ export function InlineCommentableMarkdown({
     setHoveredLineIndex(null);
   }, []);
 
-  // CSS-based line highlighting — updating this never causes ReactMarkdown to re-render.
+  // CSS-based line highlighting – updating this never causes ReactMarkdown to re-render.
   // Omitted lines (no DOM marker) are aliased to the preceding line so we can highlight that content.
   // Hovered lines get a more intense color than merely active (selected) lines.
   const lineHighlightCss = useMemo(() => {
@@ -837,7 +837,7 @@ export function InlineCommentableMarkdown({
     }
   }
 
-  // Memoized components — only recomputes when comments change, not on hover/active state changes.
+  // Memoized components – only recomputes when comments change, not on hover/active state changes.
   // Hover highlighting is handled via a <style> tag (lineHighlightCss) so this stays stable.
   const markdownComponents = useMemo(
     () => ({
@@ -1143,7 +1143,7 @@ export function InlineCommentableMarkdown({
           onMouseMove={handleMouseMove}
           onMouseUp={handleTextSelection}
         >
-          {/* Scoped styles for hover/active line highlights — updating this string
+          {/* Scoped styles for hover/active line highlights – updating this string
               only patches the <style> text node, ReactMarkdown is unaffected */}
           <style>{lineHighlightCss}</style>
           <MemoizedMarkdown content={content} components={markdownComponents} />

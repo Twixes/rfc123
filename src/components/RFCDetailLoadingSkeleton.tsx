@@ -1,9 +1,15 @@
 "use client";
 
-import Link from "next/link";
 import { motion } from "motion/react";
+import RFCsTopBar from "@/components/RFCsTopBar";
 
-export default function RFCDetailLoadingSkeleton() {
+interface RFCDetailLoadingSkeletonProps {
+  user?: { name?: string | null; image?: string | null } | null;
+}
+
+export default function RFCDetailLoadingSkeleton({
+  user,
+}: RFCDetailLoadingSkeletonProps = {}) {
   return (
     <motion.div
       className="mx-auto min-h-screen max-w-360 px-8 py-12"
@@ -14,18 +20,12 @@ export default function RFCDetailLoadingSkeleton() {
         hidden: {},
       }}
     >
-      <motion.nav
-        className="mb-6"
+      <motion.div
         variants={{ visible: { opacity: 1, y: 0 }, hidden: { opacity: 0, y: 8 } }}
         transition={{ duration: 0.35 }}
       >
-        <Link
-          href="/rfcs"
-          className="rounded-md border border-gray-20 bg-surface px-4 py-2 text-sm font-medium text-foreground transition-all hover:bg-gray-5"
-        >
-          ← Back to RFCs
-        </Link>
-      </motion.nav>
+        <RFCsTopBar user={user ?? null} />
+      </motion.div>
 
       <motion.div
         className="mb-4 border border-gray-20 rounded-md bg-surface p-8"

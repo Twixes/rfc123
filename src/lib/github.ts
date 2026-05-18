@@ -120,7 +120,7 @@ export async function listReposWithRFCs(
     //
     // `octokit.paginate` walks pages sequentially. We instead fetch page 1,
     // read the `Link: …; rel="last"` header to learn the total page count,
-    // then fire the remaining pages in parallel via `Promise.all` — same
+    // then fire the remaining pages in parallel via `Promise.all` – same
     // trick used for review-comment counts further down.
     const listParams = {
       per_page: 100,
@@ -230,7 +230,7 @@ export async function listRFCs(
     const withTeamFields = opts.withTeamFields ?? true;
 
     // GraphQL query to fetch all PRs with files and comment counts in one request.
-    // The Team fragment is gated behind GitHub's `read:org` scope — callers
+    // The Team fragment is gated behind GitHub's `read:org` scope – callers
     // without that scope must omit it or GitHub returns INSUFFICIENT_SCOPES.
     const teamFragment = withTeamFields
       ? `... on Team {
@@ -578,7 +578,7 @@ export async function getRFCDetail(
       headRef: string;
       markdownEtag?: string;
       reviewers: RFCDetail["reviewers"];
-      /** Logins of users with a pending review request — used to derive `reviewRequested` per-user. */
+      /** Logins of users with a pending review request – used to derive `reviewRequested` per-user. */
       requestedReviewerLogins: string[];
     }
     const tContentCache = performance.now();
@@ -969,7 +969,7 @@ export async function getRFCTitle(
       return cached.pr.title;
     }
 
-    // Cache miss — fetch just the PR title
+    // Cache miss – fetch just the PR title
     const octokit = await getOctokit(accessToken);
     const { data: pr } = await octokit.rest.pulls.get({
       owner,
@@ -1200,7 +1200,7 @@ export async function createRFC(
 
     // 3. Choose branch / file path. If either collides, append the same
     //    random 4-letter suffix to both so they stay aligned. Slugify the
-    //    username defensively — GitHub logins are already URL-safe, but the
+    //    username defensively – GitHub logins are already URL-safe, but the
     //    client preview passes display names which may contain spaces/caps.
     const baseBranch = `rfc/${slugify(username)}/${slug}`;
     const baseFilePath = `requests-for-comments/${slug}.md`;
@@ -1265,7 +1265,7 @@ export async function createRFC(
       draft,
     });
 
-    // 7. Request reviewers (best effort — don't fail the whole create if a
+    // 7. Request reviewers (best effort – don't fail the whole create if a
     //    reviewer can't be requested, e.g. they're not a repo collaborator).
     if (reviewers.length > 0) {
       try {

@@ -18,7 +18,7 @@ export default defineSchema({
     timezone: v.string(),
     notificationsEnabled: v.boolean(),
     // Local YMD string (e.g. "2026-05-17") of the last sent briefing, in the
-    // user's own timezone. Used purely for idempotency — protects against
+    // user's own timezone. Used purely for idempotency – protects against
     // the cron action retrying mid-loop.
     lastSentYmdLocal: v.optional(v.string()),
   })

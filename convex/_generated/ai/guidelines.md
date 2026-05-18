@@ -194,13 +194,13 @@ function App({ children }: { children: React.ReactNode }) {
 }
 ```
 
-The `useAuth` prop must return `{ isLoading, isAuthenticated, fetchAccessToken }`. Do NOT use plain `ConvexProvider` when authentication is needed — it will not send tokens with requests.
+The `useAuth` prop must return `{ isLoading, isAuthenticated, fetchAccessToken }`. Do NOT use plain `ConvexProvider` when authentication is needed – it will not send tokens with requests.
 
 ## Typescript guidelines
 
 - You can use the helper typescript type `Id` imported from './\_generated/dataModel' to get the type of the id for a given table. For example if there is a table called 'users' you can use `Id<'users'>` to get the type of the id for that table.
 - Use `Doc<"tableName">` from `./_generated/dataModel` to get the full document type for a table.
-- Use `QueryCtx`, `MutationCtx`, `ActionCtx` from `./_generated/server` for typing function contexts. NEVER use `any` for ctx parameters — always use the proper context type.
+- Use `QueryCtx`, `MutationCtx`, `ActionCtx` from `./_generated/server` for typing function contexts. NEVER use `any` for ctx parameters – always use the proper context type.
 - If you need to define a `Record` make sure that you correctly provide the type of the key and value in the type. For example a validator `v.record(v.id('users'), v.string())` would have the type `Record<Id<'users'>, string>`. Below is an example of using `Record` with an `Id` type in a query:
 
 ```ts

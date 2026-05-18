@@ -187,7 +187,7 @@ export const getInstallByTeamId = query({
   },
 });
 
-/** Public — used by /settings to render the workspace picker. */
+/** Public – used by /settings to render the workspace picker. */
 export const listLinksForUser = query({
   args: { secret: v.string(), githubUserId: v.number() },
   handler: async (ctx, args) => {
@@ -225,7 +225,7 @@ export const listLinksForUser = query({
   },
 });
 
-// Internal-only — used by the briefing action.
+// Internal-only – used by the briefing action.
 export const getActiveLinkAndInstall = internalQuery({
   args: { userId: v.id("users") },
   handler: async (

@@ -30,7 +30,7 @@ export async function GET(
       (session as unknown as { accessToken: string }).accessToken,
     );
 
-    // Paginate so PRs with >30 inline comments don't drop later ones —
+    // Paginate so PRs with >30 inline comments don't drop later ones –
     // missing parents would also break reply-threading in groupIntoThreads.
     const [reviewComments, issueComments] = await Promise.all([
       octokit.paginate(octokit.rest.pulls.listReviewComments, {

@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
   if (!stateParam) return slackErrorRedirect("Missing state in URL");
   if (!stateCookie) {
     return slackErrorRedirect(
-      "Missing state cookie — likely a cross-origin issue. Make sure you started the install on the same host as NEXTAUTH_URL.",
+      "Missing state cookie – likely a cross-origin issue. Make sure you started the install on the same host as NEXTAUTH_URL.",
     );
   }
   if (stateParam !== stateCookie) {
@@ -74,7 +74,7 @@ export async function GET(req: NextRequest) {
         return slackErrorRedirect("Slack install missing bot token");
       }
       // Resolve the installer's Slack handle with the bot token we just
-      // received. Best-effort — falls back to user_id in the UI.
+      // received. Best-effort – falls back to user_id in the UI.
       const slackUserName = await fetchSlackUserName(
         oauth.access_token,
         authedUser.id,
@@ -92,7 +92,7 @@ export async function GET(req: NextRequest) {
     } else {
       // Look up the bot token for this team so we can resolve the linking
       // user's handle. If the install doesn't exist, the link itself still
-      // works — we just won't have a friendly name.
+      // works – we just won't have a friendly name.
       const install = await convexClient().query(api.slack.getInstallByTeamId, {
         secret: secretKey(),
         teamId: team.id,
@@ -110,7 +110,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Connecting Slack is itself opt-in — flip the digest on.
+    // Connecting Slack is itself opt-in – flip the digest on.
     await convexClient().mutation(api.users.enableNotifications, {
       secret: secretKey(),
       githubUserId,

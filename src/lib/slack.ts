@@ -105,7 +105,7 @@ export function buildLinkUrl(redirectUri: string, state: string): string {
 
 /**
  * Resolve a Slack user_id to a human-readable handle. Prefers display name,
- * falls back to real name, then login. Returns undefined on any failure —
+ * falls back to real name, then login. Returns undefined on any failure –
  * the caller should fall back to showing the raw user_id.
  */
 export async function fetchSlackUserName(

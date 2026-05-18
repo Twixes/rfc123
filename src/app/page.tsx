@@ -1,98 +1,19 @@
 import Link from "next/link"
-import { auth, signIn, signOut } from "@/auth"
+import { auth, signIn } from "@/auth"
 import AccountDropdown from "@/components/AccountDropdown"
+import Dingbat from "@/components/Dingbat"
 
 export default async function LandingPage() {
     const session = await auth()
 
     return (
-        <div className="flex min-h-screen items-center justify-center px-4 sm:px-8 py-8 sm:py-0">
+        <div className="min-h-screen flex items-start justify-center px-4 sm:px-8 py-8 sm:py-12">
             <div className="w-full max-w-4xl">
                 <div className="border border-gray-20 rounded-md bg-surface p-4 sm:p-8">
-                    <h1 className="font-serif font-normal text-4xl sm:text-6xl text-foreground mb-2">RFC123</h1>
+                    <div className="flex justify-between items-start flex-wrap gap-2 mb-2">
+                    <h1 className="font-serif font-normal text-5xl sm:text-6xl text-foreground mb-0">RFC123</h1>
 
-                    <p className="mb-6 text-lg sm:text-xl font-light leading-tight text-gray-70">The RFC platform for teams.</p>
-
-                    <div className="mb-6 flex flex-col sm:flex-row gap-6 sm:gap-8 border-b border-gray-20 pb-6">
-                        <div className="flex-1">
-                            <div className="mb-2 h-0.5 w-12 bg-cyan" />
-                            <div className="text-2xl font-serif text-foreground">1. Draft</div>
-                            <p className="mt-1 text-sm text-gray-70">Write rich RFCs in Markdown,<br/>automatically creating a GitHub PR.</p>
-                        </div>
-                        <div className="flex-1">
-                            <div className="mb-2 h-0.5 w-12 bg-magenta" />
-                            <div className="text-2xl font-serif text-foreground">2. Discuss</div>
-                            <p className="mt-1 text-sm text-gray-70">Comment line-by-line,<br/>Google Docs-style.</p>
-                        </div>
-                        <div className="flex-1">
-                            <div className="mb-2 h-0.5 w-12 bg-yellow" />
-                            <div className="text-2xl font-serif text-foreground">3. Decide<sup className="text-xs ml-0.5 font-sans font-medium text-gray-50">SOON</sup></div>
-                            <p className="mt-1 text-sm text-gray-70">Reach conclusions ASAP<br/>thanks to Slack notifications.</p>
-                        </div>
-                    </div>
-
-                    <div className="mb-6">
-                        <h2 className="mb-4 text-2xl font-serif text-foreground">How it works</h2>
-                        <div className="space-y-3">
-                            <div className="flex gap-3">
-                                <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-gray-30 text-sm font-medium text-gray-70">
-                                    1
-                                </div>
-                                <div>
-                                    <p className="text-sm text-foreground">
-                                        <strong>Sign in with GitHub</strong> and click{" "}
-                                        <code className="bg-gray-5 border border-gray-20 rounded-sm px-1.5 py-0.5 font-mono text-xs">
-                                            New RFC
-                                        </code>
-                                        . Pick a repo, write your proposal in Markdown, and tag
-                                        reviewers — RFC123 opens the PR for you.
-                                    </p>
-                                </div>
-                            </div>
-                            <div className="flex gap-3">
-                                <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-gray-30 text-sm font-medium text-gray-70">
-                                    2
-                                </div>
-                                <div>
-                                    <p className="text-sm text-foreground">
-                                        <strong>Already have RFCs?</strong> RFC123 discovers PRs
-                                        with Markdown files in your repositories automatically.
-                                        Repos with a{" "}
-                                        <code className="bg-gray-5 border border-gray-20 rounded-sm px-1.5 py-0.5 font-mono text-xs">
-                                            requests-for-comments/
-                                        </code>{" "}
-                                        directory are surfaced first.
-                                    </p>
-                                </div>
-                            </div>
-                            <div className="flex gap-3">
-                                <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-gray-30 text-sm font-medium text-gray-70">
-                                    3
-                                </div>
-                                <div>
-                                    <p className="text-sm text-foreground">
-                                        <strong>Review and comment</strong> on any RFC. Click line numbers or select
-                                        text to add inline comments. All comments are posted directly to the GitHub PR
-                                        as review comments.
-                                    </p>
-                                </div>
-                            </div>
-                            <div className="flex gap-3">
-                                <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-gray-30 text-sm font-medium text-gray-70">
-                                    4
-                                </div>
-                                <div>
-                                    <p className="text-sm text-foreground">
-                                        <strong>Iterate and merge</strong>. The RFC author updates their draft based on
-                                        feedback, and finally merges it. The RFC is now official.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
-                        <div className="flex gap-3 items-center">
+                    <div className="flex items-center gap-2">
                             {session ? (
                                 <>
                                     <Link
@@ -127,15 +48,88 @@ export default async function LandingPage() {
                                 </form>
                             )}
                         </div>
+                        </div>
+
+                    <p className="mb-4 text-lg sm:text-xl font-light leading-tight text-gray-70">The <abbr title="Request for Comments" className="cursor-help">RFC</abbr> platform for teams.</p>
+
+                    <div className="mb-8 flex flex-col sm:flex-row gap-x-6 gap-y-2 sm:gap-x-8 border-b border-gray-20 pb-6">
+                        <div >
+                            <div className="mb-2 h-0.75 w-12 bg-cyan" />
+                            <div className="text-2xl font-serif text-foreground">1. Draft</div>
+                        </div>
+                        <div >
+                            <div className="mb-2 h-0.75 w-12 bg-magenta" />
+                            <div className="text-2xl font-serif text-foreground">2. Discuss</div>
+                        </div>
+                        <div >
+                            <div className="mb-2 h-0.75 w-12 bg-yellow" />
+                            <div className="text-2xl font-serif text-foreground">3. Decide</div>
+                        </div>
+                    </div>
+
+                    <div className="mb-8 space-y-10 sm:space-y-12">
+                        <section className="flex flex-col sm:flex-row gap-3 sm:gap-6">
+                            <Dingbat glyph="¶" className="text-cyan" size="xl" />
+                            <div className="flex-1 min-w-0">
+                                <h2 className="mb-3 text-2xl font-serif text-foreground leading-none">
+                                    Write RFCs like never before
+                                </h2>
+                                <div className="space-y-2.5">
+                                    <p className="text-sm text-foreground">
+                                        <strong>Markdown in, RFC out.</strong> Pick a repo, write the draft. RFC123 opens the branch, the commit, and the PR.
+                                    </p>
+                                    <p className="text-sm text-foreground">
+                                        <strong>GitHub all the way down.</strong> Every RFC is a PR in your existing repo – same auth, same permissions, same git history. Markdown PRs from before RFC123 are already here. Walk away tomorrow; the record stays in git.
+                                    </p>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section className="flex flex-col sm:flex-row gap-3 sm:gap-6">
+                            <Dingbat glyph="§" className="text-magenta" size="xl" />
+                            <div className="flex-1 min-w-0">
+                                <h2 className="mb-3 text-2xl font-serif text-foreground leading-none">
+                                    Collaborate on proposals
+                                </h2>
+                                <div className="space-y-2.5">
+                                    <p className="text-sm text-foreground">
+                                        <strong>Comment where the argument is.</strong> Threads attach to lines or selections, right alongside the words they&rsquo;re about.
+                                    </p>
+                                    <p className="text-sm text-foreground">
+                                        <strong>A queue of your own.</strong> Review requests pinned at the top – including ones assigned to your GitHub teams. Filter by author or repo.
+                                    </p>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section className="flex flex-col sm:flex-row gap-3 sm:gap-6">
+                            <Dingbat glyph="※" className="text-yellow -mt-4" size="xl" />
+                            <div className="flex-1 min-w-0">
+                                <h2 className="mb-3 text-2xl font-serif text-foreground leading-none">
+                                    Never miss a thing
+                                </h2>
+                                <div className="space-y-2.5">
+                                    <p className="text-sm text-foreground">
+                                        <strong>Your review queue, delivered to Slack.</strong> A single DM at the hour and timezone you choose.
+                                    </p>
+                                    <p className="text-sm text-foreground">
+                                        <strong>No noise.</strong> Empty days skipped. Weekends off by default.
+                                    </p>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
                         <span className="text-sm text-gray-50 sm:grow sm:text-right">
-                            <a
+                            <a href="https://matloka.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground transition-colors">By Michael Matloka</a> • <a
                                 href="https://github.com/Twixes/rfc123"
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="underline hover:text-foreground transition-colors"
                             >
-                                View RFC123 source code
-                            </a>
+                                View RFC123 on GitHub
+                            </a> 
                         </span>
                     </div>
                 </div>

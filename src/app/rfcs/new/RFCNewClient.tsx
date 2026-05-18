@@ -4,10 +4,10 @@ import { motion } from "motion/react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import AccountDropdown from "@/components/AccountDropdown";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import RepoPickerForCreate from "@/components/RepoPickerForCreate";
 import ReviewerPicker, { type Reviewer } from "@/components/ReviewerPicker";
+import RFCsTopBar from "@/components/RFCsTopBar";
 import type { WritableRepo } from "@/lib/github";
 import { DEFAULT_RFC_TEMPLATE } from "@/lib/rfc-template";
 import { slugify } from "@/lib/slugify";
@@ -53,7 +53,7 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
   const userLogin = session?.user?.name ?? undefined;
 
   // Load any in-progress draft from localStorage on mount. Runs once, before
-  // repos finish loading — so even typing made before picking a repo is kept.
+  // repos finish loading – so even typing made before picking a repo is kept.
   useEffect(() => {
     try {
       const stored = localStorage.getItem(DRAFT_STORAGE_KEY);
@@ -116,7 +116,7 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
     if (next) setSelectedRepo(next);
   }, [repos, selectedRepo, presetOwner, presetRepo]);
 
-  // Persist the in-progress draft on every change. No repo gating — drafting
+  // Persist the in-progress draft on every change. No repo gating – drafting
   // before picking a repo is the most common entry path.
   useEffect(() => {
     if (!draftLoadedRef.current) return;
@@ -150,7 +150,7 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
     setSubmitting(true);
     setError(null);
     try {
-      // Step 1: generate the PR body summary (does not need the final URL yet —
+      // Step 1: generate the PR body summary (does not need the final URL yet –
       // we splice it in client-side from the response, but we send a placeholder
       // here. Server returns body with placeholder if no URL passed.).
       const summaryRes = await fetch("/api/rfc-body-summary", {
@@ -210,24 +210,7 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
 
   return (
     <div className="mx-auto min-h-screen max-w-240 px-4 sm:px-8 py-6 sm:py-12">
-      <header className="mb-8 flex flex-col sm:flex-row items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl sm:text-5xl font-serif font-normal text-foreground">
-            <Link href="/" className="hover:opacity-70 transition-opacity">
-              RFC123
-            </Link>
-          </h1>
-          <div className="mt-3 text-sm text-gray-50">
-            <Link
-              href="/rfcs"
-              className="hover:text-foreground transition-colors"
-            >
-              ← All RFCs
-            </Link>
-          </div>
-        </div>
-        {session?.user && <AccountDropdown user={session.user} />}
-      </header>
+      <RFCsTopBar user={session?.user ?? null} />
 
       <motion.div
         initial={{ opacity: 0, y: 8 }}
@@ -285,7 +268,7 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
             )}
           </div>
 
-          {/* Title + Body — one unified card. Title is a large serif heading
+          {/* Title + Body – one unified card. Title is a large serif heading
               input; tabs in the right of the title row swap the lower half
               between the raw textarea and a rendered preview. */}
           <div>

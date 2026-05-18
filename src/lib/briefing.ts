@@ -65,7 +65,7 @@ export interface BriefingDecision {
  *   - the local hour doesn't match their preferred hour
  *
  * Caller is responsible for pre-filtering to enabled users with an active
- * Slack link — that's done in the Convex query.
+ * Slack link – that's done in the Convex query.
  */
 export function decideShouldSend(
   user: {
@@ -121,7 +121,7 @@ export function formatBriefingBlocks(rfcs: RFC[]): unknown[] {
 }
 
 export function formatBriefingFallback(rfcs: RFC[]): string {
-  const lines = rfcs.map((rfc) => `• ${rfc.title} — ${rfc.url}`);
+  const lines = rfcs.map((rfc) => `• ${rfc.title} – ${rfc.url}`);
   return `${rfcs.length === 1 ? "1 RFC is" : `${rfcs.length} RFCs are`} waiting on your eyes 👀\n${lines.join("\n")}`;
 }
 

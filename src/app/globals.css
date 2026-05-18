@@ -180,7 +180,7 @@ pre code {
   font-variant-numeric: tabular-nums;
 }
 
-/* Override classes for values previously in style attributes — must win over Tailwind !important */
+/* Override classes for values previously in style attributes – must win over Tailwind !important */
 .comment-line-badge {
   color: var(--magenta) !important;
   opacity: var(--comment-opacity, 0.7) !important;

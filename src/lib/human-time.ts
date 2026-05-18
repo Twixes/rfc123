@@ -1,6 +1,6 @@
 /**
  * Render an elapsed duration in the largest sensible unit. Returns the bare
- * phrase without an "ago" suffix — callers compose ("open for X", "X ago",
+ * phrase without an "ago" suffix – callers compose ("open for X", "X ago",
  * "opened X ago", etc.).
  *
  *   5 seconds      → "less than a minute"

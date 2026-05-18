@@ -60,7 +60,7 @@ export function rehypeLineMarkers() {
       }
 
       // Special handling for code blocks - each line gets a marker
-      // Skip mermaid blocks — they need pristine text for rendering
+      // Skip mermaid blocks – they need pristine text for rendering
       const classes = Array.isArray(node.properties?.className) ? node.properties.className : [];
       if (node.tagName === "code" && classes.some((c) => String(c) === "language-mermaid")) {
         return;
@@ -114,7 +114,7 @@ export function rehypeLineMarkers() {
         }
       }
 
-      // Skip table and tr — tables get markers in the dedicated table pass
+      // Skip table and tr – tables get markers in the dedicated table pass
       if (node.tagName === "table" || node.tagName === "tr") return;
 
       // For all other elements, inject an invisible marker span for position tracking
@@ -197,7 +197,7 @@ export function rehypeLineMarkers() {
     });
 
     // Add data-line-element (and data-line-end for multi-line blocks) for per-line hover/comment UI.
-    // 1. Top-level block elements (p, h1, blockquote, etc.) — but NOT ol/ul
+    // 1. Top-level block elements (p, h1, blockquote, etc.) – but NOT ol/ul
     for (const child of tree.children) {
       if (child.type === "element" && child.position?.start?.line) {
         const el = child as Element;
@@ -213,7 +213,7 @@ export function rehypeLineMarkers() {
       }
     }
 
-    // 2. li elements — each list item gets its own line for individual highlighting
+    // 2. li elements – each list item gets its own line for individual highlighting
     visit(tree, "element", (node: Element) => {
       if (node.tagName !== "li") return;
       const lineNumber =
@@ -225,7 +225,7 @@ export function rehypeLineMarkers() {
       }
     });
 
-    // 3. tr elements — table rows are handled in the table pass above; other tr (unlikely) get position-based line
+    // 3. tr elements – table rows are handled in the table pass above; other tr (unlikely) get position-based line
     visit(tree, "element", (node: Element) => {
       if (node.tagName !== "tr") return;
       if (node.properties?.["data-line-element"]) return; // already set by table pass

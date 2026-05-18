@@ -125,7 +125,7 @@ export default function SettingsClient({
 
   /**
    * Flush any pending auto-save and commit synchronously before bouncing to
-   * Slack — guarantees the user's TZ/hour land in Convex before the OAuth
+   * Slack – guarantees the user's TZ/hour land in Convex before the OAuth
    * callback auto-enables notifications.
    */
   async function handleConnectSlack(mode: "install" | "link") {
@@ -137,7 +137,7 @@ export default function SettingsClient({
     try {
       await commitPrefs();
     } catch {
-      // Non-fatal — proceed to Slack OAuth anyway.
+      // Non-fatal – proceed to Slack OAuth anyway.
     }
     window.location.href = `/api/slack/install?mode=${mode}`;
   }

@@ -21,7 +21,7 @@ const OPTIONS: Option[] = getTimeZones()
   .map((tz) => {
     const offsetLabel = formatOffset(tz.currentTimeOffsetInMinutes);
     const city = tz.mainCities[0] ?? tz.name.split("/").pop() ?? tz.name;
-    const label = `${tz.alternativeName} — ${city}`;
+    const label = `${tz.alternativeName} – ${city}`;
     return {
       name: tz.name,
       label,

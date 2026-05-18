@@ -8,7 +8,7 @@ import RFCListSkeleton from "@/components/RFCListSkeleton"
 import { RelativeTime } from "@/components/RelativeTime"
 import { slugify } from "@/lib/slugify"
 import RepoSelector from "@/components/RepoSelector"
-import AccountDropdown from "@/components/AccountDropdown"
+import RFCsTopBar from "@/components/RFCsTopBar"
 
 interface RFCsPageClientProps {
     session: {
@@ -236,16 +236,10 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
 
     return (
         <div className="mx-auto min-h-screen max-w-240 px-4 sm:px-8 py-6 sm:py-12">
-            <header className="mb-8 sm:mb-10 flex flex-col sm:flex-row items-start sm:items-start justify-between gap-4">
-                <div>
-                    <h1 className="text-3xl sm:text-5xl font-serif font-normal text-foreground">
-                        <Link href="/" className="hover:opacity-70 transition-opacity">
-                            RFC123
-                        </Link>
-                    </h1>
-                    <div className="mt-3">{repoSelectorElement}</div>
-                </div>
-                <div className="flex items-center gap-3">
+            <RFCsTopBar
+                user={session?.user ?? null}
+                homeHref="/"
+                actions={
                     <Link
                         href={
                             selectedRepo
@@ -260,9 +254,8 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
                         </svg>
                         New RFC
                     </Link>
-                    {session?.user && <AccountDropdown user={session.user} />}
-                </div>
-            </header>
+                }
+            />
 
             {missingScopes.length > 0 && (
                 <div className="mb-6 border border-magenta/30 bg-magenta-light rounded-md px-4 py-3 text-sm text-foreground flex flex-wrap items-center gap-x-3 gap-y-1.5">
@@ -309,6 +302,8 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
                     </div>
 
                     <div className="h-5 w-px bg-gray-20" />
+
+                    {repoSelectorElement}
 
                     <div className="relative" ref={authorDropdownRef}>
                         <button

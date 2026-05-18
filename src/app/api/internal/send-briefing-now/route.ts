@@ -62,7 +62,7 @@ export async function POST() {
 
   // Fall back to a `read:org`-free flow when the token doesn't carry that
   // scope: listUserTeams already returns [] in that case, but listAllRFCs
-  // would throw on the Team GraphQL fragment — so we ask it to skip the
+  // would throw on the Team GraphQL fragment – so we ask it to skip the
   // fragment. Team-requested-only reviews are then silently dropped, same
   // as pre-briefing behavior.
   const scopes = await getGrantedScopes(accessToken);

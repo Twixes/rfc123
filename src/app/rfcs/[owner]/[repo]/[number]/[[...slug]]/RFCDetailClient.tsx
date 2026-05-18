@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import Link from "next/link";
-import type { RFCDetail, Comment } from "@/lib/github";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { GeneralCommentsSection } from "@/components/GeneralCommentsSection";
 import { InlineCommentableMarkdown } from "@/components/InlineCommentableMarkdown";
-import { RFCMetadataHeader } from "@/components/RFCMetadataHeader";
 import { MarkdownRawView } from "@/components/MarkdownRawView";
+import { RFCMetadataHeader } from "@/components/RFCMetadataHeader";
+import RFCsTopBar from "@/components/RFCsTopBar";
+import type { Comment, RFCDetail } from "@/lib/github";
 import { ViewModeToggle } from "./ViewModeToggle";
 
 function parseCommentIdFromHash(hash: string): number | null {
@@ -36,7 +36,9 @@ export default function RFCDetailClient({
   const [commentsLoading, setCommentsLoading] = useState(true);
   const [optimisticComments, setOptimisticComments] = useState<Comment[]>([]);
   const [viewMode, setViewMode] = useState<"pretty" | "raw">("pretty");
-  const [highlightedCommentId, setHighlightedCommentId] = useState<number | null>(null);
+  const [highlightedCommentId, setHighlightedCommentId] = useState<
+    number | null
+  >(null);
   const hasScrolledToComment = useRef(false);
 
   const loadComments = useCallback(async () => {
@@ -132,7 +134,11 @@ export default function RFCDetailClient({
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
-  async function handleInlineComment(line: number, body: string, replyToCommentId?: number) {
+  async function handleInlineComment(
+    line: number,
+    body: string,
+    replyToCommentId?: number,
+  ) {
     if (!rfc?.markdownFilePath) return;
 
     const optimisticComment: Comment = {
@@ -200,14 +206,9 @@ export default function RFCDetailClient({
   if (isLoading) {
     return (
       <div className="mx-auto max-w-360 min-h-screen px-4 sm:px-8 py-6 sm:py-12">
-        <nav className="mb-6">
-          <Link
-            href="/rfcs"
-            className="rounded-md border border-gray-20 bg-surface px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-foreground transition-all hover:bg-gray-5"
-          >
-            ← Back to RFCs
-          </Link>
-        </nav>
+        <RFCsTopBar
+          user={{ name: currentUser, image: currentUserAvatar }}
+        />
 
         {/* RFCMetadataHeader Skeleton */}
         <div className="mb-4 border border-gray-20 rounded-md bg-surface p-4 sm:p-8">
@@ -309,14 +310,9 @@ export default function RFCDetailClient({
   if (error || !rfc) {
     return (
       <div className="mx-auto max-w-360 min-h-screen px-4 sm:px-8 py-6 sm:py-12">
-        <nav className="mb-6">
-          <Link
-            href="/rfcs"
-            className="rounded-md border border-gray-20 bg-surface px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-foreground transition-all hover:bg-gray-5"
-          >
-            ← Back to RFCs
-          </Link>
-        </nav>
+        <RFCsTopBar
+          user={{ name: currentUser, image: currentUserAvatar }}
+        />
         <div className="text-center text-red-500 py-12">
           {error || "Failed to load RFC"}
         </div>
@@ -331,14 +327,7 @@ export default function RFCDetailClient({
 
   return (
     <div className="mx-auto max-w-360 min-h-screen px-4 sm:px-8 py-6 sm:py-12">
-      <nav className="mb-6">
-        <Link
-          href="/rfcs"
-          className="rounded-md border border-gray-20 bg-surface px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-foreground transition-all hover:bg-gray-5"
-        >
-          ← Back to RFCs
-        </Link>
-      </nav>
+      <RFCsTopBar user={{ name: currentUser, image: currentUserAvatar }} />
 
       <RFCMetadataHeader rfc={rfc} />
 

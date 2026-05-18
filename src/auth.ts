@@ -19,7 +19,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.accessToken = account.access_token;
         // On a fresh sign-in we know we have a token + profile; persist the
         // user to Convex so the daily-briefing cron can use the token.
-        // Best-effort — auth must never fail because Convex is down.
+        // Best-effort – auth must never fail because Convex is down.
         const ghProfile = profile as
           | { id?: number; login?: string }
           | undefined;

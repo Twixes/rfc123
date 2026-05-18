@@ -1,6 +1,6 @@
 /**
  * Server-secret guard for Convex public functions. We don't use Convex Auth
- * (yet) — the Next.js app calls Convex from server-only API routes that have
+ * (yet) – the Next.js app calls Convex from server-only API routes that have
  * already authenticated the user via NextAuth, and passes a shared secret.
  *
  * The secret lives in two places:

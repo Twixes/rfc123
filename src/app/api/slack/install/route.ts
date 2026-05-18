@@ -6,7 +6,7 @@ import { buildInstallUrl, buildLinkUrl, slackRedirectUri } from "@/lib/slack";
 /**
  * Kick off Slack OAuth. Two modes via `?mode=install|link`:
  *   - install: full bot install (workspace admin grants scopes)
- *   - link:    user-only — links the current user to an already-installed
+ *   - link:    user-only – links the current user to an already-installed
  *              workspace, no bot scopes needed
  *
  * We sign the state value (cookie + URL) so the callback can verify it

@@ -1,4 +1,4 @@
-/** Default RFC body — the user can edit it before submitting. Designed to nudge
+/** Default RFC body – the user can edit it before submitting. Designed to nudge
  * authors toward the four sections most engineering RFCs need. */
 export const DEFAULT_RFC_TEMPLATE = `## Background
 

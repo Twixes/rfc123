@@ -18,7 +18,7 @@ interface ReviewerPickerProps {
 /**
  * Multi-select picker that searches GitHub users on every keystroke (debounced)
  * and adds them as avatar chips. Backspace on an empty input removes the last
- * chip — same affordance as GitHub's own reviewer picker.
+ * chip – same affordance as GitHub's own reviewer picker.
  */
 export default function ReviewerPicker({
   reviewers,

@@ -31,7 +31,7 @@ export async function GET(request: Request) {
     const hasReadOrg = scopes.includes("read:org");
     // Sentinel header the client reads to decide whether to render the
     // "please re-auth for full features" banner. We still return RFCs in
-    // the degraded mode — direct review requests work; team-requested ones
+    // the degraded mode – direct review requests work; team-requested ones
     // are silently dropped until the user signs back in with `read:org`.
     const headers = hasReadOrg
       ? undefined

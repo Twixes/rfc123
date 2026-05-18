@@ -4,7 +4,7 @@ import { internalAction } from "./_generated/server";
  * Hourly trigger. We delegate all real work (GitHub + Slack + cache) to the
  * Next.js `/api/internal/run-briefing` endpoint, because that's where the
  * Octokit, Upstash cache, and PR-fetching logic already live. Convex is the
- * data store and the scheduler — this action is just a kick.
+ * data store and the scheduler – this action is just a kick.
  */
 export const runHourlyBriefing = internalAction({
   args: {},

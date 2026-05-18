@@ -109,9 +109,9 @@ The app uses Next.js server actions for mutations where applicable:
 ### Styling
 
 - Uses Tailwind CSS 4 with custom CSS variables defined in src/app/globals.css
-- Design feel: paper-like — slightly tinted neutral `--background` with `bg-surface` (white) cards sitting on top, 1px hairline borders (`border-gray-20`), `rounded-md` cards
+- Design feel: paper-like – slightly tinted neutral `--background` with `bg-surface` (white) cards sitting on top, 1px hairline borders (`border-gray-20`), `rounded-md` cards
 - Typography: serif headings via `--font-l-serif` (a locally hosted Lastik at `src/app/fonts/L-Variable.woff2`, used for `h1`/`h2` and `font-serif` utilities); body and `h3`+ in sans via `--font-geist` (Geist)
-- Accent colors (`--cyan`, `--magenta`, `--yellow` and their `-light` variants) are muted and used sparingly for status, highlights, and focus rings — not as primary surfaces
+- Accent colors (`--cyan`, `--magenta`, `--yellow` and their `-light` variants) are muted and used sparingly for status, highlights, and focus rings – not as primary surfaces
 - Line hover effect: yellow left border + gray background
 
 ## Development Notes
@@ -154,19 +154,19 @@ Convex stores user notification preferences and Slack workspace installs
 (`convex/schema.ts`). The Next.js app calls Convex from server routes via
 `ConvexHttpClient` (see `src/lib/convex.ts`), passing
 `SECRET_KEY` as the first argument to every public function. We
-do not use Convex Auth or the client-side reactive provider yet — that's a
+do not use Convex Auth or the client-side reactive provider yet – that's a
 follow-up.
 
 ### Daily Slack briefing
 
 Two parts:
 
-- **Convex cron** (`convex/crons.ts`, `convex/notifications.ts`) — fires
+- **Convex cron** (`convex/crons.ts`, `convex/notifications.ts`) – fires
   hourly on the hour and POSTs to `${NEXTAUTH_URL}/api/internal/run-briefing`
   with `SECRET_KEY`. `NEXTAUTH_URL` doubles as the single source of truth
   for the externally-visible app URL (set on Convex too via
   `npx convex env set NEXTAUTH_URL <https://...>`).
-- **Next.js worker** (`src/app/api/internal/run-briefing/route.ts`) —
+- **Next.js worker** (`src/app/api/internal/run-briefing/route.ts`) –
   fetches enabled users from Convex, decides who is due (per-user IANA
   timezone, skip weekends, idempotent via `lastSentYmdLocal`), pulls each
   one's open non-draft RFCs awaiting their review (direct or

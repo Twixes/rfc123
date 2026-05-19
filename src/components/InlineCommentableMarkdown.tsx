@@ -61,7 +61,6 @@ type MDProps<T extends React.ElementType> =
 
 interface LineNumbersColumnProps {
   lines: string[];
-  linesInCodeBlocks: Set<number>;
   commentsByLine: Map<number, Comment[]>;
   lineOffsets: Map<number, number>;
   linesWithMarkers: Set<number>;
@@ -74,7 +73,6 @@ interface LineNumbersColumnProps {
 
 const LineNumbersColumn = memo(function LineNumbersColumn({
   lines,
-  linesInCodeBlocks,
   commentsByLine,
   lineOffsets,
   linesWithMarkers,
@@ -237,35 +235,7 @@ export function InlineCommentableMarkdown({
   const [commentPositions, setCommentPositions] = useState<Map<number, number>>(
     new Map(),
   );
-
-  // Identify which lines are inside code blocks
-  const linesInCodeBlocks = useMemo(() => {
-    const set = new Set<number>();
-    let inCodeBlock = false;
-    let codeBlockStart = -1;
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const trimmed = line.trim();
-
-      // Detect code fence (``` or ~~~)
-      if (trimmed.startsWith("```") || trimmed.startsWith("~~~")) {
-        if (!inCodeBlock) {
-          inCodeBlock = true;
-          codeBlockStart = i;
-        } else {
-          // End of code block - add all lines between start and end
-          for (let j = codeBlockStart + 1; j < i; j++) {
-            set.add(j + 1); // +1 because line numbers are 1-indexed
-          }
-          inCodeBlock = false;
-          codeBlockStart = -1;
-        }
-      }
-    }
-
-    return set;
-  }, [lines]);
+  const [minContentHeight, setMinContentHeight] = useState(0);
 
   // Group comments by line number
   const commentsByLine = useMemo(() => {
@@ -370,7 +340,12 @@ export function InlineCommentableMarkdown({
     setLinesWithMarkers(withMarkers);
     setLineRanges(ranges);
     setLineAlias(alias);
-  }, [lines, commentsByLine, activeLineIndex]);
+    // activeLineIndex deliberately omitted: the comment form lives in the
+    // absolutely-positioned sidebar, so toggling it does not move line markers
+    // in the markdown column. Including it caused every click to rebuild
+    // lineRanges/lineOffsets/lineAlias, which destabilized handleLineClick and
+    // forced a full ReactMarkdown re-parse via markdownComponents.
+  }, [lines, commentsByLine]);
 
   // Stable hover callbacks – identity never changes, so they can be in memoized components
   const handleMouseEnterLine = useCallback((lineNumber: number) => {
@@ -437,6 +412,16 @@ export function InlineCommentableMarkdown({
     [commentsByLine],
   );
 
+  // Stable refs to mutable state so handleLineClick can avoid depending on
+  // activeLineIndex / replyTarget / collapsedLines (which all change on click).
+  // This keeps handleLineClick stable across clicks, which keeps
+  // markdownComponents stable, which prevents ReactMarkdown from re-parsing
+  // the entire RFC body on every interaction.
+  const activeLineIndexRef = useRef(activeLineIndex);
+  activeLineIndexRef.current = activeLineIndex;
+  const replyTargetRef = useRef(replyTarget);
+  replyTargetRef.current = replyTarget;
+
   // Handle clicking on a line in the markdown content
   const handleLineClick = useCallback(
     (lineNumber: number) => {
@@ -462,7 +447,7 @@ export function InlineCommentableMarkdown({
             return updated;
           });
           // Only set reply target if not already replying to this line
-          if (replyTarget?.line !== lineNumber) {
+          if (replyTargetRef.current?.line !== lineNumber) {
             const lineThreads = threadsByLine.get(lineNumber);
             if (lineThreads?.length === 1) {
               setReplyTarget({
@@ -500,7 +485,7 @@ export function InlineCommentableMarkdown({
               setReplyInitialDraft("");
             } else {
               updated.add(lineNumber);
-              if (replyTarget?.line === lineNumber) {
+              if (replyTargetRef.current?.line === lineNumber) {
                 setReplyTarget(null);
                 setReplyInitialDraft("");
               }
@@ -509,7 +494,7 @@ export function InlineCommentableMarkdown({
           });
         }
       } else {
-        if (activeLineIndex === lineIndex) {
+        if (activeLineIndexRef.current === lineIndex) {
           setActiveLineIndex(null);
           setLineCommentInitialDraft("");
           setSelectedText("");
@@ -522,7 +507,7 @@ export function InlineCommentableMarkdown({
         }
       }
     },
-    [activeLineIndex, commentsByLine, threadsByLine, replyTarget, lineRanges],
+    [commentsByLine, threadsByLine, lineRanges],
   );
 
   // Auto-expand the collapsed group that contains the highlighted comment
@@ -590,6 +575,7 @@ export function InlineCommentableMarkdown({
       boxesToPosition.sort((a, b) => a.lineNum - b.lineNum);
 
       let lastBottom = 0;
+      let maxBoxBottom = 0;
 
       for (const { lineNum, ref, isActive } of boxesToPosition) {
         const baseOffset = lineOffsets.get(lineNum) || 0;
@@ -599,9 +585,10 @@ export function InlineCommentableMarkdown({
         positions.set(isActive ? -1 : lineNum, adjustedOffset);
 
         // Update lastBottom for the next iteration
+        let boxHeight: number;
         if (ref) {
           const headerEl = ref.firstElementChild as HTMLElement | null;
-          let boxHeight = ref.offsetHeight;
+          boxHeight = ref.offsetHeight;
           if (!isActive) {
             // Use known end-state height so we don't read mid-animation
             if (resolvedCollapsedLines.has(lineNum)) {
@@ -615,13 +602,16 @@ export function InlineCommentableMarkdown({
               }
             }
           }
-          lastBottom = adjustedOffset + boxHeight + 8; // 8px gap between boxes
         } else {
-          lastBottom = adjustedOffset + 100; // Minimum estimated height
+          boxHeight = 100; // Minimum estimated height
         }
+
+        maxBoxBottom = Math.max(maxBoxBottom, adjustedOffset + boxHeight);
+        lastBottom = adjustedOffset + boxHeight + 8; // 8px gap between boxes
       }
 
       setCommentPositions(positions);
+      setMinContentHeight(maxBoxBottom);
     }
 
     recalcPositions();
@@ -657,6 +647,23 @@ export function InlineCommentableMarkdown({
       isDraft: boolean;
     }> = [];
 
+    // Snapshot block info once. The previous implementation re-ran
+    // querySelectorAll inside collect() for every comment, which became O(N×M)
+    // on every scroll frame and hung long RFCs.
+    const blockEls = markdown.querySelectorAll("[data-line-element]");
+    const blockInfo: Array<{ start: number; end: number; el: HTMLElement }> =
+      [];
+    for (const el of blockEls) {
+      const start = Number.parseInt(
+        el.getAttribute("data-line-element") ?? "",
+        10,
+      );
+      if (Number.isNaN(start)) continue;
+      const endAttr = el.getAttribute("data-line-end");
+      const end = endAttr ? Number.parseInt(endAttr, 10) : start;
+      blockInfo.push({ start, end, el: el as HTMLElement });
+    }
+
     const collect = (
       lineNum: number,
       boxRef: HTMLDivElement | null,
@@ -667,16 +674,9 @@ export function InlineCommentableMarkdown({
       const targetLine = lineAlias.get(lineNum) ?? lineNum;
       // Use data-line-element block (full-width) for right edge; line-marker is zero-width at line start
       let targetEl: HTMLElement | null = null;
-      const blocks = markdown?.querySelectorAll("[data-line-element]") ?? [];
-      for (const el of blocks) {
-        const start = Number.parseInt(
-          el.getAttribute("data-line-element") ?? "",
-          10,
-        );
-        const endAttr = el.getAttribute("data-line-end");
-        const end = endAttr ? Number.parseInt(endAttr, 10) : start;
-        if (!Number.isNaN(start) && targetLine >= start && targetLine <= end) {
-          targetEl = el as HTMLElement;
+      for (const { start, end, el } of blockInfo) {
+        if (targetLine >= start && targetLine <= end) {
+          targetEl = el;
           break;
         }
       }
@@ -1242,19 +1242,6 @@ export function InlineCommentableMarkdown({
     ],
   );
 
-  // Calculate the minimum height needed for the main content area to accommodate all comments
-  const minContentHeight = useMemo(() => {
-    let maxBottom = 0;
-    for (const [key, position] of commentPositions.entries()) {
-      const ref = commentBoxRefs.current.get(key);
-      if (ref) {
-        const bottom = position + ref.offsetHeight;
-        maxBottom = Math.max(maxBottom, bottom);
-      }
-    }
-    return maxBottom;
-  }, [commentPositions]);
-
   return (
     <div
       ref={containerRef}
@@ -1271,7 +1258,6 @@ export function InlineCommentableMarkdown({
           {/* Line numbers column */}
           <LineNumbersColumn
             lines={lines}
-            linesInCodeBlocks={linesInCodeBlocks}
             commentsByLine={commentsByLine}
             lineOffsets={lineOffsets}
             linesWithMarkers={linesWithMarkers}

@@ -36,14 +36,15 @@ export async function GET(request: Request) {
     const headers = hasReadOrg
       ? undefined
       : { "X-RFC123-Missing-Scopes": "read:org" };
+    const listOpts = {
+      withTeamFields: hasReadOrg,
+      // List page loads counts progressively via GET /api/rfcs/comment-counts.
+      deferInlineCommentCounts: true,
+    };
     const rfcs =
       !owner || !repo
-        ? await listAllRFCs(accessToken, currentUserLogin, {
-            withTeamFields: hasReadOrg,
-          })
-        : await listRFCs(accessToken, owner, repo, currentUserLogin, {
-            withTeamFields: hasReadOrg,
-          });
+        ? await listAllRFCs(accessToken, currentUserLogin, listOpts)
+        : await listRFCs(accessToken, owner, repo, currentUserLogin, listOpts);
     return NextResponse.json(rfcs, { headers });
   } catch (error) {
     console.error("Error fetching RFCs:", error);

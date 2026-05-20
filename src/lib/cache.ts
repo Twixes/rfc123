@@ -3,13 +3,24 @@ import { captureServerException } from "./posthog-server";
 
 const redis = Redis.fromEnv();
 
+/** Optional label for slow-operation logs (e.g. `listRFCs:inline_counts`). */
+export type CachedJsonOpOpts = {
+  name?: string;
+};
+
+function cacheLogPrefix(opts?: CachedJsonOpOpts): string {
+  return opts?.name ? `[${opts.name}] ` : "";
+}
+
 export async function getCachedJsonData<T>(key: string): Promise<T | null> {
   try {
     const t0 = performance.now();
     const cachedData = (await redis.get(key)) as T | null;
     const elapsed = performance.now() - t0;
     if (elapsed > 50) {
-      console.log(`[cache] SLOW redis.get("${key}") took ${elapsed.toFixed(0)}ms`);
+      console.log(
+        `[cache] SLOW redis.get("${key}") took ${elapsed.toFixed(0)}ms`,
+      );
     }
     return cachedData;
   } catch (error) {
@@ -40,13 +51,17 @@ export async function setCachedJsonData<T>(
   key: string,
   data: T,
   ttl: number,
+  opts?: CachedJsonOpOpts,
 ): Promise<void> {
   try {
     const t0 = performance.now();
     await redis.set(key, JSON.stringify(data), ttl ? { ex: ttl } : undefined);
     const elapsed = performance.now() - t0;
     if (elapsed > 50) {
-      console.log(`[cache] SLOW redis.set("${key}") took ${elapsed.toFixed(0)}ms`);
+      const label = cacheLogPrefix(opts);
+      console.log(
+        `[cache] SLOW ${label}redis.set("${key}") took ${elapsed.toFixed(0)}ms`,
+      );
     }
   } catch (error) {
     captureServerException(error as Error, undefined, {
@@ -65,6 +80,7 @@ export async function setCachedJsonData<T>(
  */
 export async function getCachedJsonDataBatch<T>(
   keys: string[],
+  opts?: CachedJsonOpOpts,
 ): Promise<(T | null)[]> {
   if (keys.length === 0) return [];
   try {
@@ -72,13 +88,12 @@ export async function getCachedJsonDataBatch<T>(
     const values = (await redis.mget(...keys)) as (string | null)[];
     const elapsed = performance.now() - t0;
     if (elapsed > 50) {
+      const label = cacheLogPrefix(opts);
       console.log(
-        `[cache] redis.mget(${keys.length} keys) took ${elapsed.toFixed(0)}ms`,
+        `[cache] SLOW ${label}redis.mget(${keys.length} keys) took ${elapsed.toFixed(0)}ms`,
       );
     }
-    return values.map((v) =>
-      v != null ? (JSON.parse(v) as T) : null,
-    );
+    return values.map((v) => (v != null ? (JSON.parse(v) as T) : null));
   } catch (error) {
     captureServerException(error as Error, undefined, {
       function: "getCachedJsonDataBatch",
@@ -96,6 +111,7 @@ export async function getCachedJsonDataBatch<T>(
 export async function setCachedJsonDataBatch<T>(
   entries: Array<{ key: string; value: T }>,
   ttl: number,
+  opts?: CachedJsonOpOpts,
 ): Promise<void> {
   if (entries.length === 0) return;
   try {
@@ -107,8 +123,9 @@ export async function setCachedJsonDataBatch<T>(
     await p.exec();
     const elapsed = performance.now() - t0;
     if (elapsed > 50) {
+      const label = cacheLogPrefix(opts);
       console.log(
-        `[cache] redis.pipeline set(${entries.length} keys) took ${elapsed.toFixed(0)}ms`,
+        `[cache] SLOW ${label}redis.pipeline set(${entries.length} keys) took ${elapsed.toFixed(0)}ms`,
       );
     }
   } catch (error) {

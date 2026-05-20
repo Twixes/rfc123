@@ -104,7 +104,9 @@ export function parseDecisionBlocks(body: string): DecisionBlock[] {
       continue;
     }
     if (inFence) continue;
-    const m = line.match(/^###\s+Decision\s+\((\d{4}-\d{2}-\d{2})(?:\s+by\s+@([\w-]+))?\)/);
+    const m = line.match(
+      /^###\s+Decision\s+\((\d{4}-\d{2}-\d{2})(?:\s+by\s+@([\w-]+))?\)/,
+    );
     if (!m) continue;
     const date = m[1];
     const decidedBy = m[2] ?? null;
@@ -178,7 +180,9 @@ export async function getGrantedScopes(accessToken: string): Promise<string[]> {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  await setCachedJsonData(cacheKey, scopes, 3600);
+  await setCachedJsonData(cacheKey, scopes, 3600, {
+    name: "getGrantedScopes:oauth_scopes",
+  });
   return scopes;
 }
 
@@ -191,6 +195,40 @@ export {
   normalizeRepoPath,
   resolveMarkdownImageRepoPath,
 } from "./markdown-assets";
+
+function repoHasRfcsCacheKey(owner: string, name: string): string {
+  return `repo_has_rfcs:${owner}:${name}`;
+}
+
+async function detectRepoHasRfcs(
+  octokit: Octokit,
+  owner: string,
+  name: string,
+): Promise<boolean> {
+  const nameLower = name.toLowerCase();
+  if (
+    nameLower.includes("rfc") ||
+    nameLower.includes("requests-for-comments")
+  ) {
+    return true;
+  }
+  const [variantFull, variantShort] = await Promise.allSettled([
+    octokit.rest.repos.getContent({
+      owner,
+      repo: name,
+      path: "requests-for-comments",
+    }),
+    octokit.rest.repos.getContent({
+      owner,
+      repo: name,
+      path: "RFCs",
+    }),
+  ]);
+  return (
+    variantFull.status === "fulfilled" ||
+    variantShort.status === "fulfilled"
+  );
+}
 
 export async function listReposWithRFCs(
   accessToken: string,
@@ -223,9 +261,7 @@ export async function listReposWithRFCs(
       await octokit.rest.repos.listForAuthenticatedUser(listParams);
     const linkHeader = firstPage.headers.link;
     const lastPageMatch = linkHeader?.match(/[?&]page=(\d+)>; rel="last"/);
-    const lastPage = lastPageMatch
-      ? Number.parseInt(lastPageMatch[1], 10)
-      : 1;
+    const lastPage = lastPageMatch ? Number.parseInt(lastPageMatch[1], 10) : 1;
     const restPages =
       lastPage > 1
         ? await Promise.all(
@@ -245,48 +281,26 @@ export async function listReposWithRFCs(
       })),
     );
 
-    // Check all repos in parallel for RFC content
-    const checks = repos.map(async (repo) => {
-      let hasRFCs = await getCachedJsonData(
-        `repo_has_rfcs:${repo.owner}:${repo.name}`,
-      );
+    // Check all repos in parallel for RFC content (single MGET for cache hits).
+    const repoHasRfcsKeys = repos.map((repo) =>
+      repoHasRfcsCacheKey(repo.owner, repo.name),
+    );
+    const cachedHasRFCs = await getCachedJsonDataBatch<boolean>(
+      repoHasRfcsKeys,
+      { name: "listReposWithRFCs:repo_has_rfcs" },
+    );
+
+    const checks = repos.map(async (repo, i) => {
+      let hasRFCs: boolean | null = cachedHasRFCs[i];
       if (hasRFCs != null) {
         return hasRFCs ? repo : null;
       }
-      // Check if repo name suggests it's an RFC repo
-      const nameLower = repo.name.toLowerCase();
-      if (
-        nameLower.includes("rfc") ||
-        nameLower.includes("requests-for-comments")
-      ) {
-        hasRFCs = true;
-        await setCachedJsonData(
-          `repo_has_rfcs:${repo.owner}:${repo.name}`,
-          hasRFCs,
-          600,
-        );
-        return repo;
-      }
-      // Otherwise check for known RFC directories
-      const [variantFull, variantShort] = await Promise.allSettled([
-        octokit.rest.repos.getContent({
-          owner: repo.owner,
-          repo: repo.name,
-          path: "requests-for-comments",
-        }),
-        octokit.rest.repos.getContent({
-          owner: repo.owner,
-          repo: repo.name,
-          path: "RFCs",
-        }),
-      ]);
-      hasRFCs =
-        variantFull.status === "fulfilled" ||
-        variantShort.status === "fulfilled";
+      hasRFCs = await detectRepoHasRfcs(octokit, repo.owner, repo.name);
       await setCachedJsonData(
-        `repo_has_rfcs:${repo.owner}:${repo.name}`,
+        repoHasRfcsCacheKey(repo.owner, repo.name),
         hasRFCs,
         600,
+        { name: "listReposWithRFCs:repo_has_rfcs" },
       );
       return hasRFCs ? repo : null;
     });
@@ -299,6 +313,7 @@ export async function listReposWithRFCs(
       `repos_with_rfcs:${accessToken}`,
       reposWithRFCs,
       600,
+      { name: "listReposWithRFCs:repos_with_rfcs" },
     );
     return reposWithRFCs;
   } catch (error) {
@@ -315,11 +330,20 @@ export async function listRFCs(
   owner: string,
   repo: string,
   currentUserLogin: string,
-  opts: { withTeamFields?: boolean } = {},
+  opts: {
+    withTeamFields?: boolean;
+    /**
+     * When true, skips the Redis MGET for per-PR inline review comment counts.
+     * Returns `inlineCommentCount` / combined `commentCount` as null; callers
+     * (e.g. `/api/rfcs/comment-counts`) can fill them in after the list renders.
+     */
+    deferInlineCommentCounts?: boolean;
+  } = {},
 ): Promise<RFC[]> {
   try {
     const octokit = await getOctokit(accessToken);
     const withTeamFields = opts.withTeamFields ?? true;
+    const deferInlineCommentCounts = opts.deferInlineCommentCounts ?? false;
 
     // GraphQL query to fetch all PRs with files and comment counts in one request.
     // The Team fragment is gated behind GitHub's `read:org` scope – callers
@@ -389,7 +413,9 @@ export async function listRFCs(
         repo,
       });
       pulls = response.repository.pullRequests.nodes;
-      await setCachedJsonData(cacheKey, pulls, 300); // Cache for 5 minutes
+      await setCachedJsonData(cacheKey, pulls, 300, {
+        name: "listRFCs:graphql_pulls",
+      }); // Cache for 5 minutes
     }
 
     // Filter PRs that have .md files (RFC content can be in any directory)
@@ -397,14 +423,20 @@ export async function listRFCs(
       pr.files.nodes.some((file: any) => file.path.endsWith(".md")),
     );
 
-    // Use cached inline comment counts where available, null for misses.
-    // Missing counts are resolved separately via fetchInlineCommentCounts().
-    const commentCountCacheKeys = rfcPulls.map(
-      (pr: any) => `rfc:${owner}:${repo}:${pr.number}:review_comments_count`,
-    );
-    const inlineCountByIndex = await getCachedJsonDataBatch<number>(
-      commentCountCacheKeys,
-    );
+    // Inline (review) comment counts: either batch from cache here, or defer to
+    // `/api/rfcs/comment-counts` + fetchInlineCommentCounts so list responses stay fast.
+    let inlineCountByIndex: (number | null)[];
+    if (deferInlineCommentCounts) {
+      inlineCountByIndex = rfcPulls.map(() => null);
+    } else {
+      const commentCountCacheKeys = rfcPulls.map(
+        (pr: any) => `rfc:${owner}:${repo}:${pr.number}:review_comments_count`,
+      );
+      inlineCountByIndex = await getCachedJsonDataBatch<number>(
+        commentCountCacheKeys,
+        { name: "listRFCs:inline_review_comment_counts" },
+      );
+    }
 
     const rfcPullsWithCounts = rfcPulls.map((pr: any, i: number) => {
       const reviewRequested = pr.reviewRequests?.nodes?.some(
@@ -548,7 +580,10 @@ export function filterRFCsAwaitingReview(
 export async function listAllRFCs(
   accessToken: string,
   currentUserLogin: string,
-  opts: { withTeamFields?: boolean } = {},
+  opts: {
+    withTeamFields?: boolean;
+    deferInlineCommentCounts?: boolean;
+  } = {},
 ): Promise<RFC[]> {
   try {
     // Get all repos with RFC directories
@@ -600,7 +635,9 @@ export async function fetchInlineCommentCounts(
     const cacheKeys = prNumbers.map(
       (n) => `rfc:${owner}:${repo}:${n}:review_comments_count`,
     );
-    const cached = await getCachedJsonDataBatch<number>(cacheKeys);
+    const cached = await getCachedJsonDataBatch<number>(cacheKeys, {
+      name: "fetchInlineCommentCounts:review_comment_counts",
+    });
 
     const result: Record<number, number> = {};
     const toFetch: number[] = [];
@@ -640,6 +677,7 @@ export async function fetchInlineCommentCounts(
           value: count,
         })),
         300,
+        { name: "fetchInlineCommentCounts:review_comment_counts" },
       );
 
       for (const { prNumber, count } of fetched) {
@@ -895,6 +933,7 @@ export async function getRFCDetail(
           markdownEtag,
         },
         300,
+        { name: "getRFCDetail:rfc_content" },
       );
     }
 
@@ -937,8 +976,7 @@ export async function getRFCDetail(
       requestedTeamSlugs: [],
       labels,
       reviewDecision: null,
-      hasDecision:
-        labels.includes(DECISION_LABEL) || decisionBlocks.length > 0,
+      hasDecision: labels.includes(DECISION_LABEL) || decisionBlocks.length > 0,
       decisionBlocks,
       mergeStateStatus: (pr.mergeable_state as string | null) ?? null,
       mergeable: pr.mergeable ?? null,
@@ -965,7 +1003,11 @@ export async function postComment(
   path?: string,
   line?: number,
   replyToCommentId?: number,
-  range?: { startLine?: number; side?: "LEFT" | "RIGHT"; startSide?: "LEFT" | "RIGHT" },
+  range?: {
+    startLine?: number;
+    side?: "LEFT" | "RIGHT";
+    startSide?: "LEFT" | "RIGHT";
+  },
 ): Promise<void> {
   try {
     const octokit = await getOctokit(accessToken);
@@ -1052,10 +1094,14 @@ export async function getCurrentUser(
       login: user.login,
       avatarUrl: user.avatar_url,
     };
-    await setCachedJsonData(userCacheKey, currentUser, 3600); // Cache for 1 hour
+    await setCachedJsonData(userCacheKey, currentUser, 3600, {
+      name: "getCurrentUser:user_info",
+    }); // Cache for 1 hour
     // Also update legacy key so getCurrentUserLogin callers benefit
     if (!cachedLogin) {
-      await setCachedJsonData(legacyCacheKey, user.login, 3600);
+      await setCachedJsonData(legacyCacheKey, user.login, 3600, {
+        name: "getCurrentUser:legacy_login",
+      });
     }
     console.log(
       `[getCurrentUser] cache MISS, fetched from GH, took ${(performance.now() - t0).toFixed(0)}ms`,
@@ -1109,8 +1155,8 @@ export async function getRFCTitle(
 ): Promise<string | null> {
   try {
     const t0 = performance.now();
-    // Try the same cache key that getRFCDetail uses
-    const contentCacheKey = `rfc:${owner}:${repo}:${prNumber}:content`;
+    // Same key as getRFCDetail (`:v2` — older `:content` keys are obsolete).
+    const contentCacheKey = `rfc:${owner}:${repo}:${prNumber}:content:v2`;
     const cached = await getCachedJsonData<{ pr: { title: string } }>(
       contentCacheKey,
     );
@@ -1175,42 +1221,27 @@ export async function listWritableRepos(
 
     // Determine which repos already host RFCs, in parallel, using the same
     // heuristic as listReposWithRFCs (name or directory).
+    const repoHasRfcsKeys = data.map((repo) =>
+      repoHasRfcsCacheKey(repo.owner.login, repo.name),
+    );
+    const cachedHasRFCs = await getCachedJsonDataBatch<boolean>(
+      repoHasRfcsKeys,
+      { name: "listWritableRepos:repo_has_rfcs" },
+    );
+
+    const cacheWrites: Array<{ key: string; value: boolean }> = [];
+
     const annotated = await Promise.all(
-      data.map(async (repo) => {
+      data.map(async (repo, i) => {
         const owner = repo.owner.login;
         const name = repo.name;
-        const nameLower = name.toLowerCase();
-        let hasRFCs: boolean | null = await getCachedJsonData(
-          `repo_has_rfcs:${owner}:${name}`,
-        );
+        let hasRFCs: boolean | null = cachedHasRFCs[i];
         if (hasRFCs == null) {
-          if (
-            nameLower.includes("rfc") ||
-            nameLower.includes("requests-for-comments")
-          ) {
-            hasRFCs = true;
-          } else {
-            const [variantFull, variantShort] = await Promise.allSettled([
-              octokit.rest.repos.getContent({
-                owner,
-                repo: name,
-                path: "requests-for-comments",
-              }),
-              octokit.rest.repos.getContent({
-                owner,
-                repo: name,
-                path: "RFCs",
-              }),
-            ]);
-            hasRFCs =
-              variantFull.status === "fulfilled" ||
-              variantShort.status === "fulfilled";
-          }
-          await setCachedJsonData(
-            `repo_has_rfcs:${owner}:${name}`,
-            hasRFCs,
-            600,
-          );
+          hasRFCs = await detectRepoHasRfcs(octokit, owner, name);
+          cacheWrites.push({
+            key: repoHasRfcsCacheKey(owner, name),
+            value: hasRFCs,
+          });
         }
 
         return {
@@ -1225,13 +1256,21 @@ export async function listWritableRepos(
       }),
     );
 
+    if (cacheWrites.length > 0) {
+      await setCachedJsonDataBatch(cacheWrites, 600, {
+        name: "listWritableRepos:repo_has_rfcs",
+      });
+    }
+
     // Sort: RFC repos first (familiar territory), then by last updated.
     annotated.sort((a, b) => {
       if (a.hasRFCs !== b.hasRFCs) return a.hasRFCs ? -1 : 1;
       return 0;
     });
 
-    await setCachedJsonData(cacheKey, annotated, 300);
+    await setCachedJsonData(cacheKey, annotated, 300, {
+      name: "listWritableRepos:writable_repos_list",
+    });
     return annotated;
   } catch (error) {
     captureServerException(error as Error, undefined, {
@@ -1330,7 +1369,9 @@ export async function detectRfcDirectory(
     try {
       const res = await octokit.rest.repos.getContent({ owner, repo, path });
       if (Array.isArray(res.data)) {
-        await setCachedJsonData(cacheKey, path, 3600);
+        await setCachedJsonData(cacheKey, path, 3600, {
+          name: "detectRfcDirectory:directory",
+        });
         return path;
       }
     } catch {
@@ -1338,7 +1379,9 @@ export async function detectRfcDirectory(
     }
   }
   const fallback = "requests-for-comments";
-  await setCachedJsonData(cacheKey, fallback, 3600);
+  await setCachedJsonData(cacheKey, fallback, 3600, {
+    name: "detectRfcDirectory:fallback",
+  });
   return fallback;
 }
 

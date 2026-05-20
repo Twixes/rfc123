@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import rehypeRaw from "rehype-raw";
@@ -11,7 +12,9 @@ interface CommentMarkdownProps {
   content: string;
 }
 
-export function CommentMarkdown({ content }: CommentMarkdownProps) {
+export const CommentMarkdown = memo(function CommentMarkdown({
+  content,
+}: CommentMarkdownProps) {
   return (
     <div className="text-sm text-gray-90">
       <ReactMarkdown
@@ -129,4 +132,4 @@ export function CommentMarkdown({ content }: CommentMarkdownProps) {
       </ReactMarkdown>
     </div>
   );
-}
+});

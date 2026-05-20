@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { motion } from "motion/react";
 import { CommentMarkdown } from "@/components/CommentMarkdown";
 import { CommentPermalink } from "@/components/CommentPermalink";
@@ -27,7 +28,6 @@ interface ExistingLineCommentsProps {
   commentBoxRef: (el: HTMLDivElement | null) => void;
   /** Ref to the expandable content block; used to measure final height before animation */
   onContentRef?: (el: HTMLDivElement | null) => void;
-  isHovered?: boolean;
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
 }
@@ -39,7 +39,7 @@ const SPRING = {
   mass: 0.6,
 };
 
-export function ExistingLineComments({
+export const ExistingLineComments = memo(function ExistingLineComments({
   lineNumber,
   endLineNumber,
   threads,
@@ -57,7 +57,6 @@ export function ExistingLineComments({
   onToggleCollapse,
   commentBoxRef,
   onContentRef,
-  isHovered,
   onMouseEnter,
   onMouseLeave,
 }: ExistingLineCommentsProps) {
@@ -73,11 +72,8 @@ export function ExistingLineComments({
   return (
     <motion.div
       ref={commentBoxRef}
-      className={`group/note lg:absolute static w-full lg:w-[400px] mb-3 lg:mb-0 rounded-md bg-surface border transition-shadow ${
-        isHovered
-          ? "border-magenta/50 shadow-[0_1px_0_0_rgba(0,0,0,0.02),0_8px_24px_-12px_rgba(114,30,60,0.18)]"
-          : "border-gray-20 shadow-[0_1px_0_0_rgba(0,0,0,0.02)]"
-      }`}
+      data-comment-line={lineNumber}
+      className="group/note lg:absolute static w-full lg:w-[400px] mb-3 lg:mb-0 rounded-md bg-surface border border-gray-20 shadow-[0_1px_0_0_rgba(0,0,0,0.02)] transition-shadow"
       initial={{ top: position }}
       animate={{ top: position }}
       transition={SPRING}
@@ -90,14 +86,7 @@ export function ExistingLineComments({
           onClick={onToggleCollapse}
           className="flex w-full items-center gap-2.5 py-2.5 pl-3.5 pr-3 text-left cursor-pointer rounded-md"
         >
-          <span
-            className="comment-line-badge shrink-0 font-mono text-[10px] uppercase tracking-[0.12em] transition-opacity"
-            style={
-              {
-                "--comment-opacity": isHovered ? 1 : 0.7,
-              } as React.CSSProperties
-            }
-          >
+          <span className="comment-line-badge shrink-0 font-mono text-[10px] uppercase tracking-[0.12em] transition-opacity">
             L{lineLabel}
           </span>
           <span className="min-w-0 flex-1 truncate text-xs text-gray-70">
@@ -138,11 +127,6 @@ export function ExistingLineComments({
             type="button"
             onClick={onToggleCollapse}
             className="comment-line-badge inline-flex items-baseline gap-2 font-mono text-[10px] uppercase tracking-[0.12em] transition-opacity hover:opacity-70 cursor-pointer"
-            style={
-              {
-                "--comment-opacity": isHovered ? 1 : 0.7,
-              } as React.CSSProperties
-            }
           >
             Line {lineLabel}
             {hasMultipleThreads && (
@@ -157,19 +141,9 @@ export function ExistingLineComments({
             className="rounded p-1 text-gray-40 transition-colors hover:bg-gray-5 hover:text-foreground cursor-pointer"
             aria-label="Collapse thread"
           >
-            <svg
-              className="h-3 w-3"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
+            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <title>Collapse</title>
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M5 15l7-7 7 7"
-              />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
             </svg>
           </button>
         </div>
@@ -202,10 +176,7 @@ export function ExistingLineComments({
                     }`}
                   >
                     {commentIndex > 0 && (
-                      <span
-                        aria-hidden
-                        className="absolute -top-2 left-2 h-2 w-px bg-gray-20"
-                      />
+                      <span aria-hidden className="absolute -top-2 left-2 h-2 w-px bg-gray-20" />
                     )}
                     <div className="mb-1.5 flex items-center gap-2">
                       <img
@@ -217,10 +188,7 @@ export function ExistingLineComments({
                         {comment.user}
                       </span>
                       <span className="text-gray-30">·</span>
-                      <RelativeTime
-                        date={comment.createdAt}
-                        className="text-[11px] text-gray-50"
-                      />
+                      <RelativeTime date={comment.createdAt} className="text-[11px] text-gray-50" />
                       <CommentPermalink commentId={comment.id} />
                     </div>
                     <CommentMarkdown content={comment.body} />
@@ -249,16 +217,15 @@ export function ExistingLineComments({
                   >
                     Reply
                   </button>
-                  {threadIndex === threads.length - 1 &&
-                    !isStartingNewThread && (
-                      <button
-                        type="button"
-                        onClick={onStartNewThread}
-                        className="rounded-md border border-dashed border-gray-20 bg-surface px-2.5 py-1 text-[11px] font-medium text-gray-50 transition-colors hover:bg-gray-5 hover:text-foreground hover:border-gray-30 cursor-pointer"
-                      >
-                        + New thread
-                      </button>
-                    )}
+                  {threadIndex === threads.length - 1 && !isStartingNewThread && (
+                    <button
+                      type="button"
+                      onClick={onStartNewThread}
+                      className="rounded-md border border-dashed border-gray-20 bg-surface px-2.5 py-1 text-[11px] font-medium text-gray-50 transition-colors hover:bg-gray-5 hover:text-foreground hover:border-gray-30 cursor-pointer"
+                    >
+                      + New thread
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -286,4 +253,4 @@ export function ExistingLineComments({
       </motion.div>
     </motion.div>
   );
-}
+});

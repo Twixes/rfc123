@@ -52,8 +52,9 @@ export function LineCommentBox({
     <motion.div
       ref={commentBoxRef}
       className="lg:absolute static w-full lg:w-[400px] rounded-md bg-surface border border-cyan/70 shadow-[0_1px_0_0_rgba(0,0,0,0.02),0_10px_28px_-14px_rgba(57,144,168,0.35)]"
-      initial={{ top: position, opacity: 0, y: -2 }}
-      animate={{ top: position, opacity: 1, y: 0 }}
+      style={{ top: position }}
+      initial={{ opacity: 0, y: -2 }}
+      animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -2 }}
       transition={SPRING}
       onMouseEnter={onMouseEnter}

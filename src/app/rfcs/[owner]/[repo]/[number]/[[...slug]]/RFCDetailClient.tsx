@@ -52,7 +52,7 @@ export default function RFCDetailClient({
       if (!response.ok) {
         throw new Error("Failed to load comments");
       }
-      const data = await response.json();
+      const data = (await response.json()) as Comment[];
       setComments(data);
       setOptimisticComments([]); // Clear optimistic comments after loading real ones
     } catch (error) {
@@ -72,7 +72,7 @@ export default function RFCDetailClient({
       if (!response.ok) {
         throw new Error("Failed to load RFC");
       }
-      const data = await response.json();
+      const data = (await response.json()) as RFCDetail;
       setRfc(data);
       // Load comments progressively after content is ready
       loadComments();
@@ -249,7 +249,7 @@ export default function RFCDetailClient({
         }
       />
 
-      <div className="relative border-t border-gray-20 pt-8">
+      <div className="relative border-t border-gray-20 pt-4">
         {viewMode === "pretty" ? (
           <InlineCommentableMarkdown
             content={rfc.markdownContent}

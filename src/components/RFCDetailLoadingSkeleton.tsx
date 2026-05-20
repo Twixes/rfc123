@@ -77,7 +77,7 @@ export default function RFCDetailLoadingSkeleton({
 
       {/* Content skeleton — single hairline rule, no card chrome */}
       <motion.div
-        className="border-t border-gray-20 pt-8"
+        className="border-t border-gray-20 pt-4"
         variants={FADE_UP}
         transition={{ duration: 0.35 }}
       >

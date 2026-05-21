@@ -194,14 +194,15 @@ export default async function LandingPage() {
                     <strong>
                       Connect Claude, ChatGPT, or any agent with our MCP server.
                     </strong>{" "}
-                    One click to authorize — then it can list, read, and discuss
-                    RFCs alongside you.
+                    One click to authorize – then it can list, read, and discuss
+                    RFCs alongside you. No slop here, as the agent can read, but{" "}
+                    <em>not</em> write for you.
                   </p>
                   <p className="text-sm text-foreground">
-                    <strong>It thinks; you type.</strong> Skills for
-                    pressure-testing claims, comparing RFCs against the
-                    codebase, and synthesizing discussion — all in chat. Every
-                    word that lands on GitHub is still typed by a human.
+                    <strong>Instructions for digging deep.</strong> With RFC123
+                    skills, your assistant becomes an expert in comparing
+                    proposals against codebases, synthesizing discussions,
+                    extracting action items, or suggesting reviewers.
                   </p>
                 </div>
               </div>

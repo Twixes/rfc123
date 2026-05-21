@@ -68,6 +68,10 @@ export async function resolveRfcRef(
           repo: r.name,
           pull_number: opts.number,
         });
+        // Confirm it's actually an RFC PR (has a .md file in its diff). Cheap
+        // shortcut: we trust listReposWithRFCs to have filtered to RFC-bearing
+        // repos already, so any PR with this number in such a repo is fair
+        // game — re-listing files would multiply API calls per resolution.
         return { owner: r.owner, repo: r.name, number: data.number };
       } catch {
         return null;
@@ -348,6 +352,7 @@ export async function mergeRFC(input: {
   const approvals = [...latest.values()].filter((s) => s === "APPROVED").length;
   const unresolved = threadsRes.threads.filter((t) => !t.isResolved);
 
+  // Decision block check — read the .md file from the head branch.
   let hasDecision = false;
   const mdFile = filesRes.data.find((f) => f.filename.endsWith(".md"));
   if (mdFile) {
@@ -415,9 +420,13 @@ export async function mergeRFC(input: {
 }
 
 export interface RequestReviewersResult {
+  /** Reviewers freshly added on this call. */
   added: { users: string[]; teams: string[] };
+  /** Reviewers already pending before this call (no-op for them). */
   alreadyRequested: { users: string[]; teams: string[] };
+  /** Reviewers removed on this call. */
   removed: { users: string[]; teams: string[] };
+  /** Final state of pending review requests after both add and remove. */
   pending: { users: string[]; teams: string[] };
 }
 
@@ -463,6 +472,8 @@ export async function requestReviewers(input: {
     wantUsers.length > 0 ||
     wantTeams.length > 0
   ) {
+    // Pass through all of `wantUsers`/`wantTeams` (not just `addedUsers`) so a
+    // user who previously reviewed and is no longer pending gets re-requested.
     await octokit.rest.pulls.requestReviewers({
       owner: input.owner,
       repo: input.repo,
@@ -507,16 +518,23 @@ export interface ReviewerSearchResult {
   kind: "user" | "team";
   /** GitHub login (users) or `org/slug` (teams) — what to pass to request_reviewers. */
   handle: string;
+  /** Display name (users: profile name; teams: team name). May be null. */
   name: string | null;
+  /** Avatar URL where available. */
   avatarUrl: string | null;
-  /** Org the candidate was matched in. */
+  /** Org login the candidate is sourced from (always set for teams; for users
+   *  this is the org they were matched in). */
   org: string;
 }
 
 /**
  * Search for *reviewers* — people and teams — within the orgs that host RFC
- * repos visible to the user. Pools results across orgs and caps them at
- * `limit` (default 20).
+ * repos visible to the user. Replaces the previous global-GitHub user search
+ * (10-result cap on the global namespace was near-useless for common names).
+ *
+ * Results pool across orgs and are capped at `limit` (default 20). Users from
+ * the search API include their display name; teams come from
+ * `orgs/{org}/teams` filtered locally on slug and name.
  */
 export async function searchReviewers(input: {
   accessToken: string;
@@ -530,6 +548,8 @@ export async function searchReviewers(input: {
   const octokit = new Octokit({ auth: accessToken });
 
   const repos = await listReposWithRFCs(accessToken);
+  // Unique orgs from RFC repos. Personal-account owners are also acceptable
+  // (their "org" search just returns themselves) but rarely useful.
   const orgs = Array.from(new Set(repos.map((r) => r.owner)));
   if (orgs.length === 0) return [];
 
@@ -538,6 +558,7 @@ export async function searchReviewers(input: {
 
   await Promise.all(
     orgs.map(async (org) => {
+      // Users via org-scoped search.
       try {
         const { data } = await octokit.rest.search.users({
           q: `${trimmed} org:${org}`,
@@ -568,6 +589,7 @@ export async function searchReviewers(input: {
           org,
         });
       }
+      // Teams via teams listing, filtered locally.
       try {
         const teams = await octokit.paginate(octokit.rest.teams.list, {
           org,
@@ -593,6 +615,8 @@ export async function searchReviewers(input: {
     }),
   );
 
+  // De-duplicate by handle (rare for users — but a team and a user could
+  // share a name across orgs).
   const seen = new Set<string>();
   const deduped: ReviewerSearchResult[] = [];
   for (const r of results) {
@@ -638,6 +662,9 @@ export async function searchRFCs(input: {
       per_page: limit,
     });
 
+    // Strip GitHub search qualifiers (`label:foo`) and surrounding quotes
+    // before classifying — otherwise `"design doc"` would never match a title
+    // because the title doesn't contain the literal quotes.
     const haystackQuery = query
       .replace(/\b[a-z]+:[^\s"]+/gi, " ")
       .replace(/["']/g, "")

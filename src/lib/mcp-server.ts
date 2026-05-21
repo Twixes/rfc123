@@ -616,6 +616,9 @@ export function registerMcpCapabilities(server: McpServer) {
     },
   );
 
+  // The skills catalog is exposed as an MCP resource (rfc123://skills/catalog),
+  // not a tool — it's static reference data, not an action. Agents read it
+  // via ReadMcpResourceTool when the user asks about installing skills.
   server.registerResource(
     "skills-catalog",
     "rfc123://skills/catalog",

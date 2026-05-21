@@ -8,14 +8,22 @@
     "start": "next start",
     "lint": "biome check",
     "format": "biome format --write",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,json,css}": [
+      "biome check --write --no-errors-on-unmatched"
+    ]
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.64",
     "@auth/core": "^0.41.0",
     "@headlessui/react": "^2.2.10",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@radix-ui/react-tooltip": "^1.2.8",
     "@upstash/redis": "^1.35.6",
     "@vvo/tzdb": "^6.198.0",
     "ai": "^6.0.184",
@@ -48,6 +56,8 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "babel-plugin-react-compiler": "1.0.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.5",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.6"

@@ -3,6 +3,7 @@ import { auth, signIn } from "@/auth";
 import AccountDropdown from "@/components/AccountDropdown";
 import ConnectAgentButton from "@/components/ConnectAgentButton";
 import Dingbat from "@/components/Dingbat";
+import Tooltip from "@/components/Tooltip";
 
 const ICON_CLASS = "w-4 h-4";
 
@@ -94,9 +95,22 @@ export default async function LandingPage() {
 
           <p className="mb-4 text-lg sm:text-xl font-light leading-tight text-gray-70">
             The agent-native{" "}
-            <abbr title="Request for Comments" className="cursor-help">
-              RFC
-            </abbr>{" "}
+            <Tooltip
+              content={
+                <>
+                  <div className="font-medium">Request for Comments</div>
+                  <div className="text-gray-30">
+                    Written proposals that seek feedback on decisions, their
+                    tradeoffs, and implications.
+                  </div>
+                </>
+              }
+              align="start"
+            >
+              <abbr className="cursor-help underline decoration-dotted underline-offset-4 decoration-gray-40">
+                RFC
+              </abbr>
+            </Tooltip>{" "}
             platform for teams.
           </p>
 

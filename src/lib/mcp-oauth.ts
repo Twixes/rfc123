@@ -18,7 +18,7 @@ export function randomToken(byteLen = 32): string {
     .replace(/\//g, "_");
 }
 
-/** RFC 7636 §4.2 — base64url(SHA-256(verifier)). */
+/** RFC 7636 §4.2 – base64url(SHA-256(verifier)). */
 export function pkceS256(verifier: string): string {
   return createHash("sha256")
     .update(verifier)
@@ -36,7 +36,7 @@ export const SUPPORTED_SCOPES = ["mcp"] as const;
 export const DEFAULT_SCOPE = "mcp";
 
 /**
- * Access tokens last 24h. TODO: implement refresh tokens — without them,
+ * Access tokens last 24h. TODO: implement refresh tokens – without them,
  * clients re-run the full PKCE flow daily, which Claude.ai handles but with
  * a visible browser pop. Kept short until then to bound blast radius of a
  * leaked token (we don't yet have a /revoke HTTP endpoint either).

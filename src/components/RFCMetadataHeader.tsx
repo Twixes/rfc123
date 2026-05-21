@@ -105,7 +105,7 @@ export function RFCMetadataHeader({ rfc, actions }: RFCMetadataHeaderProps) {
         <div className="flex items-center gap-1.5">
           <dt className="text-gray-50">Comments</dt>
           <dd className="font-mono tabular-nums text-foreground">
-            {rfc.commentCount ?? "—"}
+            {rfc.commentCount ?? "–"}
           </dd>
         </div>
 

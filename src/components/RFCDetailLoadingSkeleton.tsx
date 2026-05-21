@@ -29,7 +29,7 @@ export default function RFCDetailLoadingSkeleton({
         <RFCsTopBar user={user ?? null} />
       </motion.div>
 
-      {/* Masthead skeleton — eyebrow + title + byline */}
+      {/* Masthead skeleton – eyebrow + title + byline */}
       <motion.section
         className="mb-6"
         variants={FADE_UP}
@@ -75,7 +75,7 @@ export default function RFCDetailLoadingSkeleton({
         </div>
       </motion.section>
 
-      {/* Content skeleton — single hairline rule, no card chrome */}
+      {/* Content skeleton – single hairline rule, no card chrome */}
       <motion.div
         className="border-t border-gray-20 pt-4"
         variants={FADE_UP}
@@ -104,7 +104,7 @@ export default function RFCDetailLoadingSkeleton({
         </div>
       </motion.div>
 
-      {/* Conversation skeleton — divider list */}
+      {/* Conversation skeleton – divider list */}
       <motion.section
         className="mt-16"
         variants={FADE_UP}

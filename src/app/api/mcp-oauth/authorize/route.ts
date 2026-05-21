@@ -286,7 +286,7 @@ function errorRedirect(
 
 /**
  * Shared styles for OAuth screens. Inlined because these are raw HTML route
- * handlers — they don't get Tailwind or next/font automatically. Color tokens
+ * handlers – they don't get Tailwind or next/font automatically. Color tokens
  * mirror globals.css so the consent flow feels like part of the app.
  */
 const SHARED_STYLE = `<style>
@@ -567,7 +567,7 @@ ${SHARED_STYLE}
         <li>Approve, request changes, merge, close, or reopen RFCs</li>
       </ul>
 
-      <p class="footnote">Every comment or RFC body posted via MCP gets a <code>— via ${escapeHtml(input.clientName)} on RFC123</code> footer.</p>
+      <p class="footnote">Every comment or RFC body posted via MCP gets a <code>– via ${escapeHtml(input.clientName)} on RFC123</code> footer.</p>
 
       <form method="POST" action="/api/mcp-oauth/authorize">
         ${hiddenFields}

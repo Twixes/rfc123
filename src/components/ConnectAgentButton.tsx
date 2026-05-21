@@ -34,7 +34,7 @@ function CopyButton({ text }: { text: string }) {
           setTimeout(() => setCopied(false), 1500);
         } catch {
           // Clipboard access can be blocked (e.g. insecure context). Failing
-          // silently is fine — the snippet is right there to select manually.
+          // silently is fine – the snippet is right there to select manually.
         }
       }}
       className="absolute top-2 right-2 rounded border border-gray-20 bg-surface px-2 py-0.5 text-xs text-gray-70 transition-colors hover:bg-gray-5"
@@ -221,9 +221,9 @@ export function ConnectAgentSetup({
             Optional: install the skills
           </h3>
           <p className="text-sm text-gray-70 mb-2">
-            Skills teach the agent how to help you <em>review</em> an RFC —
+            Skills teach the agent how to help you <em>review</em> an RFC –
             pressure-testing claims, comparing against the codebase,
-            synthesizing discussion — without writing the prose for you. You
+            synthesizing discussion – without writing the prose for you. You
             still type every word that lands on GitHub.
           </p>
           <Snippet>
@@ -289,7 +289,7 @@ export default function ConnectAgentButton({
                 </h2>
                 <p className="text-sm text-gray-70">
                   Point your AI agent at RFC123's MCP server. Your agent helps
-                  you think and review — you still write what lands on GitHub.
+                  you think and review – you still write what lands on GitHub.
                 </p>
               </div>
               <button

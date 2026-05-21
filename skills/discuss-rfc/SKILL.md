@@ -1,6 +1,6 @@
 ---
 name: discuss-rfc
-description: Use when the user wants to talk through a specific RFC in depth — understanding the proposal, pressure-testing it, comparing it against the actual codebase, and surfacing gaps the author missed. Pulls the RFC + threads via the MCP server, grounds the discussion in the current code, and stays in chat. Never posts back to the RFC.
+description: Use when the user wants to talk through a specific RFC in depth – understanding the proposal, pressure-testing it, comparing it against the actual codebase, and surfacing gaps the author missed. Pulls the RFC + threads via the MCP server, grounds the discussion in the current code, and stays in chat. Never posts back to the RFC.
 allowed-tools:
   - mcp__rfc123__rfc123_get_rfc
   - mcp__rfc123__rfc123_get_rfc_comments
@@ -11,7 +11,7 @@ allowed-tools:
 
 Help the user think through a specific RFC by grounding the conversation in
 both the proposal and the codebase it touches. Surface gaps the author
-missed. **The output is the conversation itself** — nothing gets posted back
+missed. **The output is the conversation itself** – nothing gets posted back
 to GitHub by this skill. If the user wants to leave a comment, they type it
 into GitHub themselves.
 
@@ -43,22 +43,22 @@ proposal with me", or pastes an RFC URL and wants to engage with it.
 
 4. **Hand the conversation to the user.** They might want to push back,
    brainstorm alternatives, dig into a specific section, or just understand
-   something. Don't lecture — ask what they want to focus on. Whenever you
-   need a choice or clarification from the user — at this hand-off or anywhere
-   later in the conversation — prefer your structured question-asking tool
+   something. Don't lecture – ask what they want to focus on. Whenever you
+   need a choice or clarification from the user – at this hand-off or anywhere
+   later in the conversation – prefer your structured question-asking tool
    (e.g. `AskUserQuestion` in Claude Code) over a plain prose question, so the
    user can answer with one click. Fall back to free-text questions only if
    no such tool is available.
 
 ## What not to do
 
-- Don't summarize the RFC back to the user in long form — they're reading it.
+- Don't summarize the RFC back to the user in long form – they're reading it.
   Surface what they wouldn't see by reading.
-- **Don't post anything to GitHub.** No comments, no replies, no reviews —
+- **Don't post anything to GitHub.** No comments, no replies, no reviews –
   not even if the user explicitly asks. If they want to leave feedback,
   direct them to the RFC page so they can write it themselves, in their
   own voice. RFCs and the discussion around them are human-written; copying
   LLM prose verbatim is what we're avoiding.
-- Don't draft RFC body rewrites — the agent doesn't author RFC prose.
+- Don't draft RFC body rewrites – the agent doesn't author RFC prose.
 - Don't try to resolve threads or merge. There's no MCP tool for thread
   resolution; merge is its own structural action.

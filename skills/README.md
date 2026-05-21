@@ -5,12 +5,12 @@ Each skill teaches an AI coding assistant how to use the MCP server's
 deterministic tools to help a human think about an RFC.
 
 The MCP server itself never calls an LLM and never builds embeddings.
-Anything that needs judgement — synthesizing, comparing, pressure-testing —
+Anything that needs judgement – synthesizing, comparing, pressure-testing –
 lives here.
 
 ## The rule
 
-The agent reads, clusters, strawmans, steelmans, and synthesizes — **in
+The agent reads, clusters, strawmans, steelmans, and synthesizes – **in
 chat**. Every word that lands on GitHub is typed by a human. None of the
 skills below post comments, reply to threads, write to RFC bodies, or open
 PRs. The only structural writes exposed by the MCP server are

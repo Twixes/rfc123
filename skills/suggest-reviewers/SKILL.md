@@ -31,7 +31,7 @@ add reviewers to an existing RFC.
 3. **Build a candidate list.** For each candidate, write down the *reason*
    they're a good fit ("authored related RFC #X about Y"; "is on
    `${org}/${team}` which has reviewed every storage RFC"). Bare names with
-   no reason are not useful — the user can't sanity-check them.
+   no reason are not useful – the user can't sanity-check them.
 
 4. **Rank.** Cap the list at 5 individuals + up to 2 teams. Rank by
    directness of relevance, not seniority.
@@ -47,7 +47,7 @@ add reviewers to an existing RFC.
 
 7. **Request.** Call `rfc123_request_reviewers` with the chosen `users` and
    `teams`. The response echoes back `added`, `alreadyRequested`, `removed`,
-   and the final `pending` set — share the relevant slice with the user. If
+   and the final `pending` set – share the relevant slice with the user. If
    the user wants to swap a stalled reviewer, use `removeUsers` /
    `removeTeams` in the same call.
 
@@ -55,7 +55,7 @@ add reviewers to an existing RFC.
 
 - Don't recommend reviewers without giving the user a reason. "Add Alice"
   with no rationale is worse than no suggestion.
-- Don't recommend the author. (It happens — check.)
+- Don't recommend the author. (It happens – check.)
 - Don't propose more than 5 individuals; reviewer overload kills response time.
 - Don't invent team slugs. If you can't see the team in `requestedTeamSlugs`
   of any existing RFC, ask the user to confirm the team exists.

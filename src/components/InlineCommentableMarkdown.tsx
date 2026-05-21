@@ -968,7 +968,7 @@ export function InlineCommentableMarkdown({
     }
 
     // Defer to rAF so layout reads happen after the browser paints.
-    // lineOffsets is accessed via ref so it's excluded from deps —
+    // lineOffsets is accessed via ref so it's excluded from deps –
     // removing it prevents a re-trigger when ELC boxes mount and shift layout.
     const raf = requestAnimationFrame(() => recalcPositions());
     return () => cancelAnimationFrame(raf);

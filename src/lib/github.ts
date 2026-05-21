@@ -34,7 +34,7 @@ export interface RFC {
   reviewRequested: boolean;
   /** Team slugs (e.g. ["posthog/web"]) requested as reviewers. */
   requestedTeamSlugs: string[];
-  /** Issue/PR labels — agents/managers use these for filtering and to derive
+  /** Issue/PR labels – agents/managers use these for filtering and to derive
    *  `hasDecision` (applied by humans on the web app when they record a
    *  decision). */
   labels: string[];
@@ -66,7 +66,7 @@ export interface RFCDetail extends RFC {
   markdownFilePath: string | null;
   /** PR head branch ref; used to resolve relative image paths to repo files */
   headRef: string;
-  /** Head commit SHA — agents/UI use this for line-anchored review APIs. */
+  /** Head commit SHA – agents/UI use this for line-anchored review APIs. */
   headSha: string;
   reviewers: Array<{
     login: string;
@@ -857,7 +857,7 @@ export async function getRFCDetail(
         }
       }
 
-      // Build reviewers list — take the *latest* review state per user so the
+      // Build reviewers list – take the *latest* review state per user so the
       // displayed verdict reflects "where are they now" not "where were they
       // when they first commented".
       const latestByLogin = new Map<
@@ -1156,7 +1156,7 @@ export async function getRFCTitle(
 ): Promise<string | null> {
   try {
     const t0 = performance.now();
-    // Same key as getRFCDetail (`:v2` — older `:content` keys are obsolete).
+    // Same key as getRFCDetail (`:v2` – older `:content` keys are obsolete).
     const contentCacheKey = `rfc:${owner}:${repo}:${prNumber}:content:v2`;
     const cached = await getCachedJsonData<{ pr: { title: string } }>(
       contentCacheKey,
@@ -1376,7 +1376,7 @@ export async function detectRfcDirectory(
         return path;
       }
     } catch {
-      // not present — try next
+      // not present – try next
     }
   }
   const fallback = "requests-for-comments";

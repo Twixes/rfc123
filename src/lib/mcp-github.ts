@@ -10,7 +10,7 @@ import { captureServerException } from "./posthog-server";
  * caches the MCP path doesn't always need.
  *
  * Surface rule: only *read* and *structural* helpers live here. There is no
- * helper that turns LLM prose into GitHub content — that lands on the
+ * helper that turns LLM prose into GitHub content – that lands on the
  * human-driven web app routes (`/api/comment`, `/api/rfcs` POST) instead.
  */
 
@@ -27,7 +27,7 @@ export interface RfcRef {
  * returns the unique match.
  *
  * Throws with a descriptive message when zero or multiple repos contain a PR
- * with that number — the agent should then prompt the user (or call
+ * with that number – the agent should then prompt the user (or call
  * list_rfcs to narrow down) rather than guess.
  */
 export async function resolveRfcRef(
@@ -71,7 +71,7 @@ export async function resolveRfcRef(
         // Confirm it's actually an RFC PR (has a .md file in its diff). Cheap
         // shortcut: we trust listReposWithRFCs to have filtered to RFC-bearing
         // repos already, so any PR with this number in such a repo is fair
-        // game — re-listing files would multiply API calls per resolution.
+        // game – re-listing files would multiply API calls per resolution.
         return { owner: r.owner, repo: r.name, number: data.number };
       } catch {
         return null;
@@ -279,7 +279,7 @@ export async function fetchAllRfcComments(
  *  2. zero unresolved review threads,
  *  3. a `### Decision (...)` block in the RFC body.
  *
- * `force: true` bypasses every check — the caller is on the hook for why.
+ * `force: true` bypasses every check – the caller is on the hook for why.
  *
  * Merge method auto-selection: if `mergeMethod` is omitted, prefer `squash`
  * (RFC convention: one decision commit), fall back to whichever the repo
@@ -332,7 +332,7 @@ export async function mergeRFC(input: {
     ],
   );
 
-  // Latest review state per user — same logic as getRFCDetail.
+  // Latest review state per user – same logic as getRFCDetail.
   const latest = new Map<string, string>();
   const ordered = [...reviewsRes.data].sort(
     (a, b) =>
@@ -352,7 +352,7 @@ export async function mergeRFC(input: {
   const approvals = [...latest.values()].filter((s) => s === "APPROVED").length;
   const unresolved = threadsRes.threads.filter((t) => !t.isResolved);
 
-  // Decision block check — read the .md file from the head branch.
+  // Decision block check – read the .md file from the head branch.
   let hasDecision = false;
   const mdFile = filesRes.data.find((f) => f.filename.endsWith(".md"));
   if (mdFile) {
@@ -516,7 +516,7 @@ export async function requestReviewers(input: {
 
 export interface ReviewerSearchResult {
   kind: "user" | "team";
-  /** GitHub login (users) or `org/slug` (teams) — what to pass to request_reviewers. */
+  /** GitHub login (users) or `org/slug` (teams) – what to pass to request_reviewers. */
   handle: string;
   /** Display name (users: profile name; teams: team name). May be null. */
   name: string | null;
@@ -528,7 +528,7 @@ export interface ReviewerSearchResult {
 }
 
 /**
- * Search for *reviewers* — people and teams — within the orgs that host RFC
+ * Search for *reviewers* – people and teams – within the orgs that host RFC
  * repos visible to the user. Replaces the previous global-GitHub user search
  * (10-result cap on the global namespace was near-useless for common names).
  *
@@ -610,12 +610,12 @@ export async function searchReviewers(input: {
           }
         }
       } catch (_error) {
-        // Token may lack `read:org` for this org — skip silently.
+        // Token may lack `read:org` for this org – skip silently.
       }
     }),
   );
 
-  // De-duplicate by handle (rare for users — but a team and a user could
+  // De-duplicate by handle (rare for users – but a team and a user could
   // share a name across orgs).
   const seen = new Set<string>();
   const deduped: ReviewerSearchResult[] = [];
@@ -663,7 +663,7 @@ export async function searchRFCs(input: {
     });
 
     // Strip GitHub search qualifiers (`label:foo`) and surrounding quotes
-    // before classifying — otherwise `"design doc"` would never match a title
+    // before classifying – otherwise `"design doc"` would never match a title
     // because the title doesn't contain the literal quotes.
     const haystackQuery = query
       .replace(/\b[a-z]+:[^\s"]+/gi, " ")

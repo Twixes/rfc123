@@ -22,7 +22,7 @@ interface DiscussWithAgentButtonProps {
 /**
  * Build the per-RFC copy-paste prompt. Assumes the user has the RFC123 MCP
  * server connected to their agent, but NOT that they have the rfc123-skills
- * plugin installed — so we inline everything the agent needs to know.
+ * plugin installed – so we inline everything the agent needs to know.
  *
  * Mirrors the canonical `discuss-rfc` skill in `skills/discuss-rfc/SKILL.md`.
  */
@@ -33,7 +33,7 @@ function buildPrompt({
   title,
   author,
 }: DiscussWithAgentButtonProps): string {
-  return `You have access to the RFC123 MCP server, which lets you read engineering RFCs (markdown pull requests) on GitHub. You can read RFCs and discussions; you cannot post comments, replies, reviews, or RFC bodies through the MCP server. The point of this conversation is to help me *think* about an RFC. Any feedback that lands on GitHub I write myself, in my own voice — don't expect me to copy yours verbatim.
+  return `You have access to the RFC123 MCP server, which lets you read engineering RFCs (markdown pull requests) on GitHub. You can read RFCs and discussions; you cannot post comments, replies, reviews, or RFC bodies through the MCP server. The point of this conversation is to help me *think* about an RFC. Any feedback that lands on GitHub I write myself, in my own voice – don't expect me to copy yours verbatim.
 
 I'd like your help thinking through this RFC with me:
 
@@ -60,9 +60,9 @@ Please do the following in order:
    - Things that are harder than the proposal implies, given current structure
    - Existing inline threads that already raise (or contradict) any of the above
 
-4. **Hand the conversation back to me.** Don't summarize the RFC at length — I'm reading it. Ask what I want to focus on: push back, brainstorm alternatives, dig into a section, or understand something specific. Whenever you need a choice or clarification from me — here or anywhere later in the conversation — prefer your structured question-asking tool (e.g. \`AskUserQuestion\` in Claude Code) over a plain prose question, so I can answer with one click. Use free-text questions only if no such tool is available.
+4. **Hand the conversation back to me.** Don't summarize the RFC at length – I'm reading it. Ask what I want to focus on: push back, brainstorm alternatives, dig into a section, or understand something specific. Whenever you need a choice or clarification from me – here or anywhere later in the conversation – prefer your structured question-asking tool (e.g. \`AskUserQuestion\` in Claude Code) over a plain prose question, so I can answer with one click. Use free-text questions only if no such tool is available.
 
-5. **Never post to GitHub.** You don't have a tool that posts on my behalf — that's deliberate. If I ask you to leave a comment, direct me to the RFC page so I can write it myself. Don't draft prose for me to copy; the point is for me to write the comment in my own voice, using what we discussed as input to my thinking.
+5. **Never post to GitHub.** You don't have a tool that posts on my behalf – that's deliberate. If I ask you to leave a comment, direct me to the RFC page so I can write it myself. Don't draft prose for me to copy; the point is for me to write the comment in my own voice, using what we discussed as input to my thinking.
 
 Start with step 1 now.`;
 }
@@ -136,7 +136,7 @@ export function DiscussWithAgentButton(props: DiscussWithAgentButtonProps) {
                 <p className="mt-2 text-sm text-gray-70">
                   Hand this RFC to Claude, ChatGPT, or any agent with the RFC123
                   MCP server. It will read the proposal, ground itself in the
-                  codebase, and surface gaps — then wait. Any feedback that
+                  codebase, and surface gaps – then wait. Any feedback that
                   lands on GitHub you type yourself.
                 </p>
               </div>
@@ -247,7 +247,7 @@ export function DiscussWithAgentButton(props: DiscussWithAgentButtonProps) {
                   Paste this into your agent.
                   <br />
                   It will pull this RFC, compare it against the codebase, and
-                  surface gaps for you. Nothing gets posted back — the MCP
+                  surface gaps for you. Nothing gets posted back – the MCP
                   server can't.
                 </p>
                 <textarea

@@ -45,7 +45,7 @@ const jsonResult = (data: unknown) => ({
 /**
  * Resolve a per-RFC tool's input to `{auth, owner, repo, number}`. If the
  * caller omitted owner/repo we look the PR up across every RFC repo the
- * user can access — so agents (and humans) can refer to an RFC by number
+ * user can access – so agents (and humans) can refer to an RFC by number
  * alone in single-repo orgs and most multi-repo orgs.
  */
 async function resolveCtx(
@@ -159,9 +159,9 @@ function threadInvolvement(
  * is deterministic – no LLM calls, no embedding lookups. Multi-step
  * reasoning is delegated to the agent-side skills (`skills/`).
  *
- * Surface rule: the agent reads and synthesizes — in chat. Every word that
+ * Surface rule: the agent reads and synthesizes – in chat. Every word that
  * lands on GitHub is typed by a human. The only writes exposed here are
- * *structural* (request reviewers, merge) — no prose.
+ * *structural* (request reviewers, merge) – no prose.
  */
 export function registerMcpCapabilities(server: McpServer) {
   server.registerTool(
@@ -188,7 +188,7 @@ export function registerMcpCapabilities(server: McpServer) {
         "omitted). Each result carries a `viewerInvolvement` field showing " +
         "whether the current user authored the RFC, is a requested reviewer, " +
         "or is on a requested team. Results are sorted so the user's own " +
-        "involvement comes first — agents should prioritize those.",
+        "involvement comes first – agents should prioritize those.",
       inputSchema: {
         owner: z.string().optional(),
         repo: z.string().optional(),
@@ -251,8 +251,8 @@ export function registerMcpCapabilities(server: McpServer) {
       description:
         "Fetch the markdown body, reviewers (with per-reviewer state), " +
         "status, merge-readiness, parsed decision blocks, and metadata for " +
-        "a single RFC. Returns `markdownContentNumbered` — a line-numbered " +
-        "view of the body — so agents can cite specific lines back to the " +
+        "a single RFC. Returns `markdownContentNumbered` – a line-numbered " +
+        "view of the body – so agents can cite specific lines back to the " +
         "user. Comments are returned separately by rfc123_get_rfc_comments.",
       inputSchema: {
         owner: z
@@ -462,7 +462,7 @@ export function registerMcpCapabilities(server: McpServer) {
     {
       title: "Search reviewers (users + teams)",
       description:
-        "Search for reviewers — users *and* teams — within the orgs that " +
+        "Search for reviewers – users *and* teams – within the orgs that " +
         "host RFC repos visible to you. Returns `{kind, handle, name, " +
         "avatarUrl, org}` per result, deduplicated and capped (default 20). " +
         "Use the `handle` directly in rfc123_request_reviewers.users / " +
@@ -494,7 +494,7 @@ export function registerMcpCapabilities(server: McpServer) {
         "Add and/or remove reviewers (users or teams) on an RFC in one " +
         "call. Use rfc123_search_reviewers first to resolve handles. " +
         "Passing a user who previously reviewed and is no longer pending " +
-        "re-requests them. Structural action — no prose. Returns a " +
+        "re-requests them. Structural action – no prose. Returns a " +
         "structured echo of what was added, what was already requested, " +
         "what was removed, and the final pending list.",
       inputSchema: {
@@ -553,7 +553,7 @@ export function registerMcpCapabilities(server: McpServer) {
         "a `### Decision (...)` block is present in the RFC body. Pass " +
         "`force: true` to override (caller owns the consequences). " +
         "`mergeMethod` defaults to squash if the repo allows it, otherwise " +
-        "the first method the repo permits. Structural action — no prose.",
+        "the first method the repo permits. Structural action – no prose.",
       inputSchema: {
         owner: z
           .string()
@@ -617,7 +617,7 @@ export function registerMcpCapabilities(server: McpServer) {
   );
 
   // The skills catalog is exposed as an MCP resource (rfc123://skills/catalog),
-  // not a tool — it's static reference data, not an action. Agents read it
+  // not a tool – it's static reference data, not an action. Agents read it
   // via ReadMcpResourceTool when the user asks about installing skills.
   server.registerResource(
     "skills-catalog",
@@ -626,7 +626,7 @@ export function registerMcpCapabilities(server: McpServer) {
       title: "RFC123 agent skills catalog",
       description:
         "List of agent-side skills (workflow recipes that compose RFC123 " +
-        "tools) plus installation instructions. Static reference data — " +
+        "tools) plus installation instructions. Static reference data – " +
         "read this once when the user asks about skills.",
       mimeType: "application/json",
     },
@@ -690,7 +690,7 @@ export function registerMcpCapabilities(server: McpServer) {
                 },
                 rule:
                   "The agent reads, clusters, strawmans, steelmans, and " +
-                  "synthesizes — in chat. Every word that lands on GitHub " +
+                  "synthesizes – in chat. Every word that lands on GitHub " +
                   "is typed by a human.",
                 skills,
                 usage:
@@ -734,7 +734,7 @@ export function registerMcpCapabilities(server: McpServer) {
       );
       const header =
         `# ${detail.title}\n` +
-        `\n*RFC ${owner}/${repo}#${number} — ${detail.status}` +
+        `\n*RFC ${owner}/${repo}#${number} – ${detail.status}` +
         (detail.isDraft ? " (draft)" : "") +
         `, by @${detail.author}*\n\n---\n\n`;
       return {
@@ -834,7 +834,7 @@ export function registerMcpCapabilities(server: McpServer) {
   // Prompts below are all chat-terminating: they help the user think, then
   // stop. They never instruct the agent to post or commit on the user's
   // behalf. If the user wants the output on the RFC, they edit it in
-  // themselves — in their own voice. RFCs are human-written; copying LLM
+  // themselves – in their own voice. RFCs are human-written; copying LLM
   // prose verbatim is the failure mode we're avoiding.
 
   server.registerPrompt(
@@ -918,7 +918,7 @@ export function registerMcpCapabilities(server: McpServer) {
               "read everything. Group concerns by theme; flag what's " +
               "settled vs. unresolved; cite commenters by @login. Show me " +
               "the synthesis in chat. If I want any of it on the RFC, " +
-              "I'll rework it in my own voice — don't expect me to copy " +
+              "I'll rework it in my own voice – don't expect me to copy " +
               "yours.",
           },
         },
@@ -946,7 +946,7 @@ export function registerMcpCapabilities(server: McpServer) {
               "Load the `compare-alternatives` skill. Extract the options " +
               "from the body, propose comparison axes, fill in the table. " +
               "Show me the markdown in chat. If I want it on the RFC, I'll " +
-              "edit it in myself — rewriting the cells in my own voice as " +
+              "edit it in myself – rewriting the cells in my own voice as " +
               "I go.",
           },
         },
@@ -974,7 +974,7 @@ export function registerMcpCapabilities(server: McpServer) {
               "Load the `extract-action-items` skill. Read every comment via " +
               "rfc123_get_rfc_comments. Surface explicit owners + actions. " +
               "Show me a markdown checklist in chat. If I want it on the " +
-              "RFC, I'll edit it in myself — rewriting items in my own " +
+              "RFC, I'll edit it in myself – rewriting items in my own " +
               "voice as I go.",
           },
         },

@@ -7,7 +7,7 @@ import {
   sha256Hex,
 } from "@/lib/mcp-oauth";
 
-// RFC 7636 §4.1 — code_verifier is 43..128 chars of [A-Z a-z 0-9 -._~].
+// RFC 7636 §4.1 – code_verifier is 43..128 chars of [A-Z a-z 0-9 -._~].
 const PKCE_VERIFIER_RE = /^[A-Za-z0-9\-._~]{43,128}$/;
 
 /**

@@ -24,10 +24,10 @@ const handler = createMcpHandler(
     },
     instructions:
       "RFC123 helps you reason about engineering RFCs (markdown pull " +
-      "requests). The MCP surface is read+route only — there is no tool " +
+      "requests). The MCP surface is read+route only – there is no tool " +
       "that posts comments, replies, reviews, or RFC bodies on the user's " +
       "behalf. The agent reads, clusters, strawmans, steelmans, and " +
-      "synthesizes — in chat. Every word that lands on GitHub is typed by " +
+      "synthesizes – in chat. Every word that lands on GitHub is typed by " +
       "a human. Review-craft skills install via " +
       "`/plugin install rfc123-skills` (catalog at " +
       "`rfc123://skills/catalog`).\n\n" +

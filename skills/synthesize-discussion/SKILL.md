@@ -1,17 +1,19 @@
 ---
 name: synthesize-discussion
-description: Use when an RFC has accumulated enough comments that newcomers can't easily see the shape of the discussion. Reads every comment and review thread, groups concerns by theme, distinguishes settled vs. unresolved, and posts a roll-up as a general comment on the RFC.
+description: Use when an RFC has accumulated enough comments that newcomers can't easily see the shape of the discussion. Reads every comment and review thread, groups concerns by theme, distinguishes settled vs. unresolved, and shows the roll-up in chat. Never posts back to GitHub — the user reworks any of it into the RFC in their own words.
 allowed-tools:
   - mcp__rfc123__rfc123_get_rfc
   - mcp__rfc123__rfc123_get_rfc_comments
   - mcp__rfc123__rfc123_list_review_threads
-  - mcp__rfc123__rfc123_post_general_comment
 ---
 
 # synthesize-discussion
 
 Roll up a long RFC discussion into a short, structured summary that lets the
-author and new reviewers orient quickly.
+user orient quickly. **Output stays in chat.** If the user wants the
+synthesis to land on the RFC, they edit it in themselves — rewriting it in
+their own voice, not copying yours verbatim. The chat synthesis is a
+thinking aid, not source prose.
 
 ## When to use
 
@@ -39,10 +41,9 @@ when an RFC has 20+ comments and the user is about to engage.
      author.
 
 5. **Cite people by `@login`.** Specific attributions ("@alice flagged X,
-   @bob countered with Y") are more useful than passive voice. Don't include
-   the via-Claude footer of any prior bot comments in your tally.
+   @bob countered with Y") are more useful than passive voice.
 
-6. **Format the output.** Use this template (adapt as needed):
+6. **Show the synthesis in chat.** Use this template (adapt as needed):
 
    ```markdown
    ## Discussion synthesis
@@ -59,13 +60,18 @@ when an RFC has 20+ comments and the user is about to engage.
    …
    ```
 
-7. **Post it.** Call `rfc123_post_general_comment` with the synthesis. The MCP
-   server appends the via-Claude footer automatically.
+7. **Stop there.** Do not post the synthesis. If the user wants this on the
+   RFC, they incorporate it themselves on GitHub — in their own words. The
+   chat output is for them to read and think with, not to copy verbatim.
 
 ## What not to do
 
 - Don't paraphrase comments in a way that changes their meaning. When
   in doubt, quote.
 - Don't take sides. Surface the disagreement; let humans resolve it.
+- Don't post the synthesis to GitHub — even if the user asks. Hand it to
+  them in chat and remind them to rewrite the bits they want to share in
+  their own voice. RFCs are human-written documents; verbatim LLM prose
+  defeats the purpose.
 - Don't include a synthesis if the discussion is short (under ~10 comments)
   — just point the user at it directly.

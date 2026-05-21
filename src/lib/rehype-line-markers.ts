@@ -61,8 +61,13 @@ export function rehypeLineMarkers() {
 
       // Special handling for code blocks - each line gets a marker
       // Skip mermaid blocks – they need pristine text for rendering
-      const classes = Array.isArray(node.properties?.className) ? node.properties.className : [];
-      if (node.tagName === "code" && classes.some((c) => String(c) === "language-mermaid")) {
+      const classes = Array.isArray(node.properties?.className)
+        ? node.properties.className
+        : [];
+      if (
+        node.tagName === "code" &&
+        classes.some((c) => String(c) === "language-mermaid")
+      ) {
         return;
       }
       if (node.tagName === "code" && node.children && node.position) {
@@ -154,7 +159,8 @@ export function rehypeLineMarkers() {
       for (const section of node.children) {
         if (section.type !== "element") continue;
         const sectionEl = section as Element;
-        if (sectionEl.tagName !== "thead" && sectionEl.tagName !== "tbody") continue;
+        if (sectionEl.tagName !== "thead" && sectionEl.tagName !== "tbody")
+          continue;
 
         for (const row of sectionEl.children) {
           if (row.type !== "element") continue;
@@ -217,8 +223,7 @@ export function rehypeLineMarkers() {
     visit(tree, "element", (node: Element) => {
       if (node.tagName !== "li") return;
       const lineNumber =
-        node.position?.start?.line ??
-        findFirstDescendantLine(node);
+        node.position?.start?.line ?? findFirstDescendantLine(node);
       if (lineNumber != null) {
         if (!node.properties) node.properties = {};
         node.properties["data-line-element"] = lineNumber;
@@ -230,8 +235,7 @@ export function rehypeLineMarkers() {
       if (node.tagName !== "tr") return;
       if (node.properties?.["data-line-element"]) return; // already set by table pass
       const lineNumber =
-        node.position?.start?.line ??
-        findFirstDescendantLine(node);
+        node.position?.start?.line ?? findFirstDescendantLine(node);
       if (lineNumber != null) {
         if (!node.properties) node.properties = {};
         node.properties["data-line-element"] = lineNumber;

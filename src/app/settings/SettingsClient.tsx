@@ -180,9 +180,7 @@ export default function SettingsClient({
   const hasActiveSlack = slackLinks.some((l) => l.isActive);
 
   return (
-    <div
-      className="border border-gray-20 rounded-md bg-surface p-6 sm:p-8"
-    >
+    <div className="border border-gray-20 rounded-md bg-surface p-6 sm:p-8">
       <div className="mb-3 h-0.75 w-12 bg-cyan" />
       <h1 className="text-foreground">Settings</h1>
       <p className="mt-2 mb-6 text-gray-70">

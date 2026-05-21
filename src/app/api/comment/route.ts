@@ -10,7 +10,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { owner, repo, prNumber, body, path, line, replyToCommentId } = await request.json();
+  const { owner, repo, prNumber, body, path, line, replyToCommentId } =
+    await request.json();
 
   if (!owner || !repo || !prNumber || !body) {
     return NextResponse.json(

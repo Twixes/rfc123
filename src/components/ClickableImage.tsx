@@ -3,12 +3,19 @@
 import { useState, useEffect, useCallback } from "react";
 import { AnimatePresence, motion } from "motion/react";
 
-interface ClickableImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
+interface ClickableImageProps
+  extends React.ImgHTMLAttributes<HTMLImageElement> {
   src?: string;
   alt?: string;
 }
 
-export function ClickableImage({ src, alt, className, style, ...props }: ClickableImageProps) {
+export function ClickableImage({
+  src,
+  alt,
+  className,
+  style,
+  ...props
+}: ClickableImageProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
 
   const open = useCallback(() => setLightboxOpen(true), []);
@@ -33,12 +40,7 @@ export function ClickableImage({ src, alt, className, style, ...props }: Clickab
         onClick={open}
       >
         {/* biome-ignore lint: <img> used throughout the project */}
-        <img
-          src={src}
-          alt={alt ?? ""}
-          className={className}
-          {...props}
-        />
+        <img src={src} alt={alt ?? ""} className={className} {...props} />
       </button>
       <AnimatePresence>
         {lightboxOpen && (

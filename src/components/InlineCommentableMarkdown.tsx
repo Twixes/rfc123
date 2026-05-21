@@ -58,9 +58,7 @@ type HoverState = { line: number | null; comment: number | null };
 function defaultCollapsedLines(
   commentsByLine: Map<number, Comment[]>,
 ): Set<number> {
-  return commentsByLine.size > 3
-    ? new Set(commentsByLine.keys())
-    : new Set();
+  return commentsByLine.size > 3 ? new Set(commentsByLine.keys()) : new Set();
 }
 
 function buildLineHighlightCss(
@@ -259,60 +257,121 @@ function LineHoverController({
 
     // Snapshot block info once to avoid O(N×M) querySelectorAll per comment.
     const blockEls = markdown.querySelectorAll("[data-line-element]");
-    const blockInfo: Array<{ start: number; end: number; el: HTMLElement }> = [];
+    const blockInfo: Array<{ start: number; end: number; el: HTMLElement }> =
+      [];
     for (const el of blockEls) {
-      const start = Number.parseInt(el.getAttribute("data-line-element") ?? "", 10);
+      const start = Number.parseInt(
+        el.getAttribute("data-line-element") ?? "",
+        10,
+      );
       if (Number.isNaN(start)) continue;
       const endAttr = el.getAttribute("data-line-end");
       const end = endAttr ? Number.parseInt(endAttr, 10) : start;
       blockInfo.push({ start, end, el: el as HTMLElement });
     }
 
-    const collect = (lineNum: number, boxRef: HTMLDivElement | null, color: string, isDraft: boolean) => {
+    const collect = (
+      lineNum: number,
+      boxRef: HTMLDivElement | null,
+      color: string,
+      isDraft: boolean,
+    ) => {
       if (!boxRef) return;
       const targetLine = lineAlias.get(lineNum) ?? lineNum;
       let targetEl: HTMLElement | null = null;
       for (const { start, end, el } of blockInfo) {
-        if (targetLine >= start && targetLine <= end) { targetEl = el; break; }
+        if (targetLine >= start && targetLine <= end) {
+          targetEl = el;
+          break;
+        }
       }
-      if (!targetEl) targetEl = document.getElementById(`line-marker-${targetLine}`);
+      if (!targetEl)
+        targetEl = document.getElementById(`line-marker-${targetLine}`);
       if (!targetEl) return;
 
       const boxRect = boxRef.getBoundingClientRect();
       const targetRect = targetEl.getBoundingClientRect();
-      const from = { x: boxRect.left - rect.left, y: boxRect.top - rect.top + boxRect.height / 2 };
-      const to = { x: targetRect.right - rect.left, y: targetRect.top - rect.top + 13 };
-      rawPaths.push({ lineNumber: lineNum, from, to, vy1: Math.min(from.y, to.y), vy2: Math.max(from.y, to.y), color, isDraft });
+      const from = {
+        x: boxRect.left - rect.left,
+        y: boxRect.top - rect.top + boxRect.height / 2,
+      };
+      const to = {
+        x: targetRect.right - rect.left,
+        y: targetRect.top - rect.top + 13,
+      };
+      rawPaths.push({
+        lineNumber: lineNum,
+        from,
+        to,
+        vy1: Math.min(from.y, to.y),
+        vy2: Math.max(from.y, to.y),
+        color,
+        isDraft,
+      });
     };
 
     for (const ln of commentsByLine.keys()) {
-      collect(ln, commentBoxRefs.current.get(ln) ?? null, "var(--magenta)", false);
+      collect(
+        ln,
+        commentBoxRefs.current.get(ln) ?? null,
+        "var(--magenta)",
+        false,
+      );
     }
     if (activeLineIndex !== null) {
-      collect(activeLineIndex + 1, commentBoxRefs.current.get(-1) ?? null, "var(--cyan)", true);
+      collect(
+        activeLineIndex + 1,
+        commentBoxRefs.current.get(-1) ?? null,
+        "var(--cyan)",
+        true,
+      );
     }
 
     const OFFSET = 4;
-    const baseElbowX = rawPaths.length > 0
-      ? rawPaths.reduce((s, p) => s + (p.from.x + p.to.x) / 2, 0) / rawPaths.length
-      : 0;
+    const baseElbowX =
+      rawPaths.length > 0
+        ? rawPaths.reduce((s, p) => s + (p.from.x + p.to.x) / 2, 0) /
+          rawPaths.length
+        : 0;
     const segments: Array<{ x: number; vy1: number; vy2: number }> = [];
-    const paths = rawPaths.sort((a, b) => a.vy1 - b.vy1).map((p) => {
-      let offset = 0;
-      let elbowX: number;
-      for (;;) {
-        const tryX = Math.max(p.to.x, baseElbowX - offset);
-        const overlaps = segments.some(
-          (s) => Math.abs(s.x - tryX) < OFFSET && Math.min(p.vy2, s.vy2) > Math.max(p.vy1, s.vy1),
-        );
-        if (!overlaps) { elbowX = tryX; segments.push({ x: tryX, vy1: p.vy1, vy2: p.vy2 }); break; }
-        offset += OFFSET;
-      }
-      return { lineNumber: p.lineNumber, from: p.from, to: p.to, elbowX, color: p.color, isDraft: p.isDraft };
-    });
+    const paths = rawPaths
+      .sort((a, b) => a.vy1 - b.vy1)
+      .map((p) => {
+        let offset = 0;
+        let elbowX: number;
+        for (;;) {
+          const tryX = Math.max(p.to.x, baseElbowX - offset);
+          const overlaps = segments.some(
+            (s) =>
+              Math.abs(s.x - tryX) < OFFSET &&
+              Math.min(p.vy2, s.vy2) > Math.max(p.vy1, s.vy1),
+          );
+          if (!overlaps) {
+            elbowX = tryX;
+            segments.push({ x: tryX, vy1: p.vy1, vy2: p.vy2 });
+            break;
+          }
+          offset += OFFSET;
+        }
+        return {
+          lineNumber: p.lineNumber,
+          from: p.from,
+          to: p.to,
+          elbowX,
+          color: p.color,
+          isDraft: p.isDraft,
+        };
+      });
 
     setArrowPaths(paths);
-  }, [commentsByLine, activeLineIndex, lineAlias, commentBoxRefs, containerRef, markdownRef]);
+  }, [
+    commentsByLine,
+    activeLineIndex,
+    lineAlias,
+    commentBoxRefs,
+    containerRef,
+    markdownRef,
+  ]);
 
   useEffect(() => {
     recalcArrows();
@@ -321,7 +380,11 @@ function LineHoverController({
     const onScroll = () => requestAnimationFrame(() => recalcArrows());
     window.addEventListener("scroll", onScroll, true);
     const timer = setTimeout(() => recalcArrows(), 350);
-    return () => { ro.disconnect(); window.removeEventListener("scroll", onScroll, true); clearTimeout(timer); };
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("scroll", onScroll, true);
+      clearTimeout(timer);
+    };
   }, [recalcArrows, commentPositions, resolvedCollapsedLines]);
 
   return (
@@ -368,24 +431,26 @@ function LineHoverController({
               <path d="M6,3 L0,0 L0,6 Z" fill="var(--cyan)" fillOpacity="1" />
             </marker>
           </defs>
-          {arrowPaths.map(({ lineNumber, from, to, elbowX, color, isDraft }) => {
-            const d = `M ${from.x} ${from.y} H ${elbowX} V ${to.y} H ${to.x}`;
-            return (
-              <path
-                key={lineNumber}
-                data-arrow-line={lineNumber}
-                d={d}
-                fill="none"
-                stroke={color}
-                strokeWidth="1"
-                strokeOpacity={isDraft ? 1 : 0.6}
-                markerEnd={
-                  isDraft ? "url(#arrowhead-cyan)" : "url(#arrowhead-magenta)"
-                }
-                className="svg-stroke-transition"
-              />
-            );
-          })}
+          {arrowPaths.map(
+            ({ lineNumber, from, to, elbowX, color, isDraft }) => {
+              const d = `M ${from.x} ${from.y} H ${elbowX} V ${to.y} H ${to.x}`;
+              return (
+                <path
+                  key={lineNumber}
+                  data-arrow-line={lineNumber}
+                  d={d}
+                  fill="none"
+                  stroke={color}
+                  strokeWidth="1"
+                  strokeOpacity={isDraft ? 1 : 0.6}
+                  markerEnd={
+                    isDraft ? "url(#arrowhead-cyan)" : "url(#arrowhead-magenta)"
+                  }
+                  className="svg-stroke-transition"
+                />
+              );
+            },
+          )}
         </svg>
       )}
     </>
@@ -907,12 +972,7 @@ export function InlineCommentableMarkdown({
     // removing it prevents a re-trigger when ELC boxes mount and shift layout.
     const raf = requestAnimationFrame(() => recalcPositions());
     return () => cancelAnimationFrame(raf);
-  }, [
-    commentsByLine,
-    activeLineIndex,
-    replyTarget,
-    resolvedCollapsedLines,
-  ]);
+  }, [commentsByLine, activeLineIndex, replyTarget, resolvedCollapsedLines]);
 
   // Helper to get the position for a specific line
   const getCommentPosition = (lineNumber: number): number => {
@@ -1411,7 +1471,7 @@ export function InlineCommentableMarkdown({
         containerRef={containerRef}
         markdownColumn={markdownColumn}
         sidebar={
-            <CommentsSidebar
+          <CommentsSidebar
             activeLineIndex={activeLineIndex}
             lineRanges={lineRanges}
             lineCommentInitialDraft={lineCommentInitialDraft}

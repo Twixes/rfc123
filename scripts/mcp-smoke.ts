@@ -134,8 +134,8 @@ async function main() {
   console.log("  initialize body (truncated):", initBody.slice(0, 400));
 
   console.log("");
-  console.log("> Calling tool `whoami` …");
-  const whoami = await fetch(`${origin}/mcp`, {
+  console.log("> Calling `tools/list` to enumerate the registered tools …");
+  const toolsList = await fetch(`${origin}/mcp`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -145,14 +145,36 @@ async function main() {
     body: JSON.stringify({
       jsonrpc: "2.0",
       id: 2,
-      method: "tools/call",
-      params: { name: "whoami", arguments: {} },
+      method: "tools/list",
+      params: {},
     }),
   });
-  console.log("  whoami status:", whoami.status);
+  console.log("  tools/list status:", toolsList.status);
   console.log(
-    "  whoami body (truncated):",
-    (await whoami.text()).slice(0, 600),
+    "  tools/list body (truncated):",
+    (await toolsList.text()).slice(0, 800),
+  );
+
+  console.log("");
+  console.log("> Calling tool `rfc123_list_repos_with_rfcs` …");
+  const listRepos = await fetch(`${origin}/mcp`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json, text/event-stream",
+      Authorization: `Bearer ${tokenJson.access_token}`,
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 3,
+      method: "tools/call",
+      params: { name: "rfc123_list_repos_with_rfcs", arguments: {} },
+    }),
+  });
+  console.log("  list_repos status:", listRepos.status);
+  console.log(
+    "  list_repos body (truncated):",
+    (await listRepos.text()).slice(0, 600),
   );
 }
 

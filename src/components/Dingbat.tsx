@@ -16,8 +16,7 @@ export default function Dingbat({
   size?: "md" | "xl";
   className?: string;
 }) {
-  const dimensions =
-    size === "xl" ? "h-16 w-16 text-7xl" : "h-7 w-7 text-2xl";
+  const dimensions = size === "xl" ? "h-16 w-16 text-7xl" : "h-7 w-7 text-2xl";
   return (
     <span
       aria-hidden="true"

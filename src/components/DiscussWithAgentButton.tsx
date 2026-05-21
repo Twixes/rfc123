@@ -1,12 +1,12 @@
 "use client";
 
 import {
-  Disclosure,
-  DisclosureButton,
-  DisclosurePanel,
   Dialog,
   DialogBackdrop,
   DialogPanel,
+  Disclosure,
+  DisclosureButton,
+  DisclosurePanel,
 } from "@headlessui/react";
 import { useCallback, useMemo, useState } from "react";
 import { ConnectAgentSetup } from "@/components/ConnectAgentButton";
@@ -33,7 +33,7 @@ function buildPrompt({
   title,
   author,
 }: DiscussWithAgentButtonProps): string {
-  return `You have access to the RFC123 MCP server, which lets you read and discuss engineering RFCs (markdown pull requests) on GitHub.
+  return `You have access to the RFC123 MCP server, which lets you read engineering RFCs (markdown pull requests) on GitHub. You can read RFCs and discussions; you cannot post comments, replies, reviews, or RFC bodies through the MCP server. The point of this conversation is to help me *think* about an RFC. Any feedback that lands on GitHub I write myself, in my own voice — don't expect me to copy yours verbatim.
 
 I'd like your help thinking through this RFC with me:
 
@@ -62,7 +62,7 @@ Please do the following in order:
 
 4. **Hand the conversation back to me.** Don't summarize the RFC at length — I'm reading it. Ask what I want to focus on: push back, brainstorm alternatives, dig into a section, or understand something specific. Whenever you need a choice or clarification from me — here or anywhere later in the conversation — prefer your structured question-asking tool (e.g. \`AskUserQuestion\` in Claude Code) over a plain prose question, so I can answer with one click. Use free-text questions only if no such tool is available.
 
-5. **Post only when I explicitly ask.** When I say "comment this", "reply to that thread", or similar, use the matching \`rfc123_*\` tool (post_general_comment, post_inline_comment, reply_to_comment, submit_review). RFC123 appends a "— via Claude on RFC123" footer automatically; don't add it yourself. Don't post speculatively.
+5. **Never post to GitHub.** You don't have a tool that posts on my behalf — that's deliberate. If I ask you to leave a comment, direct me to the RFC page so I can write it myself. Don't draft prose for me to copy; the point is for me to write the comment in my own voice, using what we discussed as input to my thinking.
 
 Start with step 1 now.`;
 }
@@ -134,10 +134,10 @@ export function DiscussWithAgentButton(props: DiscussWithAgentButtonProps) {
                   Talk this RFC through with your AI sidekick
                 </h2>
                 <p className="mt-2 text-sm text-gray-70">
-                  Hand this RFC to Claude, ChatGPT, or any agent with the
-                  RFC123 MCP server. It will read the proposal, ground itself
-                  in the codebase, and surface gaps before waiting on your
-                  lead.
+                  Hand this RFC to Claude, ChatGPT, or any agent with the RFC123
+                  MCP server. It will read the proposal, ground itself in the
+                  codebase, and surface gaps — then wait. Any feedback that
+                  lands on GitHub you type yourself.
                 </p>
               </div>
               <button
@@ -243,11 +243,13 @@ export function DiscussWithAgentButton(props: DiscussWithAgentButtonProps) {
                     )}
                   </button>
                 </div>
-              <p className="text-[11px] mb-3">
-                Paste this into your agent.<br/>It will pull this RFC, compare it
-                against the codebase, and wait for you before posting anything
-                back via the MCP server.
-              </p>
+                <p className="text-[11px] mb-3">
+                  Paste this into your agent.
+                  <br />
+                  It will pull this RFC, compare it against the codebase, and
+                  surface gaps for you. Nothing gets posted back — the MCP
+                  server can't.
+                </p>
                 <textarea
                   readOnly
                   value={prompt}

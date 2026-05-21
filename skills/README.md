@@ -1,11 +1,21 @@
 # RFC123 Agent Skills
 
 Portable instruction sets that pair with the [RFC123 MCP server](../src/app/mcp/route.ts).
-Each skill teaches an AI coding assistant how to use the MCP server's deterministic
-tools to perform a multi-step collaboration task on an engineering RFC.
+Each skill teaches an AI coding assistant how to use the MCP server's
+deterministic tools to help a human think about an RFC.
 
-The MCP server itself never calls an LLM and never builds embeddings. Anything
-that needs judgement — drafting, synthesizing, comparing — lives here.
+The MCP server itself never calls an LLM and never builds embeddings.
+Anything that needs judgement — synthesizing, comparing, pressure-testing —
+lives here.
+
+## The rule
+
+The agent reads, clusters, strawmans, steelmans, and synthesizes — **in
+chat**. Every word that lands on GitHub is typed by a human. None of the
+skills below post comments, reply to threads, write to RFC bodies, or open
+PRs. The only structural writes exposed by the MCP server are
+`request_reviewers` (used by `suggest-reviewers`) and `merge_rfc` (no
+skill).
 
 ## Install
 
@@ -22,14 +32,13 @@ Or clone individual `SKILL.md` files (plus their `references/`) into
 
 | Skill | Purpose |
 |---|---|
-| `draft-rfc` | Turn a brief into a structured RFC body, then create the PR. |
-| `synthesize-discussion` | Cluster comments by theme and post a roll-up. |
-| `propose-revision` | Read RFC + threads, propose a revised body diff. |
-| `compare-alternatives` | Build an Option-A-vs-B comparison table. |
-| `extract-action-items` | Surface explicit `@x will do Y` items as a checklist. |
+| `discuss-rfc` | Ground a conversation about an RFC in the proposal + repo. |
+| `pressure-test-rfc` | Strawman / steelman each claim; surface assumptions and missing options. |
+| `compare-to-codebase` | Flag every RFC claim the actual code contradicts or omits. |
+| `synthesize-discussion` | Cluster comments by theme; show the roll-up in chat. |
+| `extract-action-items` | Surface explicit `@x will do Y` items as a checklist in chat. |
+| `compare-alternatives` | Build an Option-A-vs-B comparison table in chat. |
 | `suggest-reviewers` | Recommend reviewers from PR files + comment authors + teams. |
-| `register-decision` | Capture a decision + rationale, commit to the RFC body. |
-| `resolve-threads` | Walk unresolved threads, propose replies, mark resolved. |
 
 Each `SKILL.md` is a self-contained brief on when it applies, what RFC123
 MCP tools to call, and how to format the output. References (templates,

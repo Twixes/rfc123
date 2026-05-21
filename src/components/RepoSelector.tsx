@@ -79,44 +79,44 @@ export default function RepoSelector({
             transition={{ duration: 0.15 }}
             className="absolute top-full left-0 mt-1 w-80 bg-surface border border-gray-20 rounded-md z-50"
           >
-          <div className="p-3 border-b border-gray-20">
-            <input
-              ref={inputRef}
-              type="text"
-              placeholder="Search repositories..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full border border-gray-30 rounded-sm px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan focus:border-transparent"
-            />
-          </div>
+            <div className="p-3 border-b border-gray-20">
+              <input
+                ref={inputRef}
+                type="text"
+                placeholder="Search repositories..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full border border-gray-30 rounded-sm px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan focus:border-transparent"
+              />
+            </div>
 
-          <div className="max-h-80 overflow-y-auto">
-            {filteredRepos.length === 0 ? (
-              <div className="p-4 text-center text-sm text-gray-50">
-                No repositories found
-              </div>
-            ) : (
-              filteredRepos.map((repo) => (
-                <button
-                  key={repo.fullName}
-                  type="button"
-                  onClick={() => {
-                    onSelect(repo);
-                    setIsOpen(false);
-                    setSearchQuery("");
-                  }}
-                  className={`w-full text-left px-4 py-3 text-sm border-b border-gray-20 last:border-b-0 hover:bg-yellow-light transition-colors ${
-                    repo.owner === currentRepo.owner &&
-                    repo.name === currentRepo.name
-                      ? "bg-gray-5 font-medium"
-                      : ""
-                  }`}
-                >
-                  {repo.fullName}
-                </button>
-              ))
-            )}
-          </div>
+            <div className="max-h-80 overflow-y-auto">
+              {filteredRepos.length === 0 ? (
+                <div className="p-4 text-center text-sm text-gray-50">
+                  No repositories found
+                </div>
+              ) : (
+                filteredRepos.map((repo) => (
+                  <button
+                    key={repo.fullName}
+                    type="button"
+                    onClick={() => {
+                      onSelect(repo);
+                      setIsOpen(false);
+                      setSearchQuery("");
+                    }}
+                    className={`w-full text-left px-4 py-3 text-sm border-b border-gray-20 last:border-b-0 hover:bg-yellow-light transition-colors ${
+                      repo.owner === currentRepo.owner &&
+                      repo.name === currentRepo.name
+                        ? "bg-gray-5 font-medium"
+                        : ""
+                    }`}
+                  >
+                    {repo.fullName}
+                  </button>
+                ))
+              )}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

@@ -35,7 +35,8 @@ export interface RFC {
   /** Team slugs (e.g. ["posthog/web"]) requested as reviewers. */
   requestedTeamSlugs: string[];
   /** Issue/PR labels — agents/managers use these for filtering and to derive
-   *  `hasDecision` (set by rfc123_register_decision). */
+   *  `hasDecision` (applied by humans on the web app when they record a
+   *  decision). */
   labels: string[];
   /** GitHub's aggregate review decision. `null` if no reviews submitted yet. */
   reviewDecision: "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED" | null;
@@ -91,7 +92,8 @@ export const DECISION_LABEL = "decision-registered";
 /**
  * Pull every `### Decision (YYYY-MM-DD[ by @login])` heading out of the body
  * along with the text and optional `**Rationale:** ...` line that follows.
- * Strict on the heading format because that's what `registerDecision` emits.
+ * Strict on the heading format because that's the convention humans follow
+ * when committing decisions to an RFC.
  */
 export function parseDecisionBlocks(body: string): DecisionBlock[] {
   const out: DecisionBlock[] = [];
@@ -225,8 +227,7 @@ async function detectRepoHasRfcs(
     }),
   ]);
   return (
-    variantFull.status === "fulfilled" ||
-    variantShort.status === "fulfilled"
+    variantFull.status === "fulfilled" || variantShort.status === "fulfilled"
   );
 }
 

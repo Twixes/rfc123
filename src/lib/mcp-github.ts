@@ -1,17 +1,18 @@
 import { Octokit } from "octokit";
-import { DECISION_LABEL, listReposWithRFCs } from "./github";
+import { listReposWithRFCs } from "./github";
 import { captureServerException } from "./posthog-server";
 
 /**
- * MCP-specific GitHub helpers. These wrap Octokit calls used only by the MCP
- * server's tools – review-thread resolution, decision-block commits, body
- * updates, PR-review verbs, and a deterministic text search over the user's
- * RFC repos. Kept separate from `src/lib/github.ts` because that module is
- * already large and pulls in caches the MCP path doesn't always need.
+ * MCP-specific GitHub helpers. These wrap Octokit calls used only by the
+ * MCP server's tools – review-thread listing, comment listing, PR merging,
+ * reviewer requests, and deterministic searches. Kept separate from
+ * `src/lib/github.ts` because that module is already large and pulls in
+ * caches the MCP path doesn't always need.
+ *
+ * Surface rule: only *read* and *structural* helpers live here. There is no
+ * helper that turns LLM prose into GitHub content — that lands on the
+ * human-driven web app routes (`/api/comment`, `/api/rfcs` POST) instead.
  */
-
-/** Append a one-line "via Claude" footer to any AI-authored content. */
-export const VIA_FOOTER = "\n\n— via Claude on RFC123";
 
 export interface RfcRef {
   owner: string;
@@ -67,10 +68,6 @@ export async function resolveRfcRef(
           repo: r.name,
           pull_number: opts.number,
         });
-        // Confirm it's actually an RFC PR (has a .md file in its diff). Cheap
-        // shortcut: we trust listReposWithRFCs to have filtered to RFC-bearing
-        // repos already, so any PR with this number in such a repo is fair
-        // game — re-listing files would multiply API calls per resolution.
         return { owner: r.owner, repo: r.name, number: data.number };
       } catch {
         return null;
@@ -91,21 +88,8 @@ export async function resolveRfcRef(
   );
 }
 
-/**
- * Idempotent: if the body already ends with the footer (e.g. it was read
- * back from a previous MCP edit), don't double-append. Without this, every
- * round-trip through `update_rfc_body` or `register_decision` would stack a
- * new footer on top of the old.
- */
-export function withFooter(body: string): string {
-  const trimmed = body.trimEnd();
-  if (trimmed.endsWith(VIA_FOOTER.trim())) return trimmed;
-  return trimmed + VIA_FOOTER;
-}
-
 export interface ReviewThread {
-  id: string; // GraphQL node id (use for rfc123_resolve_review_thread)
-  /** databaseId of the first comment — pass this directly to rfc123_reply_to_comment. */
+  id: string;
   firstCommentId: number | null;
   isResolved: boolean;
   isOutdated: boolean;
@@ -129,9 +113,8 @@ export interface ListReviewThreadsResult {
 }
 
 /**
- * List a page of review threads on a PR with their resolution state, diff
- * context, and the first-comment databaseId (the thing needed to reply via
- * rfc123_reply_to_comment). `pageSize` defaults to 50, max 100.
+ * List a page of review threads on a PR with their resolution state and
+ * diff context. `pageSize` defaults to 50, max 100.
  */
 export async function listReviewThreads(
   accessToken: string,
@@ -205,8 +188,8 @@ export async function listReviewThreads(
     };
   };
 
-  const threads: ReviewThread[] = resp.repository.pullRequest.reviewThreads.nodes.map(
-    (t) => {
+  const threads: ReviewThread[] =
+    resp.repository.pullRequest.reviewThreads.nodes.map((t) => {
       const comments = t.comments.nodes;
       return {
         id: t.id,
@@ -225,9 +208,11 @@ export async function listReviewThreads(
           url: c.url,
         })),
       };
-    },
-  );
-  return { threads, pageInfo: resp.repository.pullRequest.reviewThreads.pageInfo };
+    });
+  return {
+    threads,
+    pageInfo: resp.repository.pullRequest.reviewThreads.pageInfo,
+  };
 }
 
 /**
@@ -284,337 +269,6 @@ export async function fetchAllRfcComments(
   };
 }
 
-export async function resolveReviewThread(
-  accessToken: string,
-  threadId: string,
-): Promise<void> {
-  const octokit = new Octokit({ auth: accessToken });
-  await octokit.graphql(
-    `mutation($id: ID!) {
-       resolveReviewThread(input: { threadId: $id }) { thread { id } }
-     }`,
-    { id: threadId },
-  );
-}
-
-export interface UpdateBodyResult {
-  commitSha: string;
-  branch: string;
-  path: string;
-  linesBefore: number;
-  linesAfter: number;
-  linesAdded: number;
-  linesRemoved: number;
-  /** Whether the commit retried after a SHA conflict. */
-  retriedOnConflict: boolean;
-}
-
-/**
- * Commit a transformation of the RFC's .md file on the PR head branch.
- * Single source of truth for "find the .md file, read current body, write
- * new body + via-Claude footer". The `mutate` callback receives the current
- * body and returns the new body; the footer is added after.
- *
- * On a 409 SHA conflict (someone else committed in the meantime) the call
- * transparently re-reads and retries once. A second conflict surfaces as a
- * human-readable error.
- */
-async function commitRfcBodyUpdate(input: {
-  accessToken: string;
-  owner: string;
-  repo: string;
-  prNumber: number;
-  commitMessage: string;
-  mutate: (currentBody: string) => string;
-}): Promise<UpdateBodyResult> {
-  const { accessToken, owner, repo, prNumber } = input;
-  const octokit = new Octokit({ auth: accessToken });
-  const [{ data: pr }, { data: files }] = await Promise.all([
-    octokit.rest.pulls.get({ owner, repo, pull_number: prNumber }),
-    octokit.rest.pulls.listFiles({ owner, repo, pull_number: prNumber }),
-  ]);
-  const branch = pr.head.ref;
-  const mdFile = files.find((f) => f.filename.endsWith(".md"));
-  if (!mdFile) throw new Error("PR has no .md file to update.");
-
-  const readCurrent = async () => {
-    const existing = await octokit.rest.repos.getContent({
-      owner,
-      repo,
-      path: mdFile.filename,
-      ref: branch,
-    });
-    if (Array.isArray(existing.data) || existing.data.type !== "file") {
-      throw new Error(`Path ${mdFile.filename} is not a regular file`);
-    }
-    return {
-      body: Buffer.from(existing.data.content, "base64").toString("utf-8"),
-      sha: existing.data.sha,
-    };
-  };
-
-  const writeOnce = async (sha: string, newBody: string) =>
-    octokit.rest.repos.createOrUpdateFileContents({
-      owner,
-      repo,
-      path: mdFile.filename,
-      message: input.commitMessage,
-      content: Buffer.from(withFooter(newBody), "utf-8").toString("base64"),
-      branch,
-      sha,
-    });
-
-  let { body: currentBody, sha } = await readCurrent();
-  let newBody = input.mutate(currentBody);
-  let retriedOnConflict = false;
-  let result;
-  try {
-    result = await writeOnce(sha, newBody);
-  } catch (error) {
-    const e = error as { status?: number };
-    if (e.status !== 409) throw error;
-    retriedOnConflict = true;
-    ({ body: currentBody, sha } = await readCurrent());
-    newBody = input.mutate(currentBody);
-    try {
-      result = await writeOnce(sha, newBody);
-    } catch (innerError) {
-      const ie = innerError as { status?: number };
-      if (ie.status === 409) {
-        throw new Error(
-          `Update conflict on ${owner}/${repo}#${prNumber}: the RFC was modified ` +
-            "twice while writing. Re-read with rfc123_get_rfc and try again.",
-        );
-      }
-      throw innerError;
-    }
-  }
-
-  const finalBody = withFooter(newBody);
-  const beforeLines = currentBody.split("\n");
-  const afterLines = finalBody.split("\n");
-  const beforeSet = new Set(beforeLines);
-  const afterSet = new Set(afterLines);
-  let linesAdded = 0;
-  let linesRemoved = 0;
-  for (const l of afterLines) if (!beforeSet.has(l)) linesAdded++;
-  for (const l of beforeLines) if (!afterSet.has(l)) linesRemoved++;
-
-  return {
-    commitSha: result.data.commit.sha ?? "",
-    branch,
-    path: mdFile.filename,
-    linesBefore: beforeLines.length,
-    linesAfter: afterLines.length,
-    linesAdded,
-    linesRemoved,
-    retriedOnConflict,
-  };
-}
-
-export async function updateRfcBody(input: {
-  accessToken: string;
-  owner: string;
-  repo: string;
-  prNumber: number;
-  newContent: string;
-  changeDescription: string;
-}): Promise<UpdateBodyResult> {
-  return commitRfcBodyUpdate({
-    accessToken: input.accessToken,
-    owner: input.owner,
-    repo: input.repo,
-    prNumber: input.prNumber,
-    commitMessage: `RFC update: ${input.changeDescription}`,
-    mutate: () => input.newContent,
-  });
-}
-
-export interface RegisterDecisionResult extends UpdateBodyResult {
-  resolvedThreadIds: string[];
-  labelApplied: boolean;
-}
-
-/**
- * Append a `### Decision (YYYY-MM-DD by @login)` block to the RFC body and
- * apply the `decision-registered` label so `hasDecision` propagates to list
- * views. Optionally resolves the inline threads that the decision settles.
- *
- * Rationale is required because a decision without rationale is the exact
- * anti-pattern this tool exists to prevent — six months later, no one
- * remembers *why*. The schema enforces it; this helper trusts the schema.
- */
-export async function registerDecision(input: {
-  accessToken: string;
-  owner: string;
-  repo: string;
-  prNumber: number;
-  decision: string;
-  rationale: string;
-  decidedBy: string;
-  resolvesThreadIds?: string[];
-}): Promise<RegisterDecisionResult> {
-  const ymd = new Date().toISOString().slice(0, 10);
-  const entry =
-    `### Decision (${ymd} by @${input.decidedBy})\n\n` +
-    `${input.decision.trim()}\n\n` +
-    `**Rationale:** ${input.rationale.trim()}\n`;
-
-  const commitResult = await commitRfcBodyUpdate({
-    accessToken: input.accessToken,
-    owner: input.owner,
-    repo: input.repo,
-    prNumber: input.prNumber,
-    commitMessage: "Register decision via Claude on RFC123",
-    mutate: (current) => insertDecisionEntry(current, entry),
-  });
-
-  const octokit = new Octokit({ auth: input.accessToken });
-  let labelApplied = false;
-  try {
-    await octokit.rest.issues.addLabels({
-      owner: input.owner,
-      repo: input.repo,
-      issue_number: input.prNumber,
-      labels: [DECISION_LABEL],
-    });
-    labelApplied = true;
-  } catch (error) {
-    // Label may not exist in the repo yet — create it once, then retry.
-    try {
-      await octokit.rest.issues.createLabel({
-        owner: input.owner,
-        repo: input.repo,
-        name: DECISION_LABEL,
-        color: "0e8a16",
-        description: "RFC has a registered decision (auto-set by RFC123).",
-      });
-      await octokit.rest.issues.addLabels({
-        owner: input.owner,
-        repo: input.repo,
-        issue_number: input.prNumber,
-        labels: [DECISION_LABEL],
-      });
-      labelApplied = true;
-    } catch (innerError) {
-      captureServerException(innerError as Error, undefined, {
-        function: "registerDecision",
-        subfunction: "addLabel",
-        owner: input.owner,
-        repo: input.repo,
-        prNumber: input.prNumber,
-      });
-    }
-  }
-
-  const resolvedThreadIds: string[] = [];
-  for (const threadId of input.resolvesThreadIds ?? []) {
-    try {
-      await resolveReviewThread(input.accessToken, threadId);
-      resolvedThreadIds.push(threadId);
-    } catch (error) {
-      captureServerException(error as Error, undefined, {
-        function: "registerDecision",
-        subfunction: "resolveThread",
-        threadId,
-      });
-    }
-  }
-
-  return { ...commitResult, resolvedThreadIds, labelApplied };
-}
-
-/**
- * Find a `## Decisions` heading outside fenced code blocks. If one exists,
- * insert `entry` just below it; otherwise append a new section at the end.
- * A line-walker so an RFC that quotes the convention in a ```code``` block
- * doesn't get its example mangled.
- */
-function insertDecisionEntry(current: string, entry: string): string {
-  const lines = current.split("\n");
-  let inFence = false;
-  let headingIdx = -1;
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].startsWith("```")) {
-      inFence = !inFence;
-      continue;
-    }
-    if (!inFence && /^##\s+Decisions\s*$/.test(lines[i])) {
-      headingIdx = i;
-      break;
-    }
-  }
-  if (headingIdx === -1) {
-    return `${current.trimEnd()}\n\n## Decisions\n\n${entry}`;
-  }
-  const before = lines.slice(0, headingIdx + 1).join("\n");
-  const after = lines.slice(headingIdx + 1).join("\n");
-  return `${before}\n\n${entry}\n${after}`;
-}
-
-export type ReviewState = "APPROVE" | "REQUEST_CHANGES" | "COMMENT";
-
-export interface ReviewCommentInput {
-  path: string;
-  line: number;
-  body: string;
-  /** Start of a multi-line range. When omitted, the comment is a single-line note on `line`. */
-  startLine?: number;
-  /** Which side of the diff `line` refers to. Defaults to RIGHT (the head version). */
-  side?: "LEFT" | "RIGHT";
-  /** Which side of the diff `startLine` refers to. Defaults to RIGHT. */
-  startSide?: "LEFT" | "RIGHT";
-}
-
-/**
- * Submit a single GitHub PR review. `COMMENT` reviews don't carry approval
- * weight but are how senior reviewers usually bundle inline notes + an
- * overall summary.
- */
-export async function submitReview(input: {
-  accessToken: string;
-  owner: string;
-  repo: string;
-  prNumber: number;
-  state: ReviewState;
-  body?: string;
-  comments?: ReviewCommentInput[];
-}): Promise<{ reviewId: number; htmlUrl: string }> {
-  const { accessToken, owner, repo, prNumber, state } = input;
-  const octokit = new Octokit({ auth: accessToken });
-  const { data: pr } = await octokit.rest.pulls.get({
-    owner,
-    repo,
-    pull_number: prNumber,
-  });
-
-  const { data } = await octokit.rest.pulls.createReview({
-    owner,
-    repo,
-    pull_number: prNumber,
-    commit_id: pr.head.sha,
-    event: state,
-    body: input.body ? withFooter(input.body) : undefined,
-    comments: input.comments?.map((c) => ({
-      path: c.path,
-      line: c.line,
-      body: withFooter(c.body),
-      side: c.side,
-      start_line: c.startLine,
-      start_side: c.startSide,
-    })),
-  });
-
-  return { reviewId: data.id, htmlUrl: data.html_url };
-}
-
-export interface MergePreflightFailure {
-  reason: string;
-  approvals: number;
-  unresolvedThreadCount: number;
-  hasDecision: boolean;
-}
-
 /**
  * Refuse to merge an RFC silently. The default path requires:
  *  1. at least one APPROVE review,
@@ -640,28 +294,39 @@ export async function mergeRFC(input: {
   merged: boolean;
   sha: string | null;
   mergeMethod: "merge" | "squash" | "rebase";
-  preflight: { approvals: number; unresolvedThreadCount: number; hasDecision: boolean };
+  preflight: {
+    approvals: number;
+    unresolvedThreadCount: number;
+    hasDecision: boolean;
+  };
 }> {
   const octokit = new Octokit({ auth: input.accessToken });
-  const [reviewsRes, threadsRes, repoInfo, prRes, filesRes] = await Promise.all([
-    octokit.rest.pulls.listReviews({
-      owner: input.owner,
-      repo: input.repo,
-      pull_number: input.prNumber,
-    }),
-    listReviewThreads(input.accessToken, input.owner, input.repo, input.prNumber),
-    octokit.rest.repos.get({ owner: input.owner, repo: input.repo }),
-    octokit.rest.pulls.get({
-      owner: input.owner,
-      repo: input.repo,
-      pull_number: input.prNumber,
-    }),
-    octokit.rest.pulls.listFiles({
-      owner: input.owner,
-      repo: input.repo,
-      pull_number: input.prNumber,
-    }),
-  ]);
+  const [reviewsRes, threadsRes, repoInfo, prRes, filesRes] = await Promise.all(
+    [
+      octokit.rest.pulls.listReviews({
+        owner: input.owner,
+        repo: input.repo,
+        pull_number: input.prNumber,
+      }),
+      listReviewThreads(
+        input.accessToken,
+        input.owner,
+        input.repo,
+        input.prNumber,
+      ),
+      octokit.rest.repos.get({ owner: input.owner, repo: input.repo }),
+      octokit.rest.pulls.get({
+        owner: input.owner,
+        repo: input.repo,
+        pull_number: input.prNumber,
+      }),
+      octokit.rest.pulls.listFiles({
+        owner: input.owner,
+        repo: input.repo,
+        pull_number: input.prNumber,
+      }),
+    ],
+  );
 
   // Latest review state per user — same logic as getRFCDetail.
   const latest = new Map<string, string>();
@@ -683,7 +348,6 @@ export async function mergeRFC(input: {
   const approvals = [...latest.values()].filter((s) => s === "APPROVED").length;
   const unresolved = threadsRes.threads.filter((t) => !t.isResolved);
 
-  // Decision block check — read the .md file from the head branch.
   let hasDecision = false;
   const mdFile = filesRes.data.find((f) => f.filename.endsWith(".md"));
   if (mdFile) {
@@ -750,107 +414,10 @@ export async function mergeRFC(input: {
   };
 }
 
-/**
- * Close the PR after first posting `reason` as a wrap-up comment so future
- * readers see *why* the RFC was abandoned. The comment lands before the
- * close event, in GitHub's event order.
- */
-export async function closeRFC(input: {
-  accessToken: string;
-  owner: string;
-  repo: string;
-  prNumber: number;
-  reason: string;
-}): Promise<{ closingCommentUrl: string | null }> {
-  const octokit = new Octokit({ auth: input.accessToken });
-  const body = withFooter(`**Closing this RFC.** ${input.reason.trim()}`);
-  let closingCommentUrl: string | null = null;
-  try {
-    const { data } = await octokit.rest.issues.createComment({
-      owner: input.owner,
-      repo: input.repo,
-      issue_number: input.prNumber,
-      body,
-    });
-    closingCommentUrl = data.html_url ?? null;
-  } catch (error) {
-    captureServerException(error as Error, undefined, {
-      function: "closeRFC",
-      subfunction: "createComment",
-      owner: input.owner,
-      repo: input.repo,
-      prNumber: input.prNumber,
-    });
-  }
-  await octokit.rest.pulls.update({
-    owner: input.owner,
-    repo: input.repo,
-    pull_number: input.prNumber,
-    state: "closed",
-  });
-  return { closingCommentUrl };
-}
-
-/**
- * Reopen a closed PR after first posting `reason` as a comment explaining
- * why. Mirrors closeRFC. Merged PRs cannot be reopened — that surfaces as
- * GitHub's own error, with a friendlier hint here.
- */
-export async function reopenRFC(input: {
-  accessToken: string;
-  owner: string;
-  repo: string;
-  prNumber: number;
-  reason: string;
-}): Promise<{ reopeningCommentUrl: string | null }> {
-  const octokit = new Octokit({ auth: input.accessToken });
-  const body = withFooter(`**Reopening this RFC.** ${input.reason.trim()}`);
-  let reopeningCommentUrl: string | null = null;
-  try {
-    const { data } = await octokit.rest.issues.createComment({
-      owner: input.owner,
-      repo: input.repo,
-      issue_number: input.prNumber,
-      body,
-    });
-    reopeningCommentUrl = data.html_url ?? null;
-  } catch (error) {
-    captureServerException(error as Error, undefined, {
-      function: "reopenRFC",
-      subfunction: "createComment",
-      owner: input.owner,
-      repo: input.repo,
-      prNumber: input.prNumber,
-    });
-  }
-  try {
-    await octokit.rest.pulls.update({
-      owner: input.owner,
-      repo: input.repo,
-      pull_number: input.prNumber,
-      state: "open",
-    });
-  } catch (error) {
-    const e = error as { status?: number; message?: string };
-    if (e.status === 422) {
-      throw new Error(
-        `Cannot reopen ${input.owner}/${input.repo}#${input.prNumber}: ` +
-          "this PR was merged, not closed. Open a new RFC that supersedes it.",
-      );
-    }
-    throw error;
-  }
-  return { reopeningCommentUrl };
-}
-
 export interface RequestReviewersResult {
-  /** Reviewers freshly added on this call. */
   added: { users: string[]; teams: string[] };
-  /** Reviewers already pending before this call (no-op for them). */
   alreadyRequested: { users: string[]; teams: string[] };
-  /** Reviewers removed on this call. */
   removed: { users: string[]; teams: string[] };
-  /** Final state of pending review requests after both add and remove. */
   pending: { users: string[]; teams: string[] };
 }
 
@@ -890,9 +457,12 @@ export async function requestReviewers(input: {
   const removeUsers = input.removeUsers ?? [];
   const removeTeams = input.removeTeams ?? [];
 
-  if (addedUsers.length > 0 || addedTeams.length > 0 || wantUsers.length > 0 || wantTeams.length > 0) {
-    // Pass through all of `wantUsers`/`wantTeams` (not just `addedUsers`) so a
-    // user who previously reviewed and is no longer pending gets re-requested.
+  if (
+    addedUsers.length > 0 ||
+    addedTeams.length > 0 ||
+    wantUsers.length > 0 ||
+    wantTeams.length > 0
+  ) {
     await octokit.rest.pulls.requestReviewers({
       owner: input.owner,
       repo: input.repo,
@@ -937,23 +507,16 @@ export interface ReviewerSearchResult {
   kind: "user" | "team";
   /** GitHub login (users) or `org/slug` (teams) — what to pass to request_reviewers. */
   handle: string;
-  /** Display name (users: profile name; teams: team name). May be null. */
   name: string | null;
-  /** Avatar URL where available. */
   avatarUrl: string | null;
-  /** Org login the candidate is sourced from (always set for teams; for users
-   *  this is the org they were matched in). */
+  /** Org the candidate was matched in. */
   org: string;
 }
 
 /**
  * Search for *reviewers* — people and teams — within the orgs that host RFC
- * repos visible to the user. Replaces the previous global-GitHub user search
- * (10-result cap on the global namespace was near-useless for common names).
- *
- * Results pool across orgs and are capped at `limit` (default 20). Users from
- * the search API include their display name; teams come from `orgs/{org}/teams`
- * filtered locally on slug and name.
+ * repos visible to the user. Pools results across orgs and caps them at
+ * `limit` (default 20).
  */
 export async function searchReviewers(input: {
   accessToken: string;
@@ -967,8 +530,6 @@ export async function searchReviewers(input: {
   const octokit = new Octokit({ auth: accessToken });
 
   const repos = await listReposWithRFCs(accessToken);
-  // Unique orgs from RFC repos. Personal-account owners are also acceptable
-  // (their "org" search just returns themselves) but rarely useful.
   const orgs = Array.from(new Set(repos.map((r) => r.owner)));
   if (orgs.length === 0) return [];
 
@@ -977,7 +538,6 @@ export async function searchReviewers(input: {
 
   await Promise.all(
     orgs.map(async (org) => {
-      // Users via org-scoped search.
       try {
         const { data } = await octokit.rest.search.users({
           q: `${trimmed} org:${org}`,
@@ -1008,7 +568,6 @@ export async function searchReviewers(input: {
           org,
         });
       }
-      // Teams via teams listing, filtered locally.
       try {
         const teams = await octokit.paginate(octokit.rest.teams.list, {
           org,
@@ -1028,14 +587,12 @@ export async function searchReviewers(input: {
             });
           }
         }
-      } catch (error) {
+      } catch (_error) {
         // Token may lack `read:org` for this org — skip silently.
       }
     }),
   );
 
-  // De-duplicate by handle (rare for users — but a team and a user could
-  // share a name across orgs).
   const seen = new Set<string>();
   const deduped: ReviewerSearchResult[] = [];
   for (const r of results) {
@@ -1060,9 +617,7 @@ export interface SearchResult {
 
 /**
  * Deterministic text search across RFC pull requests the user can see. Uses
- * GitHub's search API for the heavy lifting: `is:pr extension:md "<query>"` for
- * file-content matches and `is:pr in:title,body "<query>"` for metadata. No
- * LLM, no embeddings.
+ * GitHub's search API. No LLM, no embeddings.
  */
 export async function searchRFCs(input: {
   accessToken: string;
@@ -1083,9 +638,6 @@ export async function searchRFCs(input: {
       per_page: limit,
     });
 
-    // Strip GitHub search qualifiers (`label:foo`) and surrounding quotes
-    // before classifying — otherwise `"design doc"` would never match a title
-    // because the title doesn't contain the literal quotes.
     const haystackQuery = query
       .replace(/\b[a-z]+:[^\s"]+/gi, " ")
       .replace(/["']/g, "")

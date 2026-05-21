@@ -23,12 +23,21 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
             try {
               if (typeof src === "string") {
                 const url = new URL(src);
-                if (url.hostname === "github.com" && url.pathname.startsWith("/user-attachments/")) {
+                if (
+                  url.hostname === "github.com" &&
+                  url.pathname.startsWith("/user-attachments/")
+                ) {
                   proxiedSrc = `/api/github-image?url=${encodeURIComponent(src)}`;
                 }
               }
             } catch {}
-            return <ClickableImage src={proxiedSrc as string | undefined} alt={(alt as string) ?? ""} {...props} />;
+            return (
+              <ClickableImage
+                src={proxiedSrc as string | undefined}
+                alt={(alt as string) ?? ""}
+                {...props}
+              />
+            );
           },
           h1: ({ children }) => (
             <h1 className="mb-3 mt-4 py-2 border-b border-gray-20 text-3xl font-sans! font-semibold! tracking-tight leading-tight text-foreground">
@@ -45,9 +54,7 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
               {children}
             </h3>
           ),
-          p: ({ children }) => (
-            <p className="my-2 text-gray-90">{children}</p>
-          ),
+          p: ({ children }) => <p className="my-2 text-gray-90">{children}</p>,
           a: ({ href, children }) => (
             <a
               href={href}
@@ -93,9 +100,7 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
             </pre>
           ),
           blockquote: ({ children }) => (
-<blockquote
-            className="my-4 border-l-2 border-l-magenta bg-gray-5 py-2 pl-4 pr-4 italic text-gray-70"
-          >
+            <blockquote className="my-4 border-l-2 border-l-magenta bg-gray-5 py-2 pl-4 pr-4 italic text-gray-70">
               {children}
             </blockquote>
           ),
@@ -110,7 +115,9 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
             <thead className="bg-gray-10">{children}</thead>
           ),
           tbody: ({ children }) => (
-            <tbody className="divide-y divide-gray-20 bg-surface">{children}</tbody>
+            <tbody className="divide-y divide-gray-20 bg-surface">
+              {children}
+            </tbody>
           ),
           tr: ({ children }) => <tr className="border-gray-20">{children}</tr>,
           th: ({ children }) => (

@@ -141,9 +141,19 @@ export const ExistingLineComments = memo(function ExistingLineComments({
             className="rounded p-1 text-gray-40 transition-colors hover:bg-gray-5 hover:text-foreground cursor-pointer"
             aria-label="Collapse thread"
           >
-            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg
+              className="h-3 w-3"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
               <title>Collapse</title>
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M5 15l7-7 7 7"
+              />
             </svg>
           </button>
         </div>
@@ -176,7 +186,10 @@ export const ExistingLineComments = memo(function ExistingLineComments({
                     }`}
                   >
                     {commentIndex > 0 && (
-                      <span aria-hidden className="absolute -top-2 left-2 h-2 w-px bg-gray-20" />
+                      <span
+                        aria-hidden
+                        className="absolute -top-2 left-2 h-2 w-px bg-gray-20"
+                      />
                     )}
                     <div className="mb-1.5 flex items-center gap-2">
                       <img
@@ -188,7 +201,10 @@ export const ExistingLineComments = memo(function ExistingLineComments({
                         {comment.user}
                       </span>
                       <span className="text-gray-30">·</span>
-                      <RelativeTime date={comment.createdAt} className="text-[11px] text-gray-50" />
+                      <RelativeTime
+                        date={comment.createdAt}
+                        className="text-[11px] text-gray-50"
+                      />
                       <CommentPermalink commentId={comment.id} />
                     </div>
                     <CommentMarkdown content={comment.body} />
@@ -217,15 +233,16 @@ export const ExistingLineComments = memo(function ExistingLineComments({
                   >
                     Reply
                   </button>
-                  {threadIndex === threads.length - 1 && !isStartingNewThread && (
-                    <button
-                      type="button"
-                      onClick={onStartNewThread}
-                      className="rounded-md border border-dashed border-gray-20 bg-surface px-2.5 py-1 text-[11px] font-medium text-gray-50 transition-colors hover:bg-gray-5 hover:text-foreground hover:border-gray-30 cursor-pointer"
-                    >
-                      + New thread
-                    </button>
-                  )}
+                  {threadIndex === threads.length - 1 &&
+                    !isStartingNewThread && (
+                      <button
+                        type="button"
+                        onClick={onStartNewThread}
+                        className="rounded-md border border-dashed border-gray-20 bg-surface px-2.5 py-1 text-[11px] font-medium text-gray-50 transition-colors hover:bg-gray-5 hover:text-foreground hover:border-gray-30 cursor-pointer"
+                      >
+                        + New thread
+                      </button>
+                    )}
                 </div>
               )}
             </div>

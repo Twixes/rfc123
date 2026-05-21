@@ -20,7 +20,12 @@ export function remarkMergeParagraphs() {
     const MAX_MERGE_LENGTH = 120; // Don't merge very long lines (likely prose)
 
     function getParagraphText(node: unknown): string | null {
-      if (!node || typeof node !== "object" || (node as { type?: string }).type !== "paragraph") return null;
+      if (
+        !node ||
+        typeof node !== "object" ||
+        (node as { type?: string }).type !== "paragraph"
+      )
+        return null;
       const p = node as Paragraph;
       if (!p.children?.length) return null;
       // Single text child only

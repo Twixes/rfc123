@@ -221,17 +221,17 @@ export function ConnectAgentSetup({
             Optional: install the skills
           </h3>
           <p className="text-sm text-gray-70 mb-2">
-            Skills teach the agent how to draft RFCs, synthesize discussions,
-            register decisions, and resolve threads — using the MCP tools above
-            as building blocks.
+            Skills teach the agent how to help you <em>review</em> an RFC —
+            pressure-testing claims, comparing against the codebase,
+            synthesizing discussion — without writing the prose for you. You
+            still type every word that lands on GitHub.
           </p>
           <Snippet>
             {`/plugin marketplace add ${SKILLS_REPO}\n/plugin install rfc123-skills`}
           </Snippet>
           <p className="text-xs text-gray-70 mt-2">
-            For agents without a plugin manager, clone the{" "}
-            <code>skills/</code> directory from the repo into your agent's
-            skills location.
+            For agents without a plugin manager, clone the <code>skills/</code>{" "}
+            directory from the repo into your agent's skills location.
           </p>
         </div>
       )}
@@ -288,7 +288,8 @@ export default function ConnectAgentButton({
                   Connect your agent
                 </h2>
                 <p className="text-sm text-gray-70">
-                  Point your AI agent at RFC123's MCP server. Pick your tool.
+                  Point your AI agent at RFC123's MCP server. Your agent helps
+                  you think and review — you still write what lands on GitHub.
                 </p>
               </div>
               <button

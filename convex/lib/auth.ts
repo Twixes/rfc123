@@ -10,9 +10,7 @@
 export function requireSecret(provided: string): void {
   const expected = process.env.SECRET_KEY;
   if (!expected) {
-    throw new Error(
-      "SECRET_KEY is not configured on the Convex deployment.",
-    );
+    throw new Error("SECRET_KEY is not configured on the Convex deployment.");
   }
   if (provided !== expected) {
     throw new Error("Invalid server secret.");

@@ -37,7 +37,9 @@ export function MermaidDiagram({ chart }: MermaidDiagramProps) {
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to render diagram");
+          setError(
+            err instanceof Error ? err.message : "Failed to render diagram",
+          );
           setSvg(null);
         }
       }
@@ -53,7 +55,9 @@ export function MermaidDiagram({ chart }: MermaidDiagramProps) {
     return (
       <div className="my-4 border border-red-300 rounded bg-red-50 p-4">
         <p className="text-sm text-red-600">Mermaid rendering error: {error}</p>
-        <pre className="mt-2 text-xs text-gray-600 whitespace-pre-wrap">{chart}</pre>
+        <pre className="mt-2 text-xs text-gray-600 whitespace-pre-wrap">
+          {chart}
+        </pre>
       </div>
     );
   }

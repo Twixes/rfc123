@@ -25,7 +25,9 @@ export default function RepoSelectorEmptyState({
   return (
     <div className="max-w-4xl mx-auto">
       <div className="bg-surface border border-gray-20 rounded-md p-8">
-        <h2 className="text-4xl font-serif tracking-tight mb-4">Select an RFC Repository</h2>
+        <h2 className="text-4xl font-serif tracking-tight mb-4">
+          Select an RFC Repository
+        </h2>
         <p className="mb-6 text-gray-70">
           Choose a repository containing RFCs:
         </p>
@@ -55,9 +57,7 @@ export default function RepoSelectorEmptyState({
                   type="button"
                   className="w-full text-left px-6 py-4 border-b border-gray-20 last:border-b-0 hover:bg-yellow-light transition-colors"
                 >
-                  <div className="font-medium text-lg">
-                    {repo.fullName}
-                  </div>
+                  <div className="font-medium text-lg">{repo.fullName}</div>
                 </button>
               ))}
             </div>

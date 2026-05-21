@@ -26,12 +26,21 @@ export const CommentMarkdown = memo(function CommentMarkdown({
             try {
               if (typeof src === "string") {
                 const url = new URL(src);
-                if (url.hostname === "github.com" && url.pathname.startsWith("/user-attachments/")) {
+                if (
+                  url.hostname === "github.com" &&
+                  url.pathname.startsWith("/user-attachments/")
+                ) {
                   proxiedSrc = `/api/github-image?url=${encodeURIComponent(src)}`;
                 }
               }
             } catch {}
-            return <ClickableImage src={proxiedSrc as string | undefined} alt={(alt as string) ?? ""} {...props} />;
+            return (
+              <ClickableImage
+                src={proxiedSrc as string | undefined}
+                alt={(alt as string) ?? ""}
+                {...props}
+              />
+            );
           },
           h1: ({ children }) => (
             <h1 className="mb-1 mt-2 text-base font-sans font-semibold text-foreground">
@@ -48,9 +57,7 @@ export const CommentMarkdown = memo(function CommentMarkdown({
               {children}
             </h3>
           ),
-          p: ({ children }) => (
-            <p className="my-1 text-gray-90">{children}</p>
-          ),
+          p: ({ children }) => <p className="my-1 text-gray-90">{children}</p>,
           a: ({ href, children }) => (
             <a
               href={href}
@@ -96,9 +103,7 @@ export const CommentMarkdown = memo(function CommentMarkdown({
             </pre>
           ),
           blockquote: ({ children }) => (
-            <blockquote
-              className="my-2 border-l-2 border-l-magenta bg-gray-5 py-1 pl-2 pr-2 text-sm italic text-gray-70"
-            >
+            <blockquote className="my-2 border-l-2 border-l-magenta bg-gray-5 py-1 pl-2 pr-2 text-sm italic text-gray-70">
               {children}
             </blockquote>
           ),
@@ -113,7 +118,9 @@ export const CommentMarkdown = memo(function CommentMarkdown({
             <thead className="bg-gray-10">{children}</thead>
           ),
           tbody: ({ children }) => (
-            <tbody className="divide-y divide-gray-20 bg-surface">{children}</tbody>
+            <tbody className="divide-y divide-gray-20 bg-surface">
+              {children}
+            </tbody>
           ),
           tr: ({ children }) => <tr className="border-gray-20">{children}</tr>,
           th: ({ children }) => (

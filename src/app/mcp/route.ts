@@ -23,31 +23,28 @@ const handler = createMcpHandler(
       version: "0.1.0",
     },
     instructions:
-      "RFC123 collaborates on engineering RFCs (markdown pull requests). " +
-      "Tools wrap deterministic GitHub operations; longer-form behaviors " +
-      "(drafting, synthesizing, deciding) ship as agent skills installed " +
-      "via `/plugin install rfc123-skills` (skill docs live under " +
-      "`rfc123://skills/...` resources). Comments and bodies you write get " +
-      "a `— via Claude on RFC123` footer.\n\n" +
-      "Tool routing guide (read once, use throughout):\n" +
+      "RFC123 helps you reason about engineering RFCs (markdown pull " +
+      "requests). The MCP surface is read+route only — there is no tool " +
+      "that posts comments, replies, reviews, or RFC bodies on the user's " +
+      "behalf. The agent reads, clusters, strawmans, steelmans, and " +
+      "synthesizes — in chat. Every word that lands on GitHub is typed by " +
+      "a human. Review-craft skills install via " +
+      "`/plugin install rfc123-skills` (catalog at " +
+      "`rfc123://skills/catalog`).\n\n" +
+      "Tool routing guide:\n" +
       "• Find work: `rfc123_list_rfcs` (filter with `onlyMine:true` for the " +
       "review queue; pass `status:open` + `includeDrafts:false` for the " +
       "high-priority cut). The response carries `viewerInvolvement` per RFC.\n" +
       "• Read content: `rfc123_get_rfc` (body + decision blocks + reviewer " +
-      "state + merge readiness, line-numbered markdown for accurate inline " +
-      "targeting). Comments come from `rfc123_get_rfc_comments` (full " +
+      "state + merge readiness, line-numbered markdown for accurate " +
+      "citation). Comments come from `rfc123_get_rfc_comments` (full " +
       "bodies, grouped threads) or `rfc123_list_review_threads` (resolution " +
-      "state + action IDs).\n" +
-      "• Comment routing: `rfc123_post_general_comment` for stateless " +
-      "discussion; `rfc123_submit_review` (state + optional `comments[]`) " +
-      "for any verdict or ≥2 inline notes (batched into a single review " +
-      "event); `rfc123_post_inline_comment` only for one-off line notes " +
-      "without a verdict; `rfc123_reply_to_comment` with `andResolve:true` " +
-      "closes a thread in one call.\n" +
-      "• Decide / land: `rfc123_register_decision` (rationale required, " +
-      "applies the `decision-registered` label and optionally resolves " +
-      "threads); `rfc123_merge_rfc` refuses to merge without approval + " +
-      "resolved threads + a Decision block (pass `force:true` to override).",
+      "state).\n" +
+      "• Find prior art: `rfc123_search_rfcs` (text search across RFC PRs).\n" +
+      "• Structural writes (no prose): `rfc123_request_reviewers` (add or " +
+      "remove reviewer requests) and `rfc123_merge_rfc` (refuses without " +
+      "approval + resolved threads + a Decision block; pass `force:true` " +
+      "to override).",
   },
   {
     streamableHttpEndpoint: "/mcp",

@@ -28,7 +28,9 @@ export function RelativeTime({ date, className }: RelativeTimeProps) {
   const parsed = new Date(date);
   const absolute = formatAbsolute(parsed);
   const [relative, setRelative] = useState<string | null>(null);
-  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
+  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(
+    null,
+  );
   const ref = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {

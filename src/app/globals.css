@@ -86,7 +86,9 @@
   --color-gray-90: var(--gray-90);
   --font-sans: var(--font-geist);
   --font-serif: var(--font-l-serif);
-  --font-mono: ui-monospace, "SF Mono", Monaco, "Cascadia Code", "Cascadia Mono", "Roboto Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --font-mono:
+    ui-monospace, "SF Mono", Monaco, "Cascadia Code", "Cascadia Mono",
+    "Roboto Mono", Menlo, Consolas, "Liberation Mono", monospace;
 }
 
 body {
@@ -157,9 +159,14 @@ pre {
   background: color-mix(in srgb, var(--foreground) 95%, transparent) !important;
   border: var(--border-thin) solid var(--gray-30);
   border-radius: 4px;
-  font-family: ui-monospace, "SF Mono", Monaco, "Cascadia Code", "Cascadia Mono", "Roboto Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-family:
+    ui-monospace, "SF Mono", Monaco, "Cascadia Code", "Cascadia Mono",
+    "Roboto Mono", Menlo, Consolas, "Liberation Mono", monospace;
   font-variant-ligatures: none;
-  font-feature-settings: "liga" 0, "calt" 0, "dlig" 0;
+  font-feature-settings:
+    "liga" 0,
+    "calt" 0,
+    "dlig" 0;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: geometricPrecision;
@@ -174,7 +181,10 @@ pre code {
   color: var(--background) !important;
   font-family: inherit;
   font-variant-ligatures: none;
-  font-feature-settings: "liga" 0, "calt" 0, "dlig" 0;
+  font-feature-settings:
+    "liga" 0,
+    "calt" 0,
+    "dlig" 0;
   letter-spacing: 0;
   word-spacing: 0;
   font-variant-numeric: tabular-nums;
@@ -187,5 +197,7 @@ pre code {
 }
 
 .svg-stroke-transition {
-  transition: stroke-opacity 0.15s, stroke-width 0.15s !important;
+  transition:
+    stroke-opacity 0.15s,
+    stroke-width 0.15s !important;
 }

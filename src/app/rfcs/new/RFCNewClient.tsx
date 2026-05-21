@@ -221,8 +221,8 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
           New RFC
         </h2>
         <p className="text-sm text-gray-70 mb-8">
-          Drop your idea into Markdown. We'll open a PR, request reviewers,
-          and write a summary for the PR description.
+          Drop your idea into Markdown. We'll open a PR, request reviewers, and
+          write a summary for the PR description.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -252,14 +252,13 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
             />
             {cannotPushSelected && (
               <p className="mt-2 text-xs text-magenta">
-                You don't have write access to this repo. Pick a different
-                one, or fork it on GitHub first.
+                You don't have write access to this repo. Pick a different one,
+                or fork it on GitHub first.
               </p>
             )}
             {selectedRepo && selectedRepo.canPush && !selectedRepo.hasRFCs && (
               <p className="mt-2 text-xs text-gray-50">
-                This repo doesn't have RFCs yet. Your first RFC will create
-                a{" "}
+                This repo doesn't have RFCs yet. Your first RFC will create a{" "}
                 <code className="bg-gray-5 border border-gray-20 rounded-sm px-1 font-mono text-[11px]">
                   requests-for-comments/
                 </code>{" "}

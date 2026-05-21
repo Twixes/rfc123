@@ -64,10 +64,7 @@ export default async function LandingPage() {
             </h1>
 
             <div className="flex items-center gap-2 flex-wrap justify-end">
-              <ConnectAgentButton
-                variant="secondary"
-                label="Connect agent"
-              />
+              <ConnectAgentButton variant="secondary" label="Connect agent" />
               {session ? (
                 <>
                   <Link href="/rfcs" className={SECONDARY_BTN}>
@@ -197,13 +194,14 @@ export default async function LandingPage() {
                     <strong>
                       Connect Claude, ChatGPT, or any agent with our MCP server.
                     </strong>{" "}
-                    One click to authorize - then it can list, read, comment,
-                    draft, review, decide, and accept on your behalf.
+                    One click to authorize — then it can list, read, and discuss
+                    RFCs alongside you.
                   </p>
                   <p className="text-sm text-foreground">
-                    <strong>Skills for the heavy lifting.</strong> Drafting,
-                    synthesizing discussions, comparing alternatives,
-                    registering decisions.
+                    <strong>It thinks; you type.</strong> Skills for
+                    pressure-testing claims, comparing RFCs against the
+                    codebase, and synthesizing discussion — all in chat. Every
+                    word that lands on GitHub is still typed by a human.
                   </p>
                 </div>
               </div>

@@ -1,21 +1,19 @@
 ---
 name: discuss-rfc
-description: Use when the user wants to talk through a specific RFC in depth — understanding the proposal, pressure-testing it, comparing it against the actual codebase, and surfacing gaps the author missed. Pulls the RFC + threads via the MCP server, grounds the discussion in the current code, then takes the user's lead before posting anything back.
+description: Use when the user wants to talk through a specific RFC in depth — understanding the proposal, pressure-testing it, comparing it against the actual codebase, and surfacing gaps the author missed. Pulls the RFC + threads via the MCP server, grounds the discussion in the current code, and stays in chat. Never posts back to the RFC.
 allowed-tools:
   - mcp__rfc123__rfc123_get_rfc
   - mcp__rfc123__rfc123_get_rfc_comments
   - mcp__rfc123__rfc123_list_review_threads
-  - mcp__rfc123__rfc123_post_general_comment
-  - mcp__rfc123__rfc123_post_inline_comment
-  - mcp__rfc123__rfc123_reply_to_comment
-  - mcp__rfc123__rfc123_submit_review
 ---
 
 # discuss-rfc
 
 Help the user think through a specific RFC by grounding the conversation in
-both the proposal and the codebase it touches. Surface gaps the author missed.
-Only post back to the RFC when the user explicitly asks.
+both the proposal and the codebase it touches. Surface gaps the author
+missed. **The output is the conversation itself** — nothing gets posted back
+to GitHub by this skill. If the user wants to leave a comment, they type it
+into GitHub themselves.
 
 ## When to use
 
@@ -52,24 +50,15 @@ proposal with me", or pastes an RFC URL and wants to engage with it.
    user can answer with one click. Fall back to free-text questions only if
    no such tool is available.
 
-5. **Post only when asked.** When the user says "comment this", "post this as
-   a reply", or similar, route to the right tool:
-   - Stateless top-level note → `rfc123_post_general_comment`.
-   - One-off inline note (no verdict) → `rfc123_post_inline_comment`. `line`
-     refers to the PR head file; pass `startLine`+`line` for a range.
-   - Verdict (APPROVE/REQUEST_CHANGES/COMMENT) or ≥2 inline notes →
-     `rfc123_submit_review` (bundles into one notification). For
-     REQUEST_CHANGES pass `confirmBlocksMerge: true`.
-   - Reply inside an existing thread → `rfc123_reply_to_comment`, with
-     `andResolve: true` when the reply also closes the discussion.
-   RFC123 appends a `— via Claude on RFC123` footer automatically; don't
-   add it yourself.
-
 ## What not to do
 
 - Don't summarize the RFC back to the user in long form — they're reading it.
   Surface what they wouldn't see by reading.
-- Don't propose body rewrites here. That's `propose-revision`.
-- Don't resolve threads or merge. Those are explicit, separate skills.
-- Don't post a comment without an explicit user instruction, even if the
-  conversation feels like it's pointing that way.
+- **Don't post anything to GitHub.** No comments, no replies, no reviews —
+  not even if the user explicitly asks. If they want to leave feedback,
+  direct them to the RFC page so they can write it themselves, in their
+  own voice. RFCs and the discussion around them are human-written; copying
+  LLM prose verbatim is what we're avoiding.
+- Don't draft RFC body rewrites — the agent doesn't author RFC prose.
+- Don't try to resolve threads or merge. There's no MCP tool for thread
+  resolution; merge is its own structural action.

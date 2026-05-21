@@ -2,7 +2,6 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import {
-  createRFC,
   getCurrentUser,
   getRFCDetail,
   groupIntoThreads,
@@ -10,23 +9,15 @@ import {
   listReposWithRFCs,
   listRFCs,
   listUserTeams,
-  postComment,
 } from "./github";
 import {
-  closeRFC,
   fetchAllRfcComments,
   listReviewThreads,
   mergeRFC,
-  registerDecision as registerDecisionCommit,
-  reopenRFC,
   requestReviewers,
-  resolveReviewThread,
   resolveRfcRef,
   searchReviewers,
   searchRFCs,
-  submitReview,
-  updateRfcBody,
-  withFooter,
 } from "./mcp-github";
 import { issuerUrl } from "./mcp-oauth";
 
@@ -45,10 +36,6 @@ function getAuth(extra: unknown): AuthExtra {
   }
   return e.authInfo.extra;
 }
-
-const textResult = (text: string) => ({
-  content: [{ type: "text" as const, text }],
-});
 
 const jsonResult = (data: unknown) => ({
   content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
@@ -171,12 +158,12 @@ function threadInvolvement(
  * Register every tool, resource, and prompt on the MCP server. All behavior
  * is deterministic – no LLM calls, no embedding lookups. Multi-step
  * reasoning is delegated to the agent-side skills (`skills/`).
+ *
+ * Surface rule: the agent reads and synthesizes — in chat. Every word that
+ * lands on GitHub is typed by a human. The only writes exposed here are
+ * *structural* (request reviewers, merge) — no prose.
  */
 export function registerMcpCapabilities(server: McpServer) {
-  // Note: `rfc123_whoami` was removed — every other tool's response already
-  // carries `viewerInvolvement` / `viewer.login`. Callers that need an
-  // explicit identity check can read the `rfc123://me` resource.
-
   server.registerTool(
     "rfc123_list_repos_with_rfcs",
     {
@@ -265,8 +252,8 @@ export function registerMcpCapabilities(server: McpServer) {
         "Fetch the markdown body, reviewers (with per-reviewer state), " +
         "status, merge-readiness, parsed decision blocks, and metadata for " +
         "a single RFC. Returns `markdownContentNumbered` — a line-numbered " +
-        "view of the body — so agents can target inline comments accurately. " +
-        "Comments are returned separately by rfc123_get_rfc_comments.",
+        "view of the body — so agents can cite specific lines back to the " +
+        "user. Comments are returned separately by rfc123_get_rfc_comments.",
       inputSchema: {
         owner: z
           .string()
@@ -451,7 +438,7 @@ export function registerMcpCapabilities(server: McpServer) {
       description:
         "Deterministic text search across RFC pull requests the user can " +
         "access (GitHub Search API; matches title and body). Use this to " +
-        "find prior art before drafting a new RFC.",
+        "find prior art when reviewing.",
       inputSchema: {
         query: z.string().min(1),
         ownerFilter: z.string().optional(),
@@ -499,279 +486,6 @@ export function registerMcpCapabilities(server: McpServer) {
     },
   );
 
-  // The skills catalog is exposed as an MCP resource (rfc123://skills/catalog),
-  // not a tool — it's static reference data, not an action. Agents read it
-  // via ReadMcpResourceTool when the user asks about installing skills.
-
-  // Body-bearing write tools below all append the via-Claude footer via withFooter.
-
-  server.registerTool(
-    "rfc123_post_general_comment",
-    {
-      title: "Post general comment",
-      description:
-        "Post a top-level discussion comment on an RFC. Use this for " +
-        "stateless conversation: status updates, synthesis roll-ups, " +
-        "informal nudges. **Do not use this when carrying a formal review " +
-        "verdict** — call rfc123_submit_review with state=COMMENT/APPROVE/" +
-        "REQUEST_CHANGES instead. To reply within an inline thread, use " +
-        "rfc123_reply_to_comment.",
-      inputSchema: {
-        owner: z
-          .string()
-          .optional()
-          .describe(
-            "Repository owner. Omit to auto-resolve across your RFC repos.",
-          ),
-        repo: z
-          .string()
-          .optional()
-          .describe("Repository name. Omit to auto-resolve."),
-        number: z.coerce.number().int().positive(),
-        body: z.string().min(1),
-      },
-    },
-    async (args, extra) => {
-      const { auth, owner, repo, number } = await resolveCtx(extra, args);
-      await postComment(
-        auth.githubAccessToken,
-        owner,
-        repo,
-        number,
-        withFooter(args.body),
-      );
-      return textResult(
-        `Posted general comment on ${owner}/${repo}#${number}.`,
-      );
-    },
-  );
-
-  server.registerTool(
-    "rfc123_post_inline_comment",
-    {
-      title: "Post inline comment",
-      description:
-        "Add a single inline review comment on a line (or range) of a file " +
-        "in the RFC's pull request. Prefer rfc123_submit_review with a " +
-        "`comments` array when posting ≥2 inline notes or carrying an " +
-        "APPROVE / REQUEST_CHANGES verdict — that batches them into one " +
-        "review event instead of N notifications. `line` is the line number " +
-        "in the PR's head file (the version under review). Pass `startLine` " +
-        "for a multi-line range comment.",
-      inputSchema: {
-        owner: z
-          .string()
-          .optional()
-          .describe(
-            "Repository owner. Omit to auto-resolve across your RFC repos.",
-          ),
-        repo: z
-          .string()
-          .optional()
-          .describe("Repository name. Omit to auto-resolve."),
-        number: z.coerce.number().int().positive(),
-        path: z.string(),
-        line: z.coerce
-          .number()
-          .int()
-          .positive()
-          .describe(
-            "End line in the PR head file (RIGHT side by default). For a " +
-              "single-line comment, this is the line itself.",
-          ),
-        body: z.string().min(1),
-        startLine: z.coerce
-          .number()
-          .int()
-          .positive()
-          .optional()
-          .describe("Start line for a multi-line range comment."),
-        side: z
-          .enum(["LEFT", "RIGHT"])
-          .optional()
-          .describe("Diff side for `line`. Defaults to RIGHT (head version)."),
-        startSide: z
-          .enum(["LEFT", "RIGHT"])
-          .optional()
-          .describe("Diff side for `startLine`. Defaults to RIGHT."),
-      },
-    },
-    async (args, extra) => {
-      const { auth, owner, repo, number } = await resolveCtx(extra, args);
-      await postComment(
-        auth.githubAccessToken,
-        owner,
-        repo,
-        number,
-        withFooter(args.body),
-        args.path,
-        args.line,
-        undefined,
-        {
-          startLine: args.startLine,
-          side: args.side,
-          startSide: args.startSide,
-        },
-      );
-      const range = args.startLine
-        ? `${args.path}:${args.startLine}-${args.line}`
-        : `${args.path}:${args.line}`;
-      return textResult(`Posted inline comment on ${range}.`);
-    },
-  );
-
-  server.registerTool(
-    "rfc123_reply_to_comment",
-    {
-      title: "Reply to review comment",
-      description:
-        "Post a reply within an existing inline review-comment thread. " +
-        "Pass `andResolve: true` to mark the thread resolved in the same " +
-        "call — the 90% pattern after a satisfying reply. The resolve step " +
-        "is best-effort; failure is reported in the response but does not " +
-        "fail the reply.",
-      inputSchema: {
-        owner: z
-          .string()
-          .optional()
-          .describe(
-            "Repository owner. Omit to auto-resolve across your RFC repos.",
-          ),
-        repo: z
-          .string()
-          .optional()
-          .describe("Repository name. Omit to auto-resolve."),
-        number: z.coerce.number().int().positive(),
-        replyToCommentId: z.coerce.number().int().positive(),
-        body: z.string().min(1),
-        andResolve: z
-          .boolean()
-          .optional()
-          .describe(
-            "If true, mark the surrounding thread resolved after replying.",
-          ),
-      },
-    },
-    async (args, extra) => {
-      const { auth, owner, repo, number } = await resolveCtx(extra, args);
-      await postComment(
-        auth.githubAccessToken,
-        owner,
-        repo,
-        number,
-        withFooter(args.body),
-        undefined,
-        undefined,
-        args.replyToCommentId,
-      );
-      let resolvedThreadId: string | null = null;
-      let resolveError: string | null = null;
-      if (args.andResolve) {
-        try {
-          const { threads } = await listReviewThreads(
-            auth.githubAccessToken,
-            owner,
-            repo,
-            number,
-          );
-          const containing = threads.find((t) =>
-            t.comments.some((c) => c.databaseId === args.replyToCommentId),
-          );
-          if (!containing) {
-            resolveError = `No thread contains comment ${args.replyToCommentId}.`;
-          } else if (containing.isResolved) {
-            resolvedThreadId = containing.id;
-          } else {
-            await resolveReviewThread(auth.githubAccessToken, containing.id);
-            resolvedThreadId = containing.id;
-          }
-        } catch (error) {
-          resolveError = (error as Error).message;
-        }
-      }
-      return jsonResult({
-        replied: true,
-        rfc: `${owner}/${repo}#${number}`,
-        replyToCommentId: args.replyToCommentId,
-        resolvedThreadId,
-        resolveError,
-      });
-    },
-  );
-
-  server.registerTool(
-    "rfc123_submit_review",
-    {
-      title: "Submit PR review",
-      description:
-        "Submit a formal PR review carrying state APPROVE, REQUEST_CHANGES, " +
-        "or COMMENT, optionally bundling one or more inline comments into a " +
-        "single review event. Prefer this over rfc123_post_inline_comment " +
-        "when (a) you're carrying a verdict, or (b) you're dropping ≥2 " +
-        "inline notes — bundling them produces one PR notification instead " +
-        "of N. REQUEST_CHANGES blocks merge org-wide; pass " +
-        "`confirmBlocksMerge: true` to acknowledge.",
-      inputSchema: {
-        owner: z
-          .string()
-          .optional()
-          .describe(
-            "Repository owner. Omit to auto-resolve across your RFC repos.",
-          ),
-        repo: z
-          .string()
-          .optional()
-          .describe("Repository name. Omit to auto-resolve."),
-        number: z.coerce.number().int().positive(),
-        state: z.enum(["APPROVE", "REQUEST_CHANGES", "COMMENT"]),
-        body: z.string().optional(),
-        comments: z
-          .array(
-            z.object({
-              path: z.string(),
-              line: z.coerce.number().int().positive(),
-              body: z.string().min(1),
-              startLine: z.coerce.number().int().positive().optional(),
-              side: z.enum(["LEFT", "RIGHT"]).optional(),
-              startSide: z.enum(["LEFT", "RIGHT"]).optional(),
-            }),
-          )
-          .optional(),
-        confirmBlocksMerge: z
-          .boolean()
-          .optional()
-          .describe(
-            "Required `true` when state=REQUEST_CHANGES — acknowledges that " +
-              "the review blocks merge org-wide until dismissed or rescinded.",
-          ),
-      },
-    },
-    async (args, extra) => {
-      if (args.state === "REQUEST_CHANGES" && !args.confirmBlocksMerge) {
-        throw new Error(
-          "submit_review with state=REQUEST_CHANGES blocks merging until the " +
-            "review is dismissed or the reviewer rescinds it. Pass " +
-            "`confirmBlocksMerge: true` to acknowledge.",
-        );
-      }
-      const { auth, owner, repo, number } = await resolveCtx(extra, args);
-      const result = await submitReview({
-        accessToken: auth.githubAccessToken,
-        owner,
-        repo,
-        prNumber: number,
-        state: args.state,
-        body: args.body,
-        comments: args.comments,
-      });
-      return jsonResult({
-        state: args.state,
-        reviewId: result.reviewId,
-        url: result.htmlUrl,
-      });
-    },
-  );
-
   server.registerTool(
     "rfc123_request_reviewers",
     {
@@ -780,9 +494,9 @@ export function registerMcpCapabilities(server: McpServer) {
         "Add and/or remove reviewers (users or teams) on an RFC in one " +
         "call. Use rfc123_search_reviewers first to resolve handles. " +
         "Passing a user who previously reviewed and is no longer pending " +
-        "re-requests them. Returns a structured echo of what was added, " +
-        "what was already requested, what was removed, and the final " +
-        "pending list — no follow-up read required.",
+        "re-requests them. Structural action — no prose. Returns a " +
+        "structured echo of what was added, what was already requested, " +
+        "what was removed, and the final pending list.",
       inputSchema: {
         owner: z
           .string()
@@ -830,283 +544,6 @@ export function registerMcpCapabilities(server: McpServer) {
   );
 
   server.registerTool(
-    "rfc123_create_rfc",
-    {
-      title: "Create RFC",
-      description:
-        "Create a new RFC in a specific repository: branches off the default " +
-        "branch, commits the markdown body, opens a pull request, and " +
-        "requests the specified reviewers. The agent must pick the target " +
-        "repo first — call rfc123_list_repos_with_rfcs if uncertain. " +
-        "Defaults: `draft: true` (so reviewers aren't notified until the " +
-        "author un-drafts on GitHub); `directory` auto-detected from the " +
-        "repo's layout (`requests-for-comments/` / `RFCs/` / `rfcs/` / " +
-        "`docs/rfcs/`, falling back to `requests-for-comments`); branch " +
-        "name `rfc/<username>/<slug>`, with a `-<random>` suffix on collision.",
-      inputSchema: {
-        owner: z.string().describe("Repository owner the RFC will live in."),
-        repo: z.string().describe("Repository name the RFC will live in."),
-        title: z.string().min(1),
-        rfcBody: z.string().min(1),
-        prBody: z.string().optional(),
-        reviewers: z.array(z.string()).optional(),
-        draft: z
-          .boolean()
-          .optional()
-          .describe(
-            "Open as draft PR. Defaults to true — pass false only after the " +
-              "author has reviewed the rendered RFC.",
-          ),
-        directory: z
-          .string()
-          .optional()
-          .describe(
-            "RFC directory, e.g. `requests-for-comments`. Auto-detected when omitted.",
-          ),
-        branchName: z
-          .string()
-          .optional()
-          .describe(
-            "Override the branch name. Auto-generated when omitted.",
-          ),
-      },
-    },
-    async (args, extra) => {
-      const auth = getAuth(extra);
-      const me = await getCurrentUser(auth.githubAccessToken);
-      const { slugify } = await import("./slugify");
-      const slug = slugify(args.title);
-      const result = await createRFC({
-        accessToken: auth.githubAccessToken,
-        owner: args.owner,
-        repo: args.repo,
-        title: args.title,
-        rfcBody: withFooter(args.rfcBody),
-        prBody:
-          args.prBody !== undefined ? withFooter(args.prBody) : args.title,
-        slug,
-        username: me.login,
-        reviewers: args.reviewers ?? [],
-        draft: args.draft ?? true,
-        directory: args.directory,
-        branchName: args.branchName,
-      });
-      return jsonResult(result);
-    },
-  );
-
-  server.registerTool(
-    "rfc123_update_rfc_body",
-    {
-      title: "Update RFC body",
-      description:
-        "Replace the markdown body of an RFC by committing a new version to " +
-        "the PR head branch (footer appended automatically). Requires " +
-        "`changeDescription` — a one-line summary of what changed, used as " +
-        "the commit message so the PR timeline reads meaningfully. " +
-        "Concurrent edits are handled with optimistic SHA-locking + one " +
-        "transparent retry; a second conflict surfaces as a clear error. " +
-        "The response includes line-count deltas so callers can confirm " +
-        "the edit without re-reading.",
-      inputSchema: {
-        owner: z
-          .string()
-          .optional()
-          .describe(
-            "Repository owner. Omit to auto-resolve across your RFC repos.",
-          ),
-        repo: z
-          .string()
-          .optional()
-          .describe("Repository name. Omit to auto-resolve."),
-        number: z.coerce.number().int().positive(),
-        newContent: z.string().min(1),
-        changeDescription: z
-          .string()
-          .min(1)
-          .describe(
-            "One-line summary of the change, e.g. " +
-              "'Tighten security section; address @alice feedback'. " +
-              "Used as the commit message.",
-          ),
-      },
-    },
-    async (args, extra) => {
-      const { auth, owner, repo, number } = await resolveCtx(extra, args);
-      const result = await updateRfcBody({
-        accessToken: auth.githubAccessToken,
-        owner,
-        repo,
-        prNumber: number,
-        newContent: args.newContent,
-        changeDescription: args.changeDescription,
-      });
-      return jsonResult(result);
-    },
-  );
-
-  server.registerTool(
-    "rfc123_register_decision",
-    {
-      title: "Register decision",
-      description:
-        "Append a dated `### Decision (YYYY-MM-DD by @login)` block to the " +
-        "RFC body, commit it to the PR branch, and apply the " +
-        "`decision-registered` label so `hasDecision` shows up in list views. " +
-        "Rationale is required — a decision without rationale is the exact " +
-        "anti-pattern this tool prevents. Pass `resolvesThreadIds` to " +
-        "auto-resolve the inline threads this decision settles.",
-      inputSchema: {
-        owner: z
-          .string()
-          .optional()
-          .describe(
-            "Repository owner. Omit to auto-resolve across your RFC repos.",
-          ),
-        repo: z
-          .string()
-          .optional()
-          .describe("Repository name. Omit to auto-resolve."),
-        number: z.coerce.number().int().positive(),
-        decision: z
-          .string()
-          .min(1)
-          .describe("One-sentence statement of what was decided."),
-        rationale: z
-          .string()
-          .min(1)
-          .describe(
-            "Why this decision — the constraints, tradeoffs, or context that " +
-              "led here. Required.",
-          ),
-        resolvesThreadIds: z
-          .array(z.string().min(1))
-          .optional()
-          .describe(
-            "Optional review-thread IDs (from rfc123_list_review_threads) " +
-              "that this decision resolves. They will be marked resolved.",
-          ),
-      },
-    },
-    async (args, extra) => {
-      const { auth, owner, repo, number } = await resolveCtx(extra, args);
-      const me = await getCurrentUser(auth.githubAccessToken);
-      const result = await registerDecisionCommit({
-        accessToken: auth.githubAccessToken,
-        owner,
-        repo,
-        prNumber: number,
-        decision: args.decision,
-        rationale: args.rationale,
-        decidedBy: me.login,
-        resolvesThreadIds: args.resolvesThreadIds,
-      });
-      return jsonResult(result);
-    },
-  );
-
-  server.registerTool(
-    "rfc123_resolve_review_thread",
-    {
-      title: "Resolve review thread(s)",
-      description:
-        "Mark one or more review-comment threads as resolved. Pass " +
-        "`threadIds` for explicit resolution, or pass `filter` + `number` to " +
-        "bulk-resolve every matching unresolved thread on a single RFC. " +
-        "Filters: `outdated` (lines no longer present in the diff) or " +
-        "`startedByMe` (threads the current user opened — useful for an " +
-        "author closing out their own questions). Use `rfc123_reply_to_comment` " +
-        "with `andResolve: true` for the common reply-then-resolve pattern.",
-      inputSchema: {
-        threadIds: z
-          .array(z.string().min(1))
-          .optional()
-          .describe("Explicit thread node IDs to resolve."),
-        filter: z
-          .enum(["outdated", "startedByMe", "all"])
-          .optional()
-          .describe(
-            "Resolve every unresolved thread on the PR matching this filter. " +
-              "Requires `number`.",
-          ),
-        owner: z
-          .string()
-          .optional()
-          .describe(
-            "Repository owner. Required (with `repo`+`number`) when using `filter`.",
-          ),
-        repo: z
-          .string()
-          .optional()
-          .describe("Repository name. Required when using `filter`."),
-        number: z
-          .coerce.number()
-          .int()
-          .positive()
-          .optional()
-          .describe("PR number. Required when using `filter`."),
-      },
-    },
-    async (args, extra) => {
-      const auth = getAuth(extra);
-      let targetIds: string[] = args.threadIds ?? [];
-      if (args.filter) {
-        if (!args.number) {
-          throw new Error("`filter` requires `number` (and optionally owner+repo).");
-        }
-        const ref = await resolveRfcRef(auth.githubAccessToken, {
-          owner: args.owner,
-          repo: args.repo,
-          number: args.number,
-        });
-        const me = await getCurrentUser(auth.githubAccessToken);
-        // Page through everything — bulk resolve needs the full set.
-        let cursor: string | undefined;
-        const allThreads: Awaited<
-          ReturnType<typeof listReviewThreads>
-        >["threads"] = [];
-        do {
-          const page = await listReviewThreads(
-            auth.githubAccessToken,
-            ref.owner,
-            ref.repo,
-            ref.number,
-            { pageSize: 100, after: cursor },
-          );
-          allThreads.push(...page.threads);
-          cursor = page.pageInfo.hasNextPage
-            ? page.pageInfo.endCursor ?? undefined
-            : undefined;
-        } while (cursor);
-        const matching = allThreads.filter((t) => {
-          if (t.isResolved) return false;
-          if (args.filter === "outdated") return t.isOutdated;
-          if (args.filter === "startedByMe")
-            return t.comments[0]?.author === me.login;
-          return true; // "all"
-        });
-        targetIds.push(...matching.map((t) => t.id));
-      }
-      if (targetIds.length === 0) {
-        throw new Error(
-          "Nothing to resolve — pass `threadIds` or a `filter` that matched ≥1 thread.",
-        );
-      }
-      const resolved: string[] = [];
-      const failed: Array<{ threadId: string; error: string }> = [];
-      for (const id of targetIds) {
-        try {
-          await resolveReviewThread(auth.githubAccessToken, id);
-          resolved.push(id);
-        } catch (error) {
-          failed.push({ threadId: id, error: (error as Error).message });
-        }
-      }
-      return jsonResult({ resolved, failed });
-    },
-  );
-
-  server.registerTool(
     "rfc123_merge_rfc",
     {
       title: "Merge RFC",
@@ -1116,7 +553,7 @@ export function registerMcpCapabilities(server: McpServer) {
         "a `### Decision (...)` block is present in the RFC body. Pass " +
         "`force: true` to override (caller owns the consequences). " +
         "`mergeMethod` defaults to squash if the repo allows it, otherwise " +
-        "the first method the repo permits.",
+        "the first method the repo permits. Structural action — no prose.",
       inputSchema: {
         owner: z
           .string()
@@ -1153,94 +590,6 @@ export function registerMcpCapabilities(server: McpServer) {
         force: args.force,
       });
       return jsonResult(result);
-    },
-  );
-
-  server.registerTool(
-    "rfc123_close_rfc",
-    {
-      title: "Close RFC",
-      description:
-        "Close an RFC's pull request without merging. Requires a `reason` " +
-        "which is auto-posted as a wrap-up comment before the close event, " +
-        "so future readers see *why* the proposal was abandoned.",
-      inputSchema: {
-        owner: z
-          .string()
-          .optional()
-          .describe(
-            "Repository owner. Omit to auto-resolve across your RFC repos.",
-          ),
-        repo: z
-          .string()
-          .optional()
-          .describe("Repository name. Omit to auto-resolve."),
-        number: z.coerce.number().int().positive(),
-        reason: z
-          .string()
-          .min(1)
-          .describe(
-            "Why this RFC is being closed. Auto-posted as a comment.",
-          ),
-      },
-    },
-    async (args, extra) => {
-      const { auth, owner, repo, number } = await resolveCtx(extra, args);
-      const result = await closeRFC({
-        accessToken: auth.githubAccessToken,
-        owner,
-        repo,
-        prNumber: number,
-        reason: args.reason,
-      });
-      return jsonResult({
-        closed: true,
-        rfc: `${owner}/${repo}#${number}`,
-        ...result,
-      });
-    },
-  );
-
-  server.registerTool(
-    "rfc123_reopen_rfc",
-    {
-      title: "Reopen RFC",
-      description:
-        "Reopen a previously-closed RFC pull request. Requires a `reason` " +
-        "which is auto-posted as a comment. Cannot reopen merged PRs — the " +
-        "tool returns a clear error in that case.",
-      inputSchema: {
-        owner: z
-          .string()
-          .optional()
-          .describe(
-            "Repository owner. Omit to auto-resolve across your RFC repos.",
-          ),
-        repo: z
-          .string()
-          .optional()
-          .describe("Repository name. Omit to auto-resolve."),
-        number: z.coerce.number().int().positive(),
-        reason: z
-          .string()
-          .min(1)
-          .describe("Why this RFC is being reopened. Auto-posted as a comment."),
-      },
-    },
-    async (args, extra) => {
-      const { auth, owner, repo, number } = await resolveCtx(extra, args);
-      const result = await reopenRFC({
-        accessToken: auth.githubAccessToken,
-        owner,
-        repo,
-        prNumber: number,
-        reason: args.reason,
-      });
-      return jsonResult({
-        reopened: true,
-        rfc: `${owner}/${repo}#${number}`,
-        ...result,
-      });
     },
   );
 
@@ -1282,49 +631,46 @@ export function registerMcpCapabilities(server: McpServer) {
       const iss = issuerUrl();
       const skills = [
         {
-          name: "draft-rfc",
-          summary: "Turn a 1-paragraph brief into a structured RFC draft.",
+          name: "discuss-rfc",
+          summary:
+            "Ground a conversation about a specific RFC in the proposal " +
+            "and (when the host is a coding agent) the surrounding repo.",
+        },
+        {
+          name: "pressure-test-rfc",
+          summary:
+            "Strawman / steelman each claim in an RFC, surface unstated " +
+            "assumptions and missing options.",
+        },
+        {
+          name: "compare-to-codebase",
+          summary:
+            "Read the RFC, then the repo at the PR head, and flag every " +
+            "claim that contradicts the current code.",
         },
         {
           name: "synthesize-discussion",
           summary:
-            "Cluster comments by theme and post a roll-up to the discussion.",
-        },
-        {
-          name: "propose-revision",
-          summary:
-            "Read the RFC and discussion, then propose a revised body diff.",
-        },
-        {
-          name: "compare-alternatives",
-          summary:
-            "Build an Option-A-vs-B comparison table from the RFC's claims.",
+            "Cluster every comment and thread by theme; show the roll-up " +
+            "in chat for the user to rework in their own voice.",
         },
         {
           name: "extract-action-items",
           summary:
-            "Walk every comment and surface explicit '@x will do Y' items.",
+            "Walk every comment and surface explicit '@x will do Y' items " +
+            "as a chat checklist.",
+        },
+        {
+          name: "compare-alternatives",
+          summary:
+            "Build an Option-A-vs-B comparison table from the RFC's claims " +
+            "and present it in chat.",
         },
         {
           name: "suggest-reviewers",
           summary:
-            "Recommend reviewers from PR file paths, prior commenters, and team mapping.",
-        },
-        {
-          name: "register-decision",
-          summary:
-            "Coach the user through writing a decision + rationale, then commit it.",
-        },
-        {
-          name: "resolve-threads",
-          summary:
-            "Walk every unresolved thread, propose a reply, mark resolved.",
-        },
-        {
-          name: "discuss-rfc",
-          summary:
-            "Ground a conversation about a specific RFC in the proposal " +
-              "and (when the host is a coding agent) the surrounding repo.",
+            "Recommend reviewers from PR file paths, prior commenters, and " +
+            "team mapping; on the user's approval, request them.",
         },
       ];
       return {
@@ -1339,6 +685,10 @@ export function registerMcpCapabilities(server: McpServer) {
                   install: "/plugin install rfc123-skills",
                   rawUrl: `${iss}/skills`,
                 },
+                rule:
+                  "The agent reads, clusters, strawmans, steelmans, and " +
+                  "synthesizes — in chat. Every word that lands on GitHub " +
+                  "is typed by a human.",
                 skills,
                 usage:
                   "In Claude Code, install with /plugin marketplace add and /plugin install. " +
@@ -1478,18 +828,21 @@ export function registerMcpCapabilities(server: McpServer) {
       .describe("Optional: repository name. Omitted to auto-resolve."),
   };
 
+  // Prompts below are all chat-terminating: they help the user think, then
+  // stop. They never instruct the agent to post or commit on the user's
+  // behalf. If the user wants the output on the RFC, they edit it in
+  // themselves — in their own voice. RFCs are human-written; copying LLM
+  // prose verbatim is the failure mode we're avoiding.
+
   server.registerPrompt(
-    "draft_rfc",
+    "pressure_test_rfc",
     {
-      title: "Draft an RFC",
+      title: "Pressure-test an RFC",
       description:
-        "Walk the user through drafting an RFC from a brief, then create " +
-        "the pull request. Loads the draft-rfc skill.",
-      argsSchema: {
-        owner: z.string().describe("Target repository owner"),
-        repo: z.string().describe("Target repository name"),
-        topic: z.string().describe("Short description of what to RFC about"),
-      },
+        "Strawman and steelman each claim in an RFC, surface unstated " +
+        "assumptions, and flag missing alternatives. Loads the " +
+        "pressure-test-rfc skill. Output stays in chat.",
+      argsSchema: rfcRefArgs,
     },
     (args) => ({
       messages: [
@@ -1498,11 +851,41 @@ export function registerMcpCapabilities(server: McpServer) {
           content: {
             type: "text",
             text:
-              `Help me draft a new RFC for ${args.owner}/${args.repo} on this topic: ${args.topic}.\n\n` +
-              "Load the `draft-rfc` agent skill (see the `rfc123://skills/catalog` resource). Ask me " +
-              "clarifying questions to fill out Background, Proposal, " +
-              "Alternatives considered, and Open questions. Once I'm happy, " +
-              "call rfc123_create_rfc to open the pull request.",
+              `Help me pressure-test RFC ${args.owner && args.repo ? `${args.owner}/${args.repo}#${args.number}` : `#${args.number}`}.\n\n` +
+              "Load the `pressure-test-rfc` skill. Read the RFC and threads. " +
+              "Walk each substantive claim, strawman and steelman it, name " +
+              "the unstated assumptions, and propose missing alternatives. " +
+              "Show me the analysis in chat. Do not post anything to " +
+              "GitHub.",
+          },
+        },
+      ],
+    }),
+  );
+
+  server.registerPrompt(
+    "compare_to_codebase",
+    {
+      title: "Compare an RFC to the codebase",
+      description:
+        "Read the RFC, read the repo at the PR head, and flag every claim " +
+        "that contradicts the current code. Loads the compare-to-codebase " +
+        "skill. Output stays in chat.",
+      argsSchema: rfcRefArgs,
+    },
+    (args) => ({
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text:
+              `Compare RFC ${args.owner && args.repo ? `${args.owner}/${args.repo}#${args.number}` : `#${args.number}`} against the codebase.\n\n` +
+              "Load the `compare-to-codebase` skill. Read the RFC, then " +
+              "read the repository at the PR head ref. For every factual " +
+              "claim (file paths, APIs, behavior, dependencies), check the " +
+              "code and flag contradictions or omissions. Show me a " +
+              "checklist in chat. Do not post anything to GitHub.",
           },
         },
       ],
@@ -1514,8 +897,9 @@ export function registerMcpCapabilities(server: McpServer) {
     {
       title: "Synthesize an RFC's discussion",
       description:
-        "Read all comments + threads on an RFC and post a roll-up that " +
-        "groups them by theme. Loads the synthesize-discussion skill.",
+        "Read all comments + threads on an RFC and produce a themed " +
+        "roll-up. Loads the synthesize-discussion skill. Output stays in " +
+        "chat.",
       argsSchema: rfcRefArgs,
     },
     (args) => ({
@@ -1526,43 +910,13 @@ export function registerMcpCapabilities(server: McpServer) {
             type: "text",
             text:
               `Synthesize the discussion on RFC ${args.owner && args.repo ? `${args.owner}/${args.repo}#${args.number}` : `#${args.number}`}.\n\n` +
-              "Load the `synthesize-discussion` skill. Use rfc123_get_rfc_comments " +
-              "and rfc123_list_review_threads to read everything. Group concerns by " +
-              "theme; flag what's settled vs. unresolved; cite commenters by " +
-              "@login. Post the synthesis as a general comment.",
-          },
-        },
-      ],
-    }),
-  );
-
-  server.registerPrompt(
-    "propose_revision",
-    {
-      title: "Propose an RFC revision",
-      description:
-        "Read the RFC + discussion, propose a revised body addressing the " +
-        "open feedback. Loads the propose-revision skill.",
-      argsSchema: {
-        ...rfcRefArgs,
-        instruction: z
-          .string()
-          .describe("Free-form directive: 'tighten the security section', etc.")
-          .optional(),
-      },
-    },
-    (args) => ({
-      messages: [
-        {
-          role: "user",
-          content: {
-            type: "text",
-            text:
-              `Propose a revision to RFC ${args.owner && args.repo ? `${args.owner}/${args.repo}#${args.number}` : `#${args.number}`}` +
-              (args.instruction ? ` (instruction: ${args.instruction})` : "") +
-              ".\n\nLoad the `propose-revision` skill. Read the RFC body and " +
-              "all unresolved threads. Show me a unified diff first. After I " +
-              "approve, call rfc123_update_rfc_body to commit.",
+              "Load the `synthesize-discussion` skill. Use " +
+              "rfc123_get_rfc_comments and rfc123_list_review_threads to " +
+              "read everything. Group concerns by theme; flag what's " +
+              "settled vs. unresolved; cite commenters by @login. Show me " +
+              "the synthesis in chat. If I want any of it on the RFC, " +
+              "I'll rework it in my own voice — don't expect me to copy " +
+              "yours.",
           },
         },
       ],
@@ -1575,7 +929,7 @@ export function registerMcpCapabilities(server: McpServer) {
       title: "Compare alternatives",
       description:
         "Build an Option-A-vs-B comparison table for the RFC. Loads the " +
-        "compare-alternatives skill.",
+        "compare-alternatives skill. Output stays in chat.",
       argsSchema: rfcRefArgs,
     },
     (args) => ({
@@ -1588,7 +942,9 @@ export function registerMcpCapabilities(server: McpServer) {
               `Build a comparison table of the alternatives in RFC ${args.owner && args.repo ? `${args.owner}/${args.repo}#${args.number}` : `#${args.number}`}.\n\n` +
               "Load the `compare-alternatives` skill. Extract the options " +
               "from the body, propose comparison axes, fill in the table. " +
-              "Show me the markdown before committing it via rfc123_update_rfc_body.",
+              "Show me the markdown in chat. If I want it on the RFC, I'll " +
+              "edit it in myself — rewriting the cells in my own voice as " +
+              "I go.",
           },
         },
       ],
@@ -1600,8 +956,8 @@ export function registerMcpCapabilities(server: McpServer) {
     {
       title: "Extract action items",
       description:
-        "Pull explicit '@x will do Y' items from the discussion and post a " +
-        "checklist. Loads the extract-action-items skill.",
+        "Pull explicit '@x will do Y' items from the discussion. Loads the " +
+        "extract-action-items skill. Output stays in chat.",
       argsSchema: rfcRefArgs,
     },
     (args) => ({
@@ -1613,8 +969,10 @@ export function registerMcpCapabilities(server: McpServer) {
             text:
               `Extract action items from RFC ${args.owner && args.repo ? `${args.owner}/${args.repo}#${args.number}` : `#${args.number}`}.\n\n` +
               "Load the `extract-action-items` skill. Read every comment via " +
-              "rfc123_get_rfc_comments. Surface explicit owners + actions. Post a " +
-              "markdown checklist as a general comment.",
+              "rfc123_get_rfc_comments. Surface explicit owners + actions. " +
+              "Show me a markdown checklist in chat. If I want it on the " +
+              "RFC, I'll edit it in myself — rewriting items in my own " +
+              "voice as I go.",
           },
         },
       ],
@@ -1640,59 +998,8 @@ export function registerMcpCapabilities(server: McpServer) {
               `Suggest reviewers for RFC ${args.owner && args.repo ? `${args.owner}/${args.repo}#${args.number}` : `#${args.number}`}.\n\n` +
               "Load the `suggest-reviewers` skill. Look at file paths in the " +
               "PR, prior comment authors, and team membership. Show me a " +
-              "ranked list with reasons; on approval, call rfc123_request_reviewers.",
-          },
-        },
-      ],
-    }),
-  );
-
-  server.registerPrompt(
-    "rfc123_register_decision",
-    {
-      title: "Register a decision",
-      description:
-        "Walk through capturing a decision + rationale, then commit it as " +
-        "a Decision block on the RFC. Loads the register-decision skill.",
-      argsSchema: rfcRefArgs,
-    },
-    (args) => ({
-      messages: [
-        {
-          role: "user",
-          content: {
-            type: "text",
-            text:
-              `Help me register a decision on RFC ${args.owner && args.repo ? `${args.owner}/${args.repo}#${args.number}` : `#${args.number}`}.\n\n` +
-              "Load the `register-decision` skill. Ask me to state the " +
-              "decision in one sentence and a brief rationale. Then call " +
-              "rfc123_register_decision to commit it to the RFC body.",
-          },
-        },
-      ],
-    }),
-  );
-
-  server.registerPrompt(
-    "resolve_threads",
-    {
-      title: "Resolve open review threads",
-      description:
-        "Walk every unresolved thread, propose a reply, and mark resolved.",
-      argsSchema: rfcRefArgs,
-    },
-    (args) => ({
-      messages: [
-        {
-          role: "user",
-          content: {
-            type: "text",
-            text:
-              `Help me resolve open threads on RFC ${args.owner && args.repo ? `${args.owner}/${args.repo}#${args.number}` : `#${args.number}`}.\n\n` +
-              "Load the `resolve-threads` skill. For each unresolved thread, " +
-              "summarize the concern and propose a reply. After I approve, " +
-              "post the reply with rfc123_reply_to_comment and call " +
-              "rfc123_resolve_review_thread on the thread id.",
+              "ranked list with reasons; on approval, call " +
+              "rfc123_request_reviewers.",
           },
         },
       ],

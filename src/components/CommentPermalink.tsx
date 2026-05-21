@@ -30,12 +30,27 @@ export function CommentPermalink({ commentId }: CommentPermalinkProps) {
       aria-label="Copy link to comment"
     >
       {copied ? (
-        <svg className="h-3 w-3 text-cyan" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg
+          className="h-3 w-3 text-cyan"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
           <title>Copied</title>
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M5 13l4 4L19 7"
+          />
         </svg>
       ) : (
-        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg
+          className="h-3 w-3"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
           <title>Copy link</title>
           <path
             strokeLinecap="round"

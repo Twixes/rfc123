@@ -19,8 +19,11 @@ RFC123 is a Next.js application for reviewing GitHub pull requests containing RF
 - **Development server**: `pnpm dev` - Starts Next.js dev server on http://localhost:3000
 - **Build**: `pnpm build` - Creates production build
 - **Production server**: `pnpm start` - Runs production build
-- **Lint**: `pnpm lint` - Runs Biome linter
+- **Lint**: `pnpm lint` - Runs Biome linter (`biome check`)
 - **Format**: `pnpm format` - Formats code with Biome
+- **Type-check**: `pnpm typecheck` - `tsc --noEmit`
+- **Tests**: `pnpm test` (Vitest, single run) / `pnpm test:watch`. Run a single file with `pnpm test src/lib/foo.test.ts`; tests currently live next to the modules in `src/lib/`.
+- **Pre-commit**: Husky + `lint-staged` run `biome check --write` on staged JS/TS/JSON/CSS automatically – don't bypass with `--no-verify`.
 
 ## Architecture
 
@@ -66,6 +69,8 @@ Key interfaces:
 - `/api/comment` - POST endpoint for submitting comments
 - `/api/github-image` - GET proxy for allowlisted GitHub-hosted images (e.g. issue/PR uploads on `github.com/user-attachments/...` and `private-user-images.githubusercontent.com`); requires session
 - `/api/rfc-asset` - GET proxy for files in the repo at the PR head ref (used for relative markdown images so private repos work); uses Octokit Contents API; `Content-Type` from `src/lib/asset-mime.ts` (magic bytes + SVG sniff + extension fallback)
+- `/rfcs/new` - "Start an RFC" flow; `/settings` - per-user notification + Slack workspace settings
+- `/mcp` - Streamable HTTP MCP endpoint (see "MCP server" below); OAuth discovery served from `src/app/.well-known/oauth-authorization-server` and `oauth-protected-resource`, token/register/authorize endpoints under `/api/mcp-oauth/*`
 
 ### Inline Commenting System
 
@@ -105,6 +110,18 @@ The core feature is line-by-line commenting on RFC markdown files. This is imple
 The app uses Next.js server actions for mutations where applicable:
 - Inline review comments are posted from the client via `fetch("/api/comment", ...)` in `RFCDetailClient` (src/app/rfcs/[owner]/[repo]/[number]/[[...slug]]/RFCDetailClient.tsx)
 - Log out action in src/app/page.tsx - Handles user logout
+
+### MCP server and agent skills
+
+RFC123 ships an MCP surface paired with portable agent skills – the "agent-native" half of the product.
+
+- **MCP server** lives in `src/app/mcp/route.ts` (`createMcpHandler` + `withMcpAuth` from `mcp-handler`). Single Streamable HTTP endpoint at `/mcp` (SSE is intentionally not exposed). Capabilities are registered in `src/lib/mcp-server.ts`; tool implementations call GitHub directly via the user's stored token. **Design rule (do not break)**: the MCP server is read+route only – it never calls an LLM, never builds embeddings, and never posts comments/replies/reviews/RFC bodies. The only structural writes are `request_reviewers` and `merge_rfc`. Anything that requires judgement (synthesis, comparison, pressure-testing) belongs in a skill, not a tool.
+- **OAuth**: every MCP request carries a Bearer token minted by `/api/mcp-oauth/token`; metadata is served from `.well-known/oauth-authorization-server` + `oauth-protected-resource`. Token state lives in Convex (`convex/mcpOAuth.ts`); resolution helpers and the SHA-256 fingerprint live in `src/lib/mcp-oauth.ts`.
+- **Skills** live in `skills/` (`discuss-rfc`, `pressure-test-rfc`, `compare-to-codebase`, `synthesize-discussion`, `extract-action-items`, `compare-alternatives`, `suggest-reviewers`). Each is a self-contained `SKILL.md` plus `references/`. The catalog is exposed over MCP at `rfc123://skills/catalog` and is also installable via `/plugin install rfc123-skills`. See `skills/README.md` for the canonical philosophy.
+
+### Observability (PostHog)
+
+`instrumentation.ts` boots `posthog-node` on the Node runtime and wires Next.js's `onRequestError` hook for server-side error tracking; `instrumentation-client.ts` initializes `posthog-js` in the browser. The server singleton lives in `src/lib/posthog-server.ts`. Both require `NEXT_PUBLIC_POSTHOG_KEY`; missing keys disable capture rather than crash.
 
 ### Styling
 
@@ -171,7 +188,8 @@ Two parts:
   timezone, skip weekends, idempotent via `lastSentYmdLocal`), pulls each
   one's open non-draft RFCs awaiting their review (direct or
   team-requested), sends a Slack DM via the bot token of their active
-  workspace.
+  workspace. `/api/internal/send-briefing-now` is the manual "send to me
+  now" variant exposed in the settings UI.
 
 Slack OAuth lives at `/api/slack/install` and
 `/api/slack/oauth/callback`. The Slack app manifest is at

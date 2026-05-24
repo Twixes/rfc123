@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Checkbox from "@/components/Checkbox";
 import { DiscussWithAgentButton } from "@/components/DiscussWithAgentButton";
 import type { ReviewerItem } from "@/components/EditableReviewers";
 import { GeneralCommentsSection } from "@/components/GeneralCommentsSection";
 import { InlineCommentableMarkdown } from "@/components/InlineCommentableMarkdown";
 import { MarkdownRawView } from "@/components/MarkdownRawView";
+import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import { RelativeTime } from "@/components/RelativeTime";
 import { RFCBodyEditor } from "@/components/RFCBodyEditor";
 import RFCDetailLoadingSkeleton from "@/components/RFCDetailLoadingSkeleton";
@@ -14,6 +16,7 @@ import RFCsTopBar from "@/components/RFCsTopBar";
 import RFCsTopBarActions from "@/components/RFCsTopBarActions";
 import Tooltip from "@/components/Tooltip";
 import type { Comment, RFCDetail, RfcStateAction } from "@/lib/github";
+import { type LineDiffEntry, lineDiff } from "@/lib/line-diff";
 import { useRfcDraft } from "@/lib/use-rfc-draft";
 import { ViewModeToggle } from "./ViewModeToggle";
 
@@ -572,6 +575,15 @@ export default function RFCDetailClient({
         }
         actions={
           <div className="flex items-center gap-2">
+            {editingBody == null && (
+              <DiscussWithAgentButton
+                owner={owner}
+                repo={repo}
+                prNumber={rfc.number}
+                title={rfc.title}
+                author={rfc.author}
+              />
+            )}
             {canEditBody && editingBody == null && (
               <button
                 type="button"
@@ -595,15 +607,6 @@ export default function RFCDetailClient({
                 </svg>
                 Edit
               </button>
-            )}
-            {editingBody == null && (
-              <DiscussWithAgentButton
-                owner={owner}
-                repo={repo}
-                prNumber={rfc.number}
-                title={rfc.title}
-                author={rfc.author}
-              />
             )}
           </div>
         }
@@ -646,6 +649,7 @@ export default function RFCDetailClient({
         {editingBody != null ? (
           <BodyEditMode
             body={editingBody}
+            originalBody={rfc.markdownContent}
             onBodyChange={setEditingBody}
             mode={editTab}
             onModeChange={setEditTab}
@@ -701,6 +705,9 @@ export default function RFCDetailClient({
 
 interface BodyEditModeProps {
   body: string;
+  /** The unedited version of the body — used as the "before" side of the diff
+   *  view when the user toggles Preview → Diff. */
+  originalBody: string;
   onBodyChange: (next: string) => void;
   /** Page-level Write/Preview toggle drives the editor — RFCBodyEditor hides
    *  its internal tabs when controlled. */
@@ -721,6 +728,7 @@ interface BodyEditModeProps {
 
 function BodyEditMode({
   body,
+  originalBody,
   onBodyChange,
   mode,
   onModeChange,
@@ -734,6 +742,23 @@ function BodyEditMode({
   onResetAndRefresh,
   saveError,
 }: BodyEditModeProps) {
+  const [showDiff, setShowDiff] = useState(false);
+  const diffEntries = useMemo(
+    () =>
+      mode === "preview" && showDiff ? lineDiff(originalBody, body) : null,
+    [mode, showDiff, originalBody, body],
+  );
+  const previewSlot =
+    mode === "preview" ? (
+      showDiff ? (
+        <DiffView entries={diffEntries ?? []} />
+      ) : body.trim() ? (
+        <MarkdownRenderer content={body} />
+      ) : (
+        <p className="text-sm text-gray-50">Nothing to preview yet.</p>
+      )
+    ) : undefined;
+
   return (
     <div className="space-y-4">
       {conflict && (
@@ -764,11 +789,20 @@ function BodyEditMode({
         onBodyChange={onBodyChange}
         mode={mode}
         onModeChange={onModeChange}
+        previewSlot={previewSlot}
       />
       {saveError && !conflict && (
         <div className="rounded-sm border border-magenta bg-magenta-light px-3 py-2 text-sm text-foreground">
           {saveError}
         </div>
+      )}
+      {mode === "preview" && (
+        <Checkbox
+          checked={showDiff}
+          onChange={setShowDiff}
+          label="Show diff against the saved revision"
+          className="text-xs text-gray-70"
+        />
       )}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <label className="flex flex-col gap-1.5 sm:flex-1">
@@ -902,6 +936,77 @@ function BodyDraftRestoreBanner({
           Discard
         </button>
       </div>
+    </div>
+  );
+}
+
+interface DiffViewProps {
+  entries: LineDiffEntry[];
+}
+
+/** Renders a block-level diff over the rendered markdown. Consecutive lines
+ *  of the same kind are grouped and rendered through MarkdownRenderer so the
+ *  diff reads as the regular preview, just with red + strikethrough for
+ *  removed blocks and a green hairline for added blocks. Some markdown
+ *  structure (e.g. a half-removed list) inevitably breaks across block
+ *  boundaries — that's acceptable for a preview affordance. */
+function DiffView({ entries }: DiffViewProps) {
+  if (entries.length === 0) {
+    return <p className="text-sm text-gray-50">No diff to show yet.</p>;
+  }
+  if (entries.every((e) => e.kind === "context")) {
+    return (
+      <p className="text-sm text-gray-50">
+        No changes — your edit matches the saved revision.
+      </p>
+    );
+  }
+  // Coalesce consecutive same-kind entries so each markdown block stays
+  // intact when handed to react-markdown.
+  const blocks: { kind: LineDiffEntry["kind"]; text: string }[] = [];
+  for (const entry of entries) {
+    const last = blocks[blocks.length - 1];
+    if (last && last.kind === entry.kind) {
+      last.text += `\n${entry.text}`;
+    } else {
+      blocks.push({ kind: entry.kind, text: entry.text });
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      {blocks.map((block, idx) => {
+        if (block.kind === "context") {
+          return (
+            // biome-ignore lint/suspicious/noArrayIndexKey: diff blocks have no stable identity; the list re-renders on every edit
+            <div key={idx}>
+              <MarkdownRenderer content={block.text} />
+            </div>
+          );
+        }
+        const isAdded = block.kind === "added";
+        return (
+          <div
+            // biome-ignore lint/suspicious/noArrayIndexKey: diff blocks have no stable identity; the list re-renders on every edit
+            key={idx}
+            className={`relative rounded-sm border-l-2 pl-3 pr-2 py-1 ${
+              isAdded
+                ? "border-l-green-400 bg-green-50"
+                : "border-l-red-400 bg-red-50 line-through decoration-red-400/70 [&_*]:decoration-red-400/70"
+            }`}
+          >
+            <span
+              aria-hidden
+              className={`absolute right-2 top-1 font-mono text-[10px] uppercase tracking-[0.12em] no-underline ${
+                isAdded ? "text-green-700" : "text-red-700"
+              }`}
+            >
+              {isAdded ? "Added" : "Removed"}
+            </span>
+            <MarkdownRenderer content={block.text} />
+          </div>
+        );
+      })}
     </div>
   );
 }

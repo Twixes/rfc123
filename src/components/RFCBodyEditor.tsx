@@ -20,6 +20,10 @@ interface RFCBodyEditorProps {
    *  drives the mode from the page-level segmented toggle instead. */
   mode?: RFCBodyEditorMode;
   onModeChange?: (next: RFCBodyEditorMode) => void;
+  /** Replaces the built-in MarkdownRenderer in Preview mode. Used by the
+   *  detail-page edit mode to swap between rendered preview and a diff view
+   *  without forking the editor frame. */
+  previewSlot?: ReactNode;
 }
 
 export function RFCBodyEditor({
@@ -30,6 +34,7 @@ export function RFCBodyEditor({
   rows = 24,
   mode,
   onModeChange,
+  previewSlot,
 }: RFCBodyEditorProps) {
   const [internalTab, setInternalTab] = useState<RFCBodyEditorMode>("write");
   const isControlled = mode !== undefined;
@@ -93,11 +98,12 @@ export function RFCBodyEditor({
         />
       ) : (
         <div className="px-5 sm:px-6 py-4 min-h-[24rem]">
-          {body.trim() ? (
-            <MarkdownRenderer content={body} />
-          ) : (
-            <p className="text-sm text-gray-50">Nothing to preview yet.</p>
-          )}
+          {previewSlot ??
+            (body.trim() ? (
+              <MarkdownRenderer content={body} />
+            ) : (
+              <p className="text-sm text-gray-50">Nothing to preview yet.</p>
+            ))}
         </div>
       )}
     </div>

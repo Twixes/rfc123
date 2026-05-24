@@ -65,6 +65,26 @@
   }
 }
 
+@theme {
+  /* Registering the animation in `@theme` is what makes Tailwind 4 emit a
+     real `animate-indeterminate-bar` utility. A bare `.animate-*` class in
+     plain CSS loses to Tailwind's own utilities under `@import ... important`. */
+  --animate-indeterminate-bar: indeterminate-bar 1.1s
+    cubic-bezier(0.4, 0, 0.2, 1) infinite;
+
+  /* Travel from just-off-left to just-off-right with no off-screen padding,
+     paired with a wider bar in the markup so the container always has visible
+     motion in it. */
+  @keyframes indeterminate-bar {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(200%);
+    }
+  }
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -105,21 +125,6 @@ body {
 
 strong {
   font-weight: 600;
-}
-
-/* Indeterminate progress bar – a narrow segment that slides left-to-right
-   forever. Used as a loading affordance for in-flight async work that has
-   no measurable progress (e.g. debounced server-side search). */
-@keyframes indeterminate-bar {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(400%);
-  }
-}
-.animate-indeterminate-bar {
-  animation: indeterminate-bar 1.1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
 /* Editorial typography – Lastik for top-level headings only */

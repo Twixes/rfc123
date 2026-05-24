@@ -202,7 +202,7 @@ export default function AddExistingRepoModal({
                     isSearching ? "opacity-100" : "opacity-0"
                   }`}
                 >
-                  <div className="h-full w-1/3 bg-cyan animate-indeterminate-bar" />
+                  <div className="h-full w-1/2 bg-cyan animate-indeterminate-bar" />
                 </div>
                 <div className="max-h-56 overflow-y-auto">
                   {results === null && !resultsError && (

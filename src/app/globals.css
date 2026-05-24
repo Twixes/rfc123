@@ -103,6 +103,25 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+strong {
+  font-weight: 600;
+}
+
+/* Indeterminate progress bar – a narrow segment that slides left-to-right
+   forever. Used as a loading affordance for in-flight async work that has
+   no measurable progress (e.g. debounced server-side search). */
+@keyframes indeterminate-bar {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
+.animate-indeterminate-bar {
+  animation: indeterminate-bar 1.1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
 /* Editorial typography – Lastik for top-level headings only */
 h1 {
   font-family: var(--font-l-serif), Georgia, serif;

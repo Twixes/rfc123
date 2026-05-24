@@ -6,10 +6,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Checkbox from "@/components/Checkbox";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
-import RepoPickerForCreate from "@/components/RepoPickerForCreate";
+import RepoSelector from "@/components/RepoSelector";
 import ReviewerPicker, { type Reviewer } from "@/components/ReviewerPicker";
 import RFCsTopBar from "@/components/RFCsTopBar";
-import type { WritableRepo } from "@/lib/github";
+import type { RepoOption } from "@/lib/github";
 import {
   defaultRfcConfig,
   type RfcConfig,
@@ -41,9 +41,9 @@ interface PersistedDraft {
   body: string;
   reviewers: Reviewer[];
   draft: boolean;
-  /** owner/name of the repo the author picked, restored once /api/writable-repos returns. */
+  /** owner/name of the repo the author picked. */
   selectedRepoFullName?: string;
-  /** Per-repo team selection for `layout: by-team` repos. */
+  /** Per-repo team selection for `layout: multi-directory` repos. */
   team?: string;
 }
 
@@ -53,8 +53,7 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
   const presetOwner = searchParams.get("owner");
   const presetRepo = searchParams.get("repo");
 
-  const [repos, setRepos] = useState<WritableRepo[] | null>(null);
-  const [selectedRepo, setSelectedRepo] = useState<WritableRepo | null>(null);
+  const [selectedRepo, setSelectedRepo] = useState<RepoOption | null>(null);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState(DEFAULT_RFC_TEMPLATE);
   const [reviewers, setReviewers] = useState<Reviewer[]>([]);
@@ -89,60 +88,37 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
     draftLoadedRef.current = true;
   }, []);
 
-  // Load writable repos on mount.
+  // Pick the initial selected repo from URL params or the saved draft. We
+  // synthesize a `RepoOption` from those identifiers rather than waiting for
+  // a repo list to confirm – the config + create endpoints will surface any
+  // real access issue when the user submits.
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch("/api/writable-repos");
-        if (!res.ok) return;
-        const data: WritableRepo[] = await res.json();
-        if (cancelled) return;
-        setRepos(data);
-      } catch (e) {
-        console.error("Failed to load repos", e);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Pick the initial selected repo once the list arrives. Priority:
-  //   1. ?owner/?repo URL preset (explicit intent for this visit wins)
-  //   2. the repo saved in the in-progress draft, if any
-  //   3. the user's single writable repo
-  useEffect(() => {
-    if (!repos || selectedRepo) return;
-    let next: WritableRepo | null = null;
+    if (selectedRepo) return;
     if (presetOwner && presetRepo) {
-      const ownerLc = presetOwner.toLowerCase();
-      const repoLc = presetRepo.toLowerCase();
-      next =
-        repos.find(
-          (r) =>
-            r.owner.toLowerCase() === ownerLc &&
-            r.name.toLowerCase() === repoLc,
-        ) ?? null;
+      setSelectedRepo({
+        owner: presetOwner,
+        name: presetRepo,
+        fullName: `${presetOwner}/${presetRepo}`,
+        canPush: true,
+      });
+      return;
     }
-    if (!next) {
-      try {
-        const stored = localStorage.getItem(DRAFT_STORAGE_KEY);
-        if (stored) {
-          const parsed = JSON.parse(stored) as PersistedDraft;
-          if (parsed.selectedRepoFullName) {
-            next =
-              repos.find((r) => r.fullName === parsed.selectedRepoFullName) ??
-              null;
-          }
-        }
-      } catch {}
-    }
-    if (!next && repos.length === 1 && repos[0].canPush) {
-      next = repos[0];
-    }
-    if (next) setSelectedRepo(next);
-  }, [repos, selectedRepo, presetOwner, presetRepo]);
+    try {
+      const stored = localStorage.getItem(DRAFT_STORAGE_KEY);
+      if (!stored) return;
+      const parsed = JSON.parse(stored) as PersistedDraft;
+      if (!parsed.selectedRepoFullName) return;
+      const [owner, name] = parsed.selectedRepoFullName.split("/");
+      if (owner && name) {
+        setSelectedRepo({
+          owner,
+          name,
+          fullName: parsed.selectedRepoFullName,
+          canPush: true,
+        });
+      }
+    } catch {}
+  }, [presetOwner, presetRepo, selectedRepo]);
 
   // Mirror the picked repo into the URL so the page is shareable/bookmarkable.
   // Uses history.replaceState directly to avoid a Next.js re-render.
@@ -198,13 +174,16 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
           `/api/repos/${encodeURIComponent(selectedRepo.owner)}/${encodeURIComponent(selectedRepo.name)}/config`,
           { signal: controller.signal },
         );
+        if (controller.signal.aborted) return;
         if (!res.ok) throw new Error("config fetch failed");
         const data: RepoConfigResponse = await res.json();
+        if (controller.signal.aborted) return;
         setRepoConfig(data);
         if (data.layout === "multi-directory" && data.teams.length > 0) {
           setTeam((prev) => prev || data.teams[0]);
         }
       } catch (e) {
+        if (controller.signal.aborted) return;
         if ((e as Error).name === "AbortError") return;
         setRepoConfig({ ...defaultRfcConfig(), teams: [] });
       }
@@ -224,8 +203,6 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
     slug.length > 0 &&
     teamValid &&
     !submitting;
-
-  const cannotPushSelected = selectedRepo && !selectedRepo.canPush;
 
   // Live preview of where this RFC will land. Mirrors server-side `rfcFilePath`.
   // Date is recomputed inside the memo so we don't carry a stale closure value
@@ -337,34 +314,15 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
                 Set up a new dedicated RFCs repo →
               </Link>
             </div>
-            <RepoPickerForCreate
-              repos={repos}
-              selected={selectedRepo}
+            <RepoSelector
+              fullWidth
+              currentRepo={selectedRepo}
               onSelect={setSelectedRepo}
+              onRepoAdopted={setSelectedRepo}
             />
-            {cannotPushSelected && (
-              <p className="mt-2 text-xs text-magenta">
-                You don't have write access to this repo. Pick a different one,
-                or fork it on GitHub first.
-              </p>
-            )}
-            {selectedRepo && selectedRepo.canPush && !selectedRepo.hasRFCs && (
-              <p className="mt-2 text-xs text-gray-50">
-                This repo doesn't have RFCs yet. Your first RFC will land at the
-                repo root with a date-prefixed filename. For a cleaner setup,
-                consider{" "}
-                <Link
-                  href="/onboarding"
-                  className="underline decoration-cyan underline-offset-2"
-                >
-                  creating a dedicated RFCs repo
-                </Link>
-                .
-              </p>
-            )}
           </div>
 
-          {/* Team (only for `layout: by-team` repos) */}
+          {/* Team (only for `layout: multi-directory` repos) */}
           {selectedRepo && repoConfig?.layout === "multi-directory" && (
             <div>
               <label
@@ -493,12 +451,8 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
           <Checkbox
             checked={isDraft}
             onChange={setIsDraft}
-            label={
-              <>
-                Open as <strong>draft</strong>
-              </>
-            }
-            description="Won't notify reviewers."
+            label="Open as draft"
+            description="Won't notify reviewers till marked ready for review."
           />
 
           {error && (

@@ -288,8 +288,10 @@ export default function ConnectAgentButton({
                   Connect your agent
                 </h2>
                 <p className="text-sm text-gray-70">
-                  Point your AI agent at RFC123's MCP server. Your agent helps
-                  you think and review – you still write what lands on GitHub.
+                  Point your AI agent at RFC123's MCP server.
+                  <br />
+                  Your agent helps you think and review, but{" "}
+                  <strong>you still write what lands on the RFC</strong>.
                 </p>
               </div>
               <button

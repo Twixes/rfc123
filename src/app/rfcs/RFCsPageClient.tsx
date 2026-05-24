@@ -24,9 +24,6 @@ interface RFCsPageClientProps {
 export default function RFCsPageClient({ session }: RFCsPageClientProps) {
   const [rfcs, setRfcs] = useState<RFC[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [availableRepos, setAvailableRepos] = useState<RepoOption[] | null>(
-    null,
-  );
   const [selectedRepo, setSelectedRepo] = useState<RepoOption | null>(null);
   const rfcsAbortControllerRef = useRef<AbortController | null>(null);
   const [selectedStatuses, setSelectedStatuses] = useState<Set<RFC["status"]>>(
@@ -91,20 +88,10 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [authorDropdownOpen]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: mount-only initial load
   useEffect(() => {
-    loadRepos();
     loadRFCs();
   }, []);
-
-  async function loadRepos() {
-    try {
-      const response = await fetch("/api/repos");
-      const data = await response.json();
-      setAvailableRepos(data);
-    } catch (error) {
-      console.error("Error loading repos:", error);
-    }
-  }
 
   function repoQueryParams(repo?: RepoOption | null): string {
     return repo
@@ -214,52 +201,20 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
 
   const repoSelectorElement = (
     <div className="flex items-center gap-2">
-      {availableRepos && availableRepos.length > 0 ? (
-        selectedRepo ? (
-          <>
-            <RepoSelector
-              currentRepo={selectedRepo}
-              availableRepos={availableRepos}
-              onSelect={handleRepoSelect}
-            />
-            <button
-              type="button"
-              onClick={handleShowAll}
-              className="text-sm text-gray-50 hover:text-foreground transition-colors"
-            >
-              (all)
-            </button>
-          </>
-        ) : (
-          <RepoSelector
-            currentRepo={{ owner: "", name: "" }}
-            label="All repositories"
-            availableRepos={availableRepos}
-            onSelect={handleRepoSelect}
-          />
-        )
-      ) : (
-        <div
-          className="text-sm font-medium text-gray-50 flex items-center gap-2"
-          aria-hidden
+      <RepoSelector
+        currentRepo={selectedRepo}
+        label="All repositories"
+        onSelect={handleRepoSelect}
+        onRepoAdopted={() => loadRFCs(selectedRepo)}
+      />
+      {selectedRepo && (
+        <button
+          type="button"
+          onClick={handleShowAll}
+          className="text-sm text-gray-50 hover:text-foreground transition-colors"
         >
-          All repositories
-          <svg
-            className="w-4 h-4"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            aria-hidden
-          >
-            <title>Dropdown</title>
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M19 9l-7 7-7-7"
-            />
-          </svg>
-        </div>
+          (all)
+        </button>
       )}
     </div>
   );
@@ -322,166 +277,188 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
         </div>
       )}
 
-      {!isLoading && rfcs && rfcs.length > 0 && (
+      {!isLoading && rfcs && (
         <div className="mb-6 flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-1.5">
-            {(["open", "merged", "closed"] as const).map((status) => {
-              const isSelected = selectedStatuses.has(status);
-              return (
-                <button
-                  key={status}
-                  type="button"
-                  onClick={() => toggleStatus(status)}
-                  className={`border rounded-sm px-2 py-1 text-xs font-medium uppercase tracking-wider transition-all cursor-pointer text-foreground ${
-                    isSelected
-                      ? status === "open"
-                        ? "border-cyan bg-cyan-light"
-                        : status === "merged"
-                          ? "border-yellow bg-yellow-light"
-                          : "border-gray-30 bg-gray-5"
-                      : "bg-transparent opacity-40 hover:opacity-70 " +
-                        (
-                          status === "open"
-                            ? "border-cyan"
+          {rfcs.length > 0 && (
+            <>
+              <div className="flex items-center gap-1.5">
+                {(["open", "merged", "closed"] as const).map((status) => {
+                  const isSelected = selectedStatuses.has(status);
+                  return (
+                    <button
+                      key={status}
+                      type="button"
+                      onClick={() => toggleStatus(status)}
+                      className={`border rounded-sm px-2 py-1 text-xs font-medium uppercase tracking-wider transition-all cursor-pointer text-foreground ${
+                        isSelected
+                          ? status === "open"
+                            ? "border-cyan bg-cyan-light"
                             : status === "merged"
-                              ? "border-yellow"
-                              : "border-gray-30"
-                        )
-                  }`}
-                >
-                  {status}
-                </button>
-              );
-            })}
-          </div>
+                              ? "border-yellow bg-yellow-light"
+                              : "border-gray-30 bg-gray-5"
+                          : "bg-transparent opacity-40 hover:opacity-70 " +
+                            (
+                              status === "open"
+                                ? "border-cyan"
+                                : status === "merged"
+                                  ? "border-yellow"
+                                  : "border-gray-30"
+                            )
+                      }`}
+                    >
+                      {status}
+                    </button>
+                  );
+                })}
+              </div>
 
-          <div className="h-5 w-px bg-gray-20" />
+              <div className="h-5 w-px bg-gray-20" />
+            </>
+          )}
 
           {repoSelectorElement}
 
-          <div className="relative" ref={authorDropdownRef}>
-            <button
-              type="button"
-              onClick={() => setAuthorDropdownOpen(!authorDropdownOpen)}
-              className="text-sm text-gray-50 hover:text-foreground transition-colors flex items-center gap-2"
-            >
-              {selectedAuthor ? (
-                <span className="flex items-center gap-1.5">
-                  <img
-                    src={
-                      authors.find((a) => a.login === selectedAuthor)?.avatar
-                    }
-                    alt={selectedAuthor}
-                    className="h-4 w-4 rounded-full border border-gray-20"
-                  />
-                  {selectedAuthor}
-                </span>
-              ) : (
-                "All authors"
-              )}
-              <svg
-                className={`w-4 h-4 transition-transform ${authorDropdownOpen ? "rotate-180" : ""}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 9l-7 7-7-7"
-                />
-              </svg>
-            </button>
-
-            <AnimatePresence>
-              {authorDropdownOpen && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ duration: 0.15 }}
-                  className="absolute top-full left-0 mt-2 w-64 bg-surface border border-gray-20 rounded-md z-50"
+          {rfcs.length > 0 && (
+            <>
+              <div className="relative" ref={authorDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setAuthorDropdownOpen(!authorDropdownOpen)}
+                  className="text-sm text-gray-50 hover:text-foreground transition-colors flex items-center gap-2"
                 >
-                  {authors.length > 5 && (
-                    <div className="p-3 border-b border-gray-20">
-                      <input
-                        ref={authorInputRef}
-                        type="text"
-                        placeholder="Search authors..."
-                        value={authorSearchQuery}
-                        onChange={(e) => setAuthorSearchQuery(e.target.value)}
-                        className="w-full border border-gray-30 rounded-sm px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan focus:border-transparent"
+                  {selectedAuthor ? (
+                    <span className="flex items-center gap-1.5">
+                      <img
+                        src={
+                          authors.find((a) => a.login === selectedAuthor)
+                            ?.avatar
+                        }
+                        alt={selectedAuthor}
+                        className="h-4 w-4 rounded-full border border-gray-20"
                       />
-                    </div>
+                      {selectedAuthor}
+                    </span>
+                  ) : (
+                    "All authors"
                   )}
-                  <div className="max-h-64 overflow-y-auto">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedAuthor(null);
-                        setAuthorDropdownOpen(false);
-                        setAuthorSearchQuery("");
-                      }}
-                      className={`w-full text-left px-4 py-2.5 text-sm border-b border-gray-20 hover:bg-yellow-light transition-colors ${
-                        !selectedAuthor ? "bg-gray-5 font-medium" : ""
-                      }`}
+                  <svg
+                    aria-hidden
+                    className={`w-4 h-4 transition-transform ${authorDropdownOpen ? "rotate-180" : ""}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <title>Toggle</title>
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 9l-7 7-7-7"
+                    />
+                  </svg>
+                </button>
+
+                <AnimatePresence>
+                  {authorDropdownOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.95 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute top-full left-0 mt-2 w-64 bg-surface border border-gray-20 rounded-md z-50"
                     >
-                      All authors
-                    </button>
-                    {authors
-                      .filter((a) =>
-                        a.login
-                          .toLowerCase()
-                          .includes(authorSearchQuery.toLowerCase()),
-                      )
-                      .map((author) => (
+                      {authors.length > 5 && (
+                        <div className="p-3 border-b border-gray-20">
+                          <input
+                            ref={authorInputRef}
+                            type="text"
+                            placeholder="Search authors..."
+                            value={authorSearchQuery}
+                            onChange={(e) =>
+                              setAuthorSearchQuery(e.target.value)
+                            }
+                            className="w-full border border-gray-30 rounded-sm px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan focus:border-transparent"
+                          />
+                        </div>
+                      )}
+                      <div className="max-h-64 overflow-y-auto">
                         <button
-                          key={author.login}
                           type="button"
                           onClick={() => {
-                            setSelectedAuthor(author.login);
+                            setSelectedAuthor(null);
                             setAuthorDropdownOpen(false);
                             setAuthorSearchQuery("");
                           }}
-                          className={`w-full text-left px-4 py-2.5 text-sm border-b border-gray-20 last:border-b-0 hover:bg-yellow-light transition-colors flex items-center gap-2 ${
-                            selectedAuthor === author.login
-                              ? "bg-gray-5 font-medium"
-                              : ""
+                          className={`w-full text-left px-4 py-2.5 text-sm border-b border-gray-20 hover:bg-yellow-light transition-colors ${
+                            !selectedAuthor ? "bg-gray-5 font-medium" : ""
                           }`}
                         >
-                          <img
-                            src={author.avatar}
-                            alt={author.login}
-                            className="h-5 w-5 rounded-full border border-gray-20"
-                          />
-                          {author.login}
+                          All authors
                         </button>
-                      ))}
-                  </div>
-                </motion.div>
+                        {authors
+                          .filter((a) =>
+                            a.login
+                              .toLowerCase()
+                              .includes(authorSearchQuery.toLowerCase()),
+                          )
+                          .map((author) => (
+                            <button
+                              key={author.login}
+                              type="button"
+                              onClick={() => {
+                                setSelectedAuthor(author.login);
+                                setAuthorDropdownOpen(false);
+                                setAuthorSearchQuery("");
+                              }}
+                              className={`w-full text-left px-4 py-2.5 text-sm border-b border-gray-20 last:border-b-0 hover:bg-yellow-light transition-colors flex items-center gap-2 ${
+                                selectedAuthor === author.login
+                                  ? "bg-gray-5 font-medium"
+                                  : ""
+                              }`}
+                            >
+                              <img
+                                src={author.avatar}
+                                alt={author.login}
+                                className="h-5 w-5 rounded-full border border-gray-20"
+                              />
+                              {author.login}
+                            </button>
+                          ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {selectedAuthor && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedAuthor(null)}
+                  className="text-sm text-gray-50 hover:text-foreground transition-colors"
+                >
+                  (clear)
+                </button>
               )}
-            </AnimatePresence>
-          </div>
 
-          {selectedAuthor && (
-            <button
-              type="button"
-              onClick={() => setSelectedAuthor(null)}
-              className="text-sm text-gray-50 hover:text-foreground transition-colors"
-            >
-              (clear)
-            </button>
+              <span className="text-xs text-gray-50 ml-auto tabular-nums">
+                {filteredRfcs?.length} of {rfcs.length}
+              </span>
+            </>
           )}
-
-          <span className="text-xs text-gray-50 ml-auto tabular-nums">
-            {filteredRfcs?.length} of {rfcs.length}
-          </span>
         </div>
       )}
 
       {isLoading ? (
         <RFCListSkeleton />
+      ) : rfcs && rfcs.length === 0 ? (
+        <EmptyRFCsState selectedRepo={selectedRepo} />
+      ) : rfcs && filteredRfcs && filteredRfcs.length === 0 ? (
+        <FilteredEmpty
+          onClearFilters={() => {
+            setSelectedStatuses(new Set(["open", "merged", "closed"]));
+            setSelectedAuthor(null);
+          }}
+        />
       ) : (
         <motion.div
           className="space-y-0"
@@ -573,6 +550,52 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
           ))}
         </motion.div>
       )}
+    </div>
+  );
+}
+
+function EmptyRFCsState({ selectedRepo }: { selectedRepo: RepoOption | null }) {
+  const newRfcHref = selectedRepo
+    ? `/rfcs/new?owner=${encodeURIComponent(selectedRepo.owner)}&repo=${encodeURIComponent(selectedRepo.name)}`
+    : "/rfcs/new";
+  const headline = selectedRepo
+    ? `No RFCs in ${selectedRepo.owner}/${selectedRepo.name} yet`
+    : "No RFCs across your RFC repos yet";
+  const subtext = selectedRepo
+    ? "Start one here, or pick a different repo from the dropdown above."
+    : "Start one in any of your RFC repos, or use the dropdown above to add a legacy RFCs repo.";
+  return (
+    <div className="mt-2 rounded-md border border-dashed border-gray-20 bg-surface px-6 py-10 text-center">
+      <h2 className="text-2xl font-serif font-normal text-foreground">
+        {headline}
+      </h2>
+      <p className="mx-auto mt-2 max-w-md text-sm text-gray-70">{subtext}</p>
+      <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+        <Link
+          href={newRfcHref}
+          className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-surface transition-all hover:opacity-80 cursor-pointer"
+        >
+          Start an RFC
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function FilteredEmpty({ onClearFilters }: { onClearFilters: () => void }) {
+  return (
+    <div className="mt-2 rounded-md border border-dashed border-gray-20 bg-surface px-6 py-8 text-center">
+      <p className="text-sm text-gray-70">
+        Nothing matches the current filters.{" "}
+        <button
+          type="button"
+          onClick={onClearFilters}
+          className="underline decoration-cyan underline-offset-2 hover:text-foreground transition-colors cursor-pointer"
+        >
+          Show everything
+        </button>
+        .
+      </p>
     </div>
   );
 }

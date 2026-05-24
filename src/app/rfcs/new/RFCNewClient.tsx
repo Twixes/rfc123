@@ -109,33 +109,60 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
   }, []);
 
   // Pick the initial selected repo once the list arrives. Priority:
-  //   1. the repo saved in the in-progress draft, if any
-  //   2. ?owner/?repo URL preset
+  //   1. ?owner/?repo URL preset (explicit intent for this visit wins)
+  //   2. the repo saved in the in-progress draft, if any
   //   3. the user's single writable repo
   useEffect(() => {
     if (!repos || selectedRepo) return;
     let next: WritableRepo | null = null;
-    try {
-      const stored = localStorage.getItem(DRAFT_STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored) as PersistedDraft;
-        if (parsed.selectedRepoFullName) {
-          next =
-            repos.find((r) => r.fullName === parsed.selectedRepoFullName) ??
-            null;
-        }
-      }
-    } catch {}
-    if (!next && presetOwner && presetRepo) {
+    if (presetOwner && presetRepo) {
+      const ownerLc = presetOwner.toLowerCase();
+      const repoLc = presetRepo.toLowerCase();
       next =
-        repos.find((r) => r.owner === presetOwner && r.name === presetRepo) ??
-        null;
+        repos.find(
+          (r) =>
+            r.owner.toLowerCase() === ownerLc &&
+            r.name.toLowerCase() === repoLc,
+        ) ?? null;
+    }
+    if (!next) {
+      try {
+        const stored = localStorage.getItem(DRAFT_STORAGE_KEY);
+        if (stored) {
+          const parsed = JSON.parse(stored) as PersistedDraft;
+          if (parsed.selectedRepoFullName) {
+            next =
+              repos.find((r) => r.fullName === parsed.selectedRepoFullName) ??
+              null;
+          }
+        }
+      } catch {}
     }
     if (!next && repos.length === 1 && repos[0].canPush) {
       next = repos[0];
     }
     if (next) setSelectedRepo(next);
   }, [repos, selectedRepo, presetOwner, presetRepo]);
+
+  // Mirror the picked repo into the URL so the page is shareable/bookmarkable.
+  // Uses history.replaceState directly to avoid a Next.js re-render.
+  useEffect(() => {
+    if (!selectedRepo) return;
+    const params = new URLSearchParams(window.location.search);
+    if (
+      params.get("owner") === selectedRepo.owner &&
+      params.get("repo") === selectedRepo.name
+    ) {
+      return;
+    }
+    params.set("owner", selectedRepo.owner);
+    params.set("repo", selectedRepo.name);
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}?${params.toString()}`,
+    );
+  }, [selectedRepo]);
 
   // Persist the in-progress draft on every change. No repo gating – drafting
   // before picking a repo is the most common entry path.

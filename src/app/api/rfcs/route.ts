@@ -46,7 +46,11 @@ export async function GET(request: Request) {
       !owner || !repo
         ? await listAllRFCs(accessToken, currentUserLogin, listOpts)
         : await listRFCs(accessToken, owner, repo, currentUserLogin, listOpts);
-    return NextResponse.json(rfcs, { headers });
+    // Hide other people's drafts; keep the viewer's own so they can resume.
+    const visibleRfcs = rfcs.filter(
+      (rfc) => !rfc.isDraft || rfc.author === currentUserLogin,
+    );
+    return NextResponse.json(visibleRfcs, { headers });
   } catch (error) {
     console.error("Error fetching RFCs:", error);
     return NextResponse.json(

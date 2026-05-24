@@ -44,9 +44,9 @@ export default async function SettingsPage({
   const params = await searchParams;
 
   return (
-    <div className="mx-auto min-h-screen max-w-240 px-4 sm:px-8 py-6 sm:py-12">
-      <RFCsTopBar user={session?.user ?? null} />
+    <div className="min-h-screen px-4 sm:px-8 py-6 sm:py-12">
       <div className="mx-auto w-full max-w-2xl">
+        <RFCsTopBar user={session?.user ?? null} />
         <SettingsClient
           initialPrefs={{
             notifyHour: user?.notifyHour ?? 9,

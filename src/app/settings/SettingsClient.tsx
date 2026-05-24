@@ -1,7 +1,7 @@
 "use client";
 
-import { motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import Checkbox from "@/components/Checkbox";
 import HourSelect from "@/components/HourSelect";
 import TimezoneSelect from "@/components/TimezoneSelect";
 
@@ -181,8 +181,9 @@ export default function SettingsClient({
 
   return (
     <div className="border border-gray-20 rounded-md bg-surface p-6 sm:p-8">
-      <div className="mb-3 h-0.75 w-12 bg-cyan" />
-      <h1 className="text-foreground">Settings</h1>
+      <h2 className="text-3xl sm:text-4xl font-serif font-normal text-foreground mb-2">
+        Settings
+      </h2>
       <p className="mt-2 mb-6 text-gray-70">
         Configure connection to Slack, and a daily nudge there on the RFCs
         waiting on you.
@@ -194,7 +195,9 @@ export default function SettingsClient({
         )}
 
         <section>
-          <h2 className="text-foreground mb-3">Slack workspace</h2>
+          <h3 className="text-lg font-medium text-foreground mb-2">
+            Slack workspace
+          </h3>
           {slackLinks.length === 0 ? (
             <div className="space-y-3">
               <p className="text-sm text-gray-70">
@@ -271,24 +274,21 @@ export default function SettingsClient({
         </section>
 
         <section>
-          <h2 className="text-foreground mb-3">Daily briefing</h2>
-          <label className="flex items-center gap-3 mb-1">
-            <input
-              type="checkbox"
-              checked={enabled}
-              onChange={(e) => setEnabled(e.target.checked)}
-              disabled={!hasActiveSlack}
-              className="h-4 w-4"
-            />
-            <span className="text-sm">
-              DM me a daily briefing of RFCs awaiting my review
-            </span>
-          </label>
-          <p className="text-xs text-gray-50 ml-7 mb-4">
-            {hasActiveSlack
-              ? "No briefing on weekends or when you have zero RFCs to review."
-              : "Connect a Slack workspace above to enable."}
-          </p>
+          <h3 className="text-lg font-medium text-foreground mb-2">
+            Daily briefing
+          </h3>
+          <Checkbox
+            checked={enabled}
+            onChange={setEnabled}
+            disabled={!hasActiveSlack}
+            label="DM me a daily briefing of RFCs awaiting my review"
+            description={
+              hasActiveSlack
+                ? "No briefing on weekends or when you have zero RFCs to review."
+                : "Connect a Slack workspace above to enable."
+            }
+            className="mb-4"
+          />
 
           <div className="flex flex-wrap gap-3 items-end">
             <div className="w-32 shrink-0">

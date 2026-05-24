@@ -3,13 +3,27 @@
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import ConnectAgentButton from "@/components/ConnectAgentButton";
 import { RelativeTime } from "@/components/RelativeTime";
 import RepoSelector from "@/components/RepoSelector";
 import RFCListSkeleton from "@/components/RFCListSkeleton";
 import RFCsTopBar from "@/components/RFCsTopBar";
+import RFCsTopBarActions, { newRfcHref } from "@/components/RFCsTopBarActions";
 import type { RepoOption, RFC } from "@/lib/github";
 import { slugify } from "@/lib/slugify";
+
+const ALL_STATUSES: ReadonlyArray<RFC["status"]> = ["open", "merged", "closed"];
+
+const STATUS_PILL_CLASSES: Record<RFC["status"], string> = {
+  open: "border-cyan bg-cyan-light",
+  merged: "border-magenta bg-magenta-light",
+  closed: "border-gray-30 bg-gray-5",
+};
+
+const STATUS_BORDER_CLASSES: Record<RFC["status"], string> = {
+  open: "border-cyan",
+  merged: "border-magenta",
+  closed: "border-gray-30",
+};
 
 interface RFCsPageClientProps {
   session: {
@@ -19,9 +33,15 @@ interface RFCsPageClientProps {
       image?: string | null;
     };
   } | null;
+  /** Null on transient GH error – we degrade by treating every RFC as
+   *  someone else's. */
+  viewerLogin: string | null;
 }
 
-export default function RFCsPageClient({ session }: RFCsPageClientProps) {
+export default function RFCsPageClient({
+  session,
+  viewerLogin,
+}: RFCsPageClientProps) {
   const [rfcs, setRfcs] = useState<RFC[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedRepo, setSelectedRepo] = useState<RepoOption | null>(null);
@@ -50,14 +70,41 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
       .sort((a, b) => a.login.localeCompare(b.login));
   }, [rfcs]);
 
-  const filteredRfcs = useMemo(() => {
-    if (!rfcs) return null;
-    return rfcs.filter((rfc) => {
-      if (!selectedStatuses.has(rfc.status)) return false;
-      if (selectedAuthor && rfc.author !== selectedAuthor) return false;
-      return true;
+  // One pass over `rfcs` derives every grouping the layout needs:
+  // filter-respecting buckets for rendering and unfiltered totals for
+  // empty-state copy ("N hidden by filters" vs first-time nudge).
+  const { mineRfcs, othersRfcs, totalMine, hasAnyOthers } = useMemo(() => {
+    const mineRfcs: RFC[] = [];
+    const othersRfcs: RFC[] = [];
+    let totalMine = 0;
+    let hasAnyOthers = false;
+    for (const rfc of rfcs ?? []) {
+      const isMine = !!viewerLogin && rfc.author === viewerLogin;
+      if (isMine) totalMine++;
+      else hasAnyOthers = true;
+      if (!selectedStatuses.has(rfc.status)) continue;
+      if (selectedAuthor && rfc.author !== selectedAuthor) continue;
+      (isMine ? mineRfcs : othersRfcs).push(rfc);
+    }
+    // Author-centric ordering for "My proposals": surface RFCs that need
+    // attention first, then in-progress drafts, then terminal states. Tie-
+    // break by most recent activity so the freshest item is always on top
+    // within its tier.
+    mineRfcs.sort((a, b) => {
+      const ra = myProposalRank(a);
+      const rb = myProposalRank(b);
+      if (ra !== rb) return ra - rb;
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
     });
-  }, [rfcs, selectedStatuses, selectedAuthor]);
+    return { mineRfcs, othersRfcs, totalMine, hasAnyOthers };
+  }, [rfcs, viewerLogin, selectedStatuses, selectedAuthor]);
+
+  const filteredCount = mineRfcs.length + othersRfcs.length;
+
+  function clearFilters() {
+    setSelectedStatuses(new Set(ALL_STATUSES));
+    setSelectedAuthor(null);
+  }
 
   function toggleStatus(status: RFC["status"]) {
     setSelectedStatuses((prev) => {
@@ -224,36 +271,7 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
       <RFCsTopBar
         user={session?.user ?? null}
         homeHref="/"
-        actions={
-          <>
-            <ConnectAgentButton variant="secondary" label="Connect agent" />
-            <Link
-              href={
-                selectedRepo
-                  ? `/rfcs/new?owner=${encodeURIComponent(selectedRepo.owner)}&repo=${encodeURIComponent(selectedRepo.name)}`
-                  : "/rfcs/new"
-              }
-              className="rounded-md bg-foreground px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium text-surface transition-all hover:opacity-80 cursor-pointer flex items-center gap-1.5"
-            >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                aria-hidden
-              >
-                <title>New</title>
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 4v16m8-8H4"
-                />
-              </svg>
-              New RFC
-            </Link>
-          </>
-        }
+        actions={<RFCsTopBarActions repo={selectedRepo} />}
       />
 
       {missingScopes.length > 0 && (
@@ -282,29 +300,17 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
           {rfcs.length > 0 && (
             <>
               <div className="flex items-center gap-1.5">
-                {(["open", "merged", "closed"] as const).map((status) => {
+                {ALL_STATUSES.map((status) => {
                   const isSelected = selectedStatuses.has(status);
+                  const colorClasses = isSelected
+                    ? STATUS_PILL_CLASSES[status]
+                    : `bg-transparent opacity-40 hover:opacity-70 ${STATUS_BORDER_CLASSES[status]}`;
                   return (
                     <button
                       key={status}
                       type="button"
                       onClick={() => toggleStatus(status)}
-                      className={`border rounded-sm px-2 py-1 text-xs font-medium uppercase tracking-wider transition-all cursor-pointer text-foreground ${
-                        isSelected
-                          ? status === "open"
-                            ? "border-cyan bg-cyan-light"
-                            : status === "merged"
-                              ? "border-yellow bg-yellow-light"
-                              : "border-gray-30 bg-gray-5"
-                          : "bg-transparent opacity-40 hover:opacity-70 " +
-                            (
-                              status === "open"
-                                ? "border-cyan"
-                                : status === "merged"
-                                  ? "border-yellow"
-                                  : "border-gray-30"
-                            )
-                      }`}
+                      className={`border rounded-sm px-2 py-1 text-xs font-medium uppercase tracking-wider transition-all cursor-pointer text-foreground ${colorClasses}`}
                     >
                       {status}
                     </button>
@@ -441,7 +447,7 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
               )}
 
               <span className="text-xs text-gray-50 ml-auto tabular-nums">
-                {filteredRfcs?.length} of {rfcs.length}
+                {filteredCount} of {rfcs.length}
               </span>
             </>
           )}
@@ -452,112 +458,37 @@ export default function RFCsPageClient({ session }: RFCsPageClientProps) {
         <RFCListSkeleton />
       ) : rfcs && rfcs.length === 0 ? (
         <EmptyRFCsState selectedRepo={selectedRepo} />
-      ) : rfcs && filteredRfcs && filteredRfcs.length === 0 ? (
-        <FilteredEmpty
-          onClearFilters={() => {
-            setSelectedStatuses(new Set(["open", "merged", "closed"]));
-            setSelectedAuthor(null);
-          }}
-        />
       ) : (
-        <motion.div
-          className="space-y-0"
-          initial="hidden"
-          animate="visible"
-          variants={{
-            visible: { transition: { staggerChildren: 0.04 } },
-            hidden: {},
-          }}
-        >
-          {filteredRfcs?.map((rfc, index) => (
-            <motion.div
-              key={`${rfc.owner}/${rfc.repo}/${rfc.number}`}
-              variants={{
-                visible: { opacity: 1, y: 0 },
-                hidden: { opacity: 0, y: 8 },
-              }}
-              transition={{ type: "spring", stiffness: 400, damping: 35 }}
-              whileHover={{ scale: 1.002 }}
-            >
-              <Link
-                href={`/rfcs/${rfc.owner}/${rfc.repo}/${rfc.number}/${slugify(rfc.title)}`}
-                className={`group block border-b border-gray-20 px-4 sm:px-6 py-4 sm:py-5 transition-all hover:bg-gray-5 ${
-                  index === 0 ? "border-t border-gray-20" : ""
-                } ${rfc.reviewRequested ? "bg-yellow-light" : ""}`}
-              >
-                <div className="flex items-start justify-between gap-4 sm:gap-6">
-                  <div className="flex-1 min-w-0">
-                    <div className="mb-2 flex flex-wrap items-center gap-2 sm:gap-3">
-                      <h2 className="text-3xl font-medium text-foreground break-words font-serif">
-                        {rfc.title}
-                      </h2>
-                      {rfc.reviewRequested && (
-                        <span className="border border-magenta bg-magenta-light text-foreground rounded-sm px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium uppercase tracking-wider flex-shrink-0">
-                          Review Requested
-                        </span>
-                      )}
-                      <span
-                        className={`border rounded-sm px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium uppercase tracking-wider flex-shrink-0 text-foreground ${
-                          rfc.status === "open"
-                            ? "border-cyan bg-cyan-light"
-                            : rfc.status === "merged"
-                              ? "border-yellow bg-yellow-light"
-                              : "border-gray-30 bg-gray-5"
-                        }`}
-                      >
-                        {rfc.status}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-[10px] sm:text-xs text-gray-50">
-                      <span className="font-medium">
-                        {rfc.owner}/{rfc.repo}
-                      </span>
-                      <div className="flex items-center gap-1.5 sm:gap-2">
-                        <div className="h-4 w-4 sm:h-5 sm:w-5 rounded-full overflow-hidden border border-gray-20">
-                          <img
-                            src={rfc.authorAvatar}
-                            alt={rfc.author}
-                            className="h-full w-full"
-                          />
-                        </div>
-                        <span className="truncate max-w-24 sm:max-w-none">
-                          {rfc.author}
-                        </span>
-                      </div>
-                      <span>#{rfc.number}</span>
-                      <span className="hidden sm:inline">
-                        <RelativeTime date={rfc.createdAt} />
-                      </span>
-                      {rfc.inlineCommentCount === null ? (
-                        <span className="border-l border-gray-30 pl-2 sm:pl-4">
-                          <span className="inline-block h-3 w-16 animate-pulse rounded bg-gray-20" />
-                        </span>
-                      ) : rfc.inlineCommentCount > 0 ? (
-                        <span className="border-l border-gray-30 pl-2 sm:pl-4">
-                          {rfc.inlineCommentCount} inline
-                        </span>
-                      ) : null}
-                      {rfc.regularCommentCount > 0 && (
-                        <span className="border-l border-gray-30 pl-2 sm:pl-4">
-                          {rfc.regularCommentCount} general
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </Link>
-            </motion.div>
-          ))}
-        </motion.div>
+        <div className="space-y-10">
+          {viewerLogin && (
+            <RFCSection
+              title="My proposals"
+              rfcs={mineRfcs}
+              variant="mine"
+              emptyState={
+                <MyProposalsEmpty
+                  selectedRepo={selectedRepo}
+                  hiddenByFilters={totalMine - mineRfcs.length}
+                  onClearFilters={clearFilters}
+                />
+              }
+            />
+          )}
+          {hasAnyOthers && (
+            <RFCSection
+              title="Up for my review"
+              rfcs={othersRfcs}
+              variant="others"
+              emptyState={<HiddenByFilters onClearFilters={clearFilters} />}
+            />
+          )}
+        </div>
       )}
     </div>
   );
 }
 
 function EmptyRFCsState({ selectedRepo }: { selectedRepo: RepoOption | null }) {
-  const newRfcHref = selectedRepo
-    ? `/rfcs/new?owner=${encodeURIComponent(selectedRepo.owner)}&repo=${encodeURIComponent(selectedRepo.name)}`
-    : "/rfcs/new";
   const headline = selectedRepo
     ? `No RFCs in ${selectedRepo.owner}/${selectedRepo.name} yet`
     : "No RFCs across your RFC repos yet";
@@ -572,7 +503,7 @@ function EmptyRFCsState({ selectedRepo }: { selectedRepo: RepoOption | null }) {
       <p className="mx-auto mt-2 max-w-md text-sm text-gray-70">{subtext}</p>
       <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
         <Link
-          href={newRfcHref}
+          href={newRfcHref(selectedRepo)}
           className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-surface transition-all hover:opacity-80 cursor-pointer"
         >
           Start an RFC
@@ -582,11 +513,48 @@ function EmptyRFCsState({ selectedRepo }: { selectedRepo: RepoOption | null }) {
   );
 }
 
-function FilteredEmpty({ onClearFilters }: { onClearFilters: () => void }) {
+function MyProposalsEmpty({
+  selectedRepo,
+  hiddenByFilters,
+  onClearFilters,
+}: {
+  selectedRepo: RepoOption | null;
+  hiddenByFilters: number;
+  onClearFilters: () => void;
+}) {
+  const headline =
+    hiddenByFilters > 0
+      ? "Nothing matches the current filters."
+      : "You haven't started an RFC yet.";
   return (
-    <div className="mt-2 rounded-md border border-dashed border-gray-20 bg-surface px-6 py-8 text-center">
+    <div className="rounded-md border border-dashed border-gray-20 bg-surface px-6 pb-6 pt-8 text-center">
+      <p className="text-sm text-gray-70">{headline}</p>
+      <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+        <Link
+          href={newRfcHref(selectedRepo)}
+          className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-surface transition-all hover:opacity-80 cursor-pointer"
+        >
+          Start an RFC
+        </Link>
+        {hiddenByFilters > 0 && (
+          <button
+            type="button"
+            onClick={onClearFilters}
+            className="text-sm text-gray-70 underline decoration-cyan underline-offset-2 hover:text-foreground transition-colors cursor-pointer"
+          >
+            Show {hiddenByFilters} hidden by filters
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function HiddenByFilters({ onClearFilters }: { onClearFilters: () => void }) {
+  return (
+    <div className="rounded-md border border-dashed border-gray-20 bg-surface px-6 py-6 text-center">
       <p className="text-sm text-gray-70">
-        Nothing matches the current filters.{" "}
+        Hidden by the current filters.{" "}
         <button
           type="button"
           onClick={onClearFilters}
@@ -598,4 +566,169 @@ function FilteredEmpty({ onClearFilters }: { onClearFilters: () => void }) {
       </p>
     </div>
   );
+}
+
+function RFCSection({
+  title,
+  rfcs,
+  variant,
+  emptyState,
+}: {
+  title: string;
+  rfcs: RFC[];
+  variant: "mine" | "others";
+  emptyState?: React.ReactNode;
+}) {
+  return (
+    <section>
+      <div className="mb-4 flex items-baseline gap-3">
+        <h2 className="text-2xl sm:text-3xl font-serif font-normal tracking-tight text-foreground">
+          {title}
+        </h2>
+        {rfcs.length > 0 && (
+          <span className="text-xs text-gray-50 tabular-nums">
+            {rfcs.length}
+          </span>
+        )}
+      </div>
+      {rfcs.length === 0 ? (
+        emptyState
+      ) : (
+        <motion.div
+          className="space-y-0"
+          initial="hidden"
+          animate="visible"
+          variants={{
+            visible: { transition: { staggerChildren: 0.04 } },
+            hidden: {},
+          }}
+        >
+          {rfcs.map((rfc, index) => (
+            <RFCRow
+              key={`${rfc.owner}/${rfc.repo}/${rfc.number}`}
+              rfc={rfc}
+              isFirst={index === 0}
+              variant={variant}
+            />
+          ))}
+        </motion.div>
+      )}
+    </section>
+  );
+}
+
+function RFCRow({
+  rfc,
+  isFirst,
+  variant,
+}: {
+  rfc: RFC;
+  isFirst: boolean;
+  variant: "mine" | "others";
+}) {
+  const myState = variant === "mine" ? myProposalState(rfc) : null;
+  return (
+    <motion.div
+      variants={{
+        visible: { opacity: 1, y: 0 },
+        hidden: { opacity: 0, y: 8 },
+      }}
+      transition={{ type: "spring", stiffness: 400, damping: 35 }}
+      whileHover={{ scale: 1.002 }}
+    >
+      <Link
+        href={`/rfcs/${rfc.owner}/${rfc.repo}/${rfc.number}/${slugify(rfc.title)}`}
+        className={`group block border-b border-gray-20 px-4 sm:px-6 py-4 sm:py-5 transition-all hover:bg-gray-5 ${
+          isFirst ? "border-t border-gray-20" : ""
+        } ${rfc.reviewRequested ? "bg-yellow-light" : ""}`}
+      >
+        <div className="flex items-start justify-between gap-4 sm:gap-6">
+          <div className="flex-1 min-w-0">
+            <div className="mb-2 flex flex-wrap items-center gap-2 sm:gap-3">
+              <h2 className="text-3xl font-medium text-foreground break-words font-serif">
+                {rfc.title}
+              </h2>
+              {rfc.reviewRequested && (
+                <span className="border border-magenta bg-magenta-light text-foreground rounded-sm px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium uppercase tracking-wider flex-shrink-0">
+                  Review Requested
+                </span>
+              )}
+              <span
+                className={`border rounded-sm px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium uppercase tracking-wider flex-shrink-0 text-foreground ${
+                  myState?.classes ?? STATUS_PILL_CLASSES[rfc.status]
+                }`}
+              >
+                {myState?.label ?? rfc.status}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-[10px] sm:text-xs text-gray-50">
+              <span className="font-medium">
+                {rfc.owner}/{rfc.repo}
+              </span>
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <div className="h-4 w-4 sm:h-5 sm:w-5 rounded-full overflow-hidden border border-gray-20">
+                  <img
+                    src={rfc.authorAvatar}
+                    alt={rfc.author}
+                    className="h-full w-full"
+                  />
+                </div>
+                <span className="truncate max-w-24 sm:max-w-none">
+                  {rfc.author}
+                </span>
+              </div>
+              <span>#{rfc.number}</span>
+              <span className="hidden sm:inline">
+                <RelativeTime date={rfc.createdAt} />
+              </span>
+              {rfc.inlineCommentCount === null ? (
+                <span className="border-l border-gray-30 pl-2 sm:pl-4">
+                  <span className="inline-block h-3 w-16 animate-pulse rounded bg-gray-20" />
+                </span>
+              ) : rfc.inlineCommentCount > 0 ? (
+                <span className="border-l border-gray-30 pl-2 sm:pl-4">
+                  {rfc.inlineCommentCount} inline
+                </span>
+              ) : null}
+              {rfc.regularCommentCount > 0 && (
+                <span className="border-l border-gray-30 pl-2 sm:pl-4">
+                  {rfc.regularCommentCount} general
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </Link>
+    </motion.div>
+  );
+}
+
+/** Sort tier for "My proposals": lower number = higher in the list. Active
+ *  RFCs first, then drafts the author still owns, then terminal states. */
+function myProposalRank(rfc: RFC): number {
+  if (rfc.status === "open" && !rfc.isDraft) return 0;
+  if (rfc.status === "open" && rfc.isDraft) return 1;
+  if (rfc.status === "merged") return 2;
+  return 3; // closed (unmerged)
+}
+
+/** Author-meaningful state for the viewer's own open RFCs. Merged/closed
+ *  fall through to the standard status pill. */
+function myProposalState(rfc: RFC): { label: string; classes: string } | null {
+  if (rfc.status !== "open") return null;
+  if (rfc.isDraft) {
+    return {
+      label: "Draft",
+      classes: "border-yellow bg-yellow-light",
+    };
+  }
+  const hasComments =
+    (rfc.inlineCommentCount ?? 0) + rfc.regularCommentCount > 0;
+  if (hasComments) {
+    return {
+      label: "Has feedback",
+      classes: "border-magenta bg-magenta-light",
+    };
+  }
+  return { label: "Ready for review", classes: "border-cyan bg-cyan-light" };
 }

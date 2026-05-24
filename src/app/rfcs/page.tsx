@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { auth, getAccessToken } from "@/auth";
-import { listReposWithRFCs, type RepoOption } from "@/lib/github";
+import {
+  getCurrentUserLogin,
+  listReposWithRFCs,
+  type RepoOption,
+} from "@/lib/github";
 import RFCsPageClient from "./RFCsPageClient";
 
 export const metadata: Metadata = {
@@ -19,14 +23,18 @@ export default async function RFCsPage() {
   // outage shouldn't block the page, but `redirect()` works by throwing and
   // must propagate.
   let rfcRepos: RepoOption[] | null = null;
+  let viewerLogin: string | null = null;
   if (accessToken) {
     try {
-      rfcRepos = await listReposWithRFCs(accessToken);
+      [rfcRepos, viewerLogin] = await Promise.all([
+        listReposWithRFCs(accessToken),
+        getCurrentUserLogin(accessToken),
+      ]);
     } catch {
       // Transient GH error – fall through to the client render.
     }
   }
   if (rfcRepos && rfcRepos.length === 0) redirect("/onboarding");
 
-  return <RFCsPageClient session={session} />;
+  return <RFCsPageClient session={session} viewerLogin={viewerLogin} />;
 }

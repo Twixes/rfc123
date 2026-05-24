@@ -2,9 +2,13 @@
 
 import { motion } from "motion/react";
 import RFCsTopBar from "@/components/RFCsTopBar";
+import RFCsTopBarActions from "@/components/RFCsTopBarActions";
 
 interface RFCDetailLoadingSkeletonProps {
   user?: { name?: string | null; image?: string | null } | null;
+  /** Optional; route-level loading.tsx doesn't have params, in-flight loads
+   *  from RFCDetailClient do. Used to prefill the "New RFC" link. */
+  repo?: { owner: string; name: string } | null;
 }
 
 const FADE_UP = {
@@ -14,6 +18,7 @@ const FADE_UP = {
 
 export default function RFCDetailLoadingSkeleton({
   user,
+  repo,
 }: RFCDetailLoadingSkeletonProps = {}) {
   return (
     <motion.div
@@ -26,7 +31,10 @@ export default function RFCDetailLoadingSkeleton({
       }}
     >
       <motion.div variants={FADE_UP} transition={{ duration: 0.35 }}>
-        <RFCsTopBar user={user ?? null} />
+        <RFCsTopBar
+          user={user ?? null}
+          actions={<RFCsTopBarActions repo={repo} />}
+        />
       </motion.div>
 
       {/* Masthead skeleton – eyebrow + title + byline */}

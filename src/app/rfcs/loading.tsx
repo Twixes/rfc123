@@ -1,9 +1,8 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import ConnectAgentButton from "@/components/ConnectAgentButton";
 import RFCListSkeleton from "@/components/RFCListSkeleton";
 import RFCsTopBar from "@/components/RFCsTopBar";
+import RFCsTopBarActions from "@/components/RFCsTopBarActions";
 
 export default async function Loading() {
   const session = await auth();
@@ -17,32 +16,7 @@ export default async function Loading() {
       <RFCsTopBar
         user={session?.user ?? null}
         homeHref="/"
-        actions={
-          <>
-            <ConnectAgentButton variant="secondary" label="Connect agent" />
-            <Link
-              href="/rfcs/new"
-              className="rounded-md bg-foreground px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium text-surface transition-all hover:opacity-80 cursor-pointer flex items-center gap-1.5"
-            >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                aria-hidden
-              >
-                <title>New</title>
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 4v16m8-8H4"
-                />
-              </svg>
-              New RFC
-            </Link>
-          </>
-        }
+        actions={<RFCsTopBarActions />}
       />
 
       <RFCListSkeleton />

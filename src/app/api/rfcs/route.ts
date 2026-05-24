@@ -7,6 +7,7 @@ import {
   getGrantedScopes,
   listAllRFCs,
   listRFCs,
+  loadRfcConfig,
 } from "@/lib/github";
 import { slugify } from "@/lib/slugify";
 
@@ -63,7 +64,7 @@ interface CreateRFCBody {
   prBody?: string;
   reviewers?: string[];
   draft?: boolean;
-  /** For `layout: by-team` repos, the team subdirectory to commit into. */
+  /** For `layout: multi-directory` repos, the team subdirectory to commit into. */
   team?: string;
 }
 
@@ -101,9 +102,22 @@ export async function POST(request: Request) {
     );
   }
 
+  const teamTrimmed =
+    typeof team === "string" && team.trim() ? team.trim() : undefined;
+
   try {
     const accessToken = (session as unknown as { accessToken: string })
       .accessToken;
+    // Multi-directory repos require a team; otherwise rfcFilePath silently
+    // omits the segment and the RFC lands at the directory root.
+    const config = await loadRfcConfig(accessToken, owner, repo);
+    if (config.layout === "multi-directory" && !teamTrimmed) {
+      return NextResponse.json(
+        { error: "This repo uses a per-team layout; `team` is required." },
+        { status: 400 },
+      );
+    }
+
     const user = await getCurrentUser(accessToken);
 
     const result = await createRFC({
@@ -117,7 +131,7 @@ export async function POST(request: Request) {
       username: user.login,
       reviewers: reviewers.filter((r): r is string => typeof r === "string"),
       draft,
-      team: typeof team === "string" && team.trim() ? team.trim() : undefined,
+      team: teamTrimmed,
     });
 
     return NextResponse.json({ ...result, slug });

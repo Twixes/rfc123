@@ -107,7 +107,7 @@ export function DiscussWithAgentButton(props: DiscussWithAgentButtonProps) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1.5 rounded-md border border-gray-20 bg-surface px-3 py-2 text-[11px] font-medium uppercase tracking-[0.1em] text-foreground transition-colors hover:bg-gray-5 cursor-pointer"
+        className="inline-flex items-center gap-1.5 rounded-md border border-gray-30 bg-surface px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-gray-5 cursor-pointer"
       >
         <MessageIcon />
         Discuss with agent
@@ -193,14 +193,26 @@ export function DiscussWithAgentButton(props: DiscussWithAgentButtonProps) {
               </section>
 
               <section>
-                <div className="mb-1 flex items-center justify-between">
-                  <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-50">
-                    Step 2 · Run this prompt
-                  </p>
+                <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-50 mb-1">
+                  Step 2 · Run this prompt
+                </p>
+                <p className="text-[11px] mb-3">
+                  Paste this into your agent. It will pull this RFC, compare it
+                  against the codebase, and surface gaps, nuances, potential
+                  improvements. The MCP server doesn't allow <em>posting</em> in
+                  your name.
+                </p>
+                <div className="relative">
+                  <textarea
+                    readOnly
+                    value={prompt}
+                    onFocus={(e) => e.currentTarget.select()}
+                    className="w-full h-72 resize-y rounded-md border border-gray-20 bg-gray-5 p-3 pr-28 font-mono text-[12px] leading-relaxed text-foreground focus:outline-none focus:ring-2 focus:ring-cyan/20 focus:border-cyan"
+                  />
                   <button
                     type="button"
                     onClick={handleCopy}
-                    className="inline-flex items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-surface transition-all hover:opacity-85 cursor-pointer"
+                    className="absolute top-2 right-5 inline-flex items-center gap-1.5 rounded-md bg-foreground px-2.5 py-1 text-xs font-medium text-surface shadow-sm transition-all hover:opacity-85 cursor-pointer"
                   >
                     {copied ? (
                       <>
@@ -243,19 +255,6 @@ export function DiscussWithAgentButton(props: DiscussWithAgentButtonProps) {
                     )}
                   </button>
                 </div>
-                <p className="text-[11px] mb-3">
-                  Paste this into your agent.
-                  <br />
-                  It will pull this RFC, compare it against the codebase, and
-                  surface gaps for you. Nothing gets posted back – the MCP
-                  server can't.
-                </p>
-                <textarea
-                  readOnly
-                  value={prompt}
-                  onFocus={(e) => e.currentTarget.select()}
-                  className="w-full h-72 resize-y rounded-md border border-gray-20 bg-gray-5 p-3 font-mono text-[12px] leading-relaxed text-foreground focus:outline-none focus:ring-2 focus:ring-cyan/20 focus:border-cyan"
-                />
               </section>
             </div>
           </DialogPanel>

@@ -1,7 +1,7 @@
 "use client";
 
-import { memo } from "react";
 import { motion } from "motion/react";
+import { memo } from "react";
 import { CommentMarkdown } from "@/components/CommentMarkdown";
 import { CommentPermalink } from "@/components/CommentPermalink";
 import { RelativeTime } from "@/components/RelativeTime";
@@ -183,7 +183,7 @@ export const ExistingLineComments = memo(function ExistingLineComments({
                       highlightedCommentId === comment.id
                         ? "bg-cyan/10 -mx-1.5 px-1.5 py-1"
                         : ""
-                    }`}
+                    } ${comment.outdated ? "opacity-60" : ""}`}
                   >
                     {commentIndex > 0 && (
                       <span
@@ -206,6 +206,14 @@ export const ExistingLineComments = memo(function ExistingLineComments({
                         className="text-[11px] text-gray-50"
                       />
                       <CommentPermalink commentId={comment.id} />
+                      {comment.outdated && (
+                        <span
+                          title="The line this comment was anchored to no longer exists in the diff."
+                          className="ml-auto rounded-sm bg-gray-10 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-70"
+                        >
+                          Outdated
+                        </span>
+                      )}
                     </div>
                     <CommentMarkdown content={comment.body} />
                   </div>

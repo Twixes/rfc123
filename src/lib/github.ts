@@ -1129,6 +1129,264 @@ export async function postComment(
   }
 }
 
+/**
+ * Drop every cached entry whose value depends on the PR's current state
+ * (open/closed/draft + reviewers). Call after any mutation – the detail
+ * cache otherwise sticks because `getRFCDetail` only revalidates the
+ * markdown file's ETag, not the PR meta itself.
+ */
+async function invalidateRfcCaches(
+  owner: string,
+  repo: string,
+  prNumber: number,
+): Promise<void> {
+  await Promise.all([
+    deleteCachedData(`rfc:${owner}:${repo}:${prNumber}:content:v2`),
+    deleteCachedData(`rfcs:${owner}:${repo}:graphql:with-teams:v2`),
+    deleteCachedData(`rfcs:${owner}:${repo}:graphql:no-teams:v2`),
+  ]);
+}
+
+export const RFC_STATE_ACTIONS = [
+  "convertToDraft",
+  "markReady",
+  "close",
+  "reopen",
+] as const;
+export type RfcStateAction = (typeof RFC_STATE_ACTIONS)[number];
+
+/**
+ * Thrown by author-only mutations when the caller isn't the PR's author.
+ * Routes turn this into a 403 without leaking PR data.
+ */
+export class ForbiddenError extends Error {
+  constructor() {
+    super("forbidden");
+    this.name = "ForbiddenError";
+  }
+}
+
+/**
+ * Fetches the PR and asserts the caller is its author. Returns the PR so
+ * callers can use its `node_id` for follow-up GraphQL mutations.
+ */
+async function assertAuthor(
+  accessToken: string,
+  owner: string,
+  repo: string,
+  prNumber: number,
+) {
+  const octokit = await getOctokit(accessToken);
+  const [{ data: pr }, viewerLogin] = await Promise.all([
+    octokit.rest.pulls.get({ owner, repo, pull_number: prNumber }),
+    getCurrentUserLogin(accessToken),
+  ]);
+  if (pr.user?.login !== viewerLogin) throw new ForbiddenError();
+  return { octokit, pr };
+}
+
+/**
+ * Author-only state transition. Returns the new state (draft + open/closed)
+ * so the client can reconcile its local copy without a follow-up GET.
+ */
+export async function setRfcState(
+  accessToken: string,
+  owner: string,
+  repo: string,
+  prNumber: number,
+  action: RfcStateAction,
+): Promise<{ isDraft: boolean; state: "open" | "closed" | "merged" }> {
+  const { octokit, pr } = await assertAuthor(
+    accessToken,
+    owner,
+    repo,
+    prNumber,
+  );
+
+  let updated: { draft?: boolean | null; state: string; merged?: boolean };
+  try {
+    if (action === "convertToDraft") {
+      await octokit.graphql(
+        `mutation($id: ID!) {
+          convertPullRequestToDraft(input: { pullRequestId: $id }) {
+            pullRequest { isDraft }
+          }
+        }`,
+        { id: pr.node_id },
+      );
+      // GraphQL mutations don't include `merged`; read the PR for the canonical state.
+      ({ data: updated } = await octokit.rest.pulls.get({
+        owner,
+        repo,
+        pull_number: prNumber,
+      }));
+    } else if (action === "markReady") {
+      await octokit.graphql(
+        `mutation($id: ID!) {
+          markPullRequestReadyForReview(input: { pullRequestId: $id }) {
+            pullRequest { isDraft }
+          }
+        }`,
+        { id: pr.node_id },
+      );
+      ({ data: updated } = await octokit.rest.pulls.get({
+        owner,
+        repo,
+        pull_number: prNumber,
+      }));
+    } else {
+      // `pulls.update` returns the freshly-updated PR; no follow-up GET needed.
+      ({ data: updated } = await octokit.rest.pulls.update({
+        owner,
+        repo,
+        pull_number: prNumber,
+        state: action === "close" ? "closed" : "open",
+      }));
+    }
+  } catch (error) {
+    captureServerException(error as Error, undefined, {
+      function: "setRfcState",
+      owner,
+      repo,
+      prNumber,
+      action,
+    });
+    throw error;
+  }
+
+  await invalidateRfcCaches(owner, repo, prNumber);
+
+  return {
+    isDraft: updated.draft ?? false,
+    state: updated.merged
+      ? "merged"
+      : updated.state === "closed"
+        ? "closed"
+        : "open",
+  };
+}
+
+/**
+ * Thrown by `setRfcRequestedReviewers` when one of the teams the caller is
+ * trying to add as a reviewer doesn't have access to the repo. Carries the
+ * data the UI needs to render a "grant access" deep-link.
+ */
+export class TeamNoAccessError extends Error {
+  constructor(
+    public readonly team: string,
+    public readonly org: string,
+    public readonly repo: string,
+  ) {
+    super(`team_no_access:${org}/${team}`);
+    this.name = "TeamNoAccessError";
+  }
+}
+
+/**
+ * Sync the PR's requested reviewers (users + teams) to the desired final
+ * state. Computes deltas against the current request list. Author-only:
+ * throws `Error("forbidden")` for any other caller.
+ *
+ * Pre-validates that each newly-added team has access to the repo and throws
+ * `TeamNoAccessError` if not, so the UI can deep-link the author to the team's
+ * repo-access page instead of leaving them with a generic GitHub error.
+ *
+ * `teams` items are bare team slugs (no `org/` prefix). Returns the final
+ * requested users + teams so the client can reconcile.
+ */
+export async function setRfcRequestedReviewers(
+  accessToken: string,
+  owner: string,
+  repo: string,
+  prNumber: number,
+  users: string[],
+  teams: string[],
+): Promise<{ users: string[]; teams: string[] }> {
+  const { octokit } = await assertAuthor(accessToken, owner, repo, prNumber);
+
+  try {
+    const { data: current } = await octokit.rest.pulls.listRequestedReviewers({
+      owner,
+      repo,
+      pull_number: prNumber,
+    });
+    const currentUsers = new Set(current.users.map((u) => u.login));
+    const currentTeams = new Set(current.teams.map((t) => t.slug));
+    const wantUsers = new Set(users);
+    const wantTeams = new Set(teams);
+
+    const removeUsers = [...currentUsers].filter((u) => !wantUsers.has(u));
+    const removeTeams = [...currentTeams].filter((t) => !wantTeams.has(t));
+    const addUsers = [...wantUsers].filter((u) => !currentUsers.has(u));
+    const addTeams = [...wantTeams].filter((t) => !currentTeams.has(t));
+
+    // Pre-check each newly-added team's repo access in parallel. Cheaper than
+    // letting GitHub reject the bulk request and parsing the resulting 422,
+    // and it tells us *which* team is missing so we can deep-link the fix.
+    await Promise.all(
+      addTeams.map(async (teamSlug) => {
+        try {
+          await octokit.rest.teams.checkPermissionsForRepoInOrg({
+            org: owner,
+            team_slug: teamSlug,
+            owner,
+            repo,
+          });
+        } catch (err) {
+          if ((err as { status?: number }).status === 404) {
+            throw new TeamNoAccessError(teamSlug, owner, repo);
+          }
+          throw err;
+        }
+      }),
+    );
+
+    // Remove + request are independent (disjoint sets) – run them in parallel.
+    await Promise.all([
+      removeUsers.length || removeTeams.length
+        ? octokit.rest.pulls.removeRequestedReviewers({
+            owner,
+            repo,
+            pull_number: prNumber,
+            reviewers: removeUsers,
+            team_reviewers: removeTeams,
+          })
+        : null,
+      addUsers.length || addTeams.length
+        ? octokit.rest.pulls.requestReviewers({
+            owner,
+            repo,
+            pull_number: prNumber,
+            reviewers: addUsers.length ? addUsers : undefined,
+            team_reviewers: addTeams.length ? addTeams : undefined,
+          })
+        : null,
+    ]);
+
+    await invalidateRfcCaches(owner, repo, prNumber);
+
+    const { data: after } = await octokit.rest.pulls.listRequestedReviewers({
+      owner,
+      repo,
+      pull_number: prNumber,
+    });
+    return {
+      users: after.users.map((u) => u.login),
+      teams: after.teams.map((t) => t.slug),
+    };
+  } catch (error) {
+    if (!(error instanceof TeamNoAccessError)) {
+      captureServerException(error as Error, undefined, {
+        function: "setRfcRequestedReviewers",
+        owner,
+        repo,
+        prNumber,
+      });
+    }
+    throw error;
+  }
+}
+
 interface CurrentUser {
   id: number;
   login: string;

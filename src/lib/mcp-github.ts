@@ -540,6 +540,11 @@ export async function searchReviewers(input: {
   accessToken: string;
   query: string;
   limit?: number;
+  /** Restrict the search to a single org. Used by the per-RFC reviewer picker
+   *  on the web app, where only the RFC's owning org matters. When omitted,
+   *  searches across every org that hosts an RFC repo visible to the user
+   *  (the default MCP behavior). */
+  org?: string;
 }): Promise<ReviewerSearchResult[]> {
   const { accessToken, query } = input;
   const trimmed = query.trim();
@@ -547,10 +552,15 @@ export async function searchReviewers(input: {
   const limit = Math.min(input.limit ?? 20, 50);
   const octokit = new Octokit({ auth: accessToken });
 
-  const repos = await listReposWithRFCs(accessToken);
-  // Unique orgs from RFC repos. Personal-account owners are also acceptable
-  // (their "org" search just returns themselves) but rarely useful.
-  const orgs = Array.from(new Set(repos.map((r) => r.owner)));
+  let orgs: string[];
+  if (input.org) {
+    orgs = [input.org];
+  } else {
+    const repos = await listReposWithRFCs(accessToken);
+    // Unique orgs from RFC repos. Personal-account owners are also acceptable
+    // (their "org" search just returns themselves) but rarely useful.
+    orgs = Array.from(new Set(repos.map((r) => r.owner)));
+  }
   if (orgs.length === 0) return [];
 
   const queryLower = trimmed.toLowerCase();
@@ -558,30 +568,34 @@ export async function searchReviewers(input: {
 
   await Promise.all(
     orgs.map(async (org) => {
-      // Users via org-scoped search.
+      // Users via org-scoped search. Profile lookups run in parallel so the
+      // per-keystroke latency stays bounded (~1 round-trip instead of ~N).
       try {
         const { data } = await octokit.rest.search.users({
           q: `${trimmed} org:${org}`,
           per_page: 10,
         });
-        for (const u of data.items) {
-          let name: string | null = null;
-          try {
-            const { data: profile } = await octokit.rest.users.getByUsername({
-              username: u.login,
-            });
-            name = profile.name ?? null;
-          } catch {
-            // Profile fetch is best-effort.
-          }
-          results.push({
-            kind: "user",
-            handle: u.login,
-            name,
-            avatarUrl: u.avatar_url,
-            org,
-          });
-        }
+        const userHits = await Promise.all(
+          data.items.map(async (u) => {
+            let name: string | null = null;
+            try {
+              const { data: profile } = await octokit.rest.users.getByUsername({
+                username: u.login,
+              });
+              name = profile.name ?? null;
+            } catch {
+              // Profile fetch is best-effort.
+            }
+            return {
+              kind: "user" as const,
+              handle: u.login,
+              name,
+              avatarUrl: u.avatar_url,
+              org,
+            };
+          }),
+        );
+        results.push(...userHits);
       } catch (error) {
         captureServerException(error as Error, undefined, {
           function: "searchReviewers",

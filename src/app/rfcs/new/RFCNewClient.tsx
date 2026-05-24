@@ -11,9 +11,10 @@ import { motion } from "motion/react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import type { ReviewerItem } from "@/components/EditableReviewers";
 import { RelativeTime } from "@/components/RelativeTime";
 import RepoSelector from "@/components/RepoSelector";
-import ReviewerPicker, { type Reviewer } from "@/components/ReviewerPicker";
+import ReviewerPicker from "@/components/ReviewerPicker";
 import { RFCBodyEditor } from "@/components/RFCBodyEditor";
 import RFCsTopBar from "@/components/RFCsTopBar";
 import Tooltip from "@/components/Tooltip";
@@ -48,7 +49,7 @@ const DRAFT_STORAGE_KEY = "rfc123:draft";
 interface PersistedDraft {
   title: string;
   body: string;
-  reviewers: Reviewer[];
+  reviewers: ReviewerItem[];
   /** owner/name of the repo the author picked. */
   selectedRepoFullName?: string;
   /** Per-repo team selection for `layout: multi-directory` repos. */
@@ -76,7 +77,7 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
   const [selectedRepo, setSelectedRepo] = useState<RepoOption | null>(null);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState(DEFAULT_RFC_TEMPLATE);
-  const [reviewers, setReviewers] = useState<Reviewer[]>([]);
+  const [reviewers, setReviewers] = useState<ReviewerItem[]>([]);
   const [submittingMode, setSubmittingMode] = useState<
     "review" | "draft" | null
   >(null);
@@ -252,7 +253,12 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
           title: title.trim(),
           rfcBody: body,
           prBody,
-          reviewers: reviewers.map((r) => r.login),
+          users: reviewers
+            .filter((r) => r.kind === "user")
+            .map((r) => r.handle),
+          teams: reviewers
+            .filter((r) => r.kind === "team")
+            .map((r) => r.handle),
           draft,
           team:
             repoConfig?.layout === "multi-directory" ? trimmedTeam : undefined,
@@ -423,21 +429,25 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
             )}
           </div>
 
-          {/* Reviewers */}
-          <div>
-            <span className="block text-sm font-medium text-foreground mb-1.5">
-              Reviewers
-            </span>
-            <ReviewerPicker
-              reviewers={reviewers}
-              onChange={setReviewers}
-              authorLogin={userLogin}
-            />
-            <p className="mt-1.5 text-xs text-gray-50">
-              These folks will see this RFC in their inbox when you mark it
-              ready for review.
-            </p>
-          </div>
+          {/* Reviewers – needs a repo so the picker can scope its search to
+              the right org. */}
+          {selectedRepo && (
+            <div>
+              <span className="block text-sm font-medium text-foreground mb-1.5">
+                Reviewers
+              </span>
+              <ReviewerPicker
+                reviewers={reviewers}
+                onChange={setReviewers}
+                org={selectedRepo.owner}
+                authorLogin={userLogin}
+              />
+              <p className="mt-1.5 text-xs text-gray-50">
+                These folks will see this RFC in their inbox when you mark it
+                ready for review.
+              </p>
+            </div>
+          )}
 
           {error && (
             <div className="border border-magenta bg-magenta-light text-foreground rounded-sm px-3 py-2 text-sm">

@@ -2,31 +2,45 @@
 
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
+import type { ReviewerItem } from "@/components/EditableReviewers";
 
-export interface Reviewer {
-  login: string;
-  avatarUrl: string;
+/** Shape returned by /api/reviewer-search. Teams come in as `org/slug`; we
+ *  strip to the bare slug when storing so the GitHub request_reviewers call
+ *  can pass `team_reviewers` as-is. */
+interface SearchHit {
+  kind: "user" | "team";
+  handle: string;
+  name: string | null;
+  avatarUrl: string | null;
+  org: string;
+}
+
+function bareTeamSlug(handle: string): string {
+  return handle.includes("/") ? handle.split("/")[1] : handle;
 }
 
 interface ReviewerPickerProps {
-  reviewers: Reviewer[];
-  onChange: (next: Reviewer[]) => void;
+  reviewers: ReviewerItem[];
+  onChange: (next: ReviewerItem[]) => void;
+  /** GitHub org to scope search to; required by /api/reviewer-search. */
+  org: string;
   /** Excludes the author from suggestions; you can't request review from yourself. */
   authorLogin?: string;
 }
 
 /**
- * Multi-select picker that searches GitHub users on every keystroke (debounced)
- * and adds them as avatar chips. Backspace on an empty input removes the last
- * chip – same affordance as GitHub's own reviewer picker.
+ * Multi-select picker for the create-RFC flow that searches GitHub users and
+ * teams within `org` on every keystroke (debounced). Backspace on an empty
+ * input removes the last chip – same affordance as GitHub's own picker.
  */
 export default function ReviewerPicker({
   reviewers,
   onChange,
+  org,
   authorLogin,
 }: ReviewerPickerProps) {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<Reviewer[]>([]);
+  const [results, setResults] = useState<SearchHit[]>([]);
   const [open, setOpen] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -48,7 +62,7 @@ export default function ReviewerPicker({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [open]);
 
-  // Debounced GitHub user search.
+  // Debounced unified people+teams search.
   useEffect(() => {
     if (query.trim().length < 2) {
       setResults([]);
@@ -60,12 +74,12 @@ export default function ReviewerPicker({
       abortRef.current = controller;
       setIsSearching(true);
       try {
-        const res = await fetch(
-          `/api/user-search?q=${encodeURIComponent(query.trim())}`,
-          { signal: controller.signal },
-        );
+        const params = new URLSearchParams({ q: query.trim(), org });
+        const res = await fetch(`/api/reviewer-search?${params}`, {
+          signal: controller.signal,
+        });
         if (!res.ok) return;
-        const data: Reviewer[] = await res.json();
+        const data = (await res.json()) as SearchHit[];
         if (controller.signal.aborted) return;
         setResults(data);
       } catch (e) {
@@ -77,18 +91,32 @@ export default function ReviewerPicker({
       }
     }, 250);
     return () => clearTimeout(handle);
-  }, [query]);
+  }, [query, org]);
 
-  function addReviewer(r: Reviewer) {
-    if (reviewers.some((existing) => existing.login === r.login)) return;
-    onChange([...reviewers, r]);
+  function addReviewer(hit: SearchHit) {
+    const handle = hit.kind === "team" ? bareTeamSlug(hit.handle) : hit.handle;
+    if (reviewers.some((r) => r.kind === hit.kind && r.handle === handle))
+      return;
+    onChange([
+      ...reviewers,
+      {
+        kind: hit.kind,
+        handle,
+        displayName: hit.name ?? handle,
+        avatarUrl: hit.avatarUrl,
+      },
+    ]);
     setQuery("");
     setResults([]);
     inputRef.current?.focus();
   }
 
-  function removeReviewer(login: string) {
-    onChange(reviewers.filter((r) => r.login !== login));
+  function removeReviewer(item: ReviewerItem) {
+    onChange(
+      reviewers.filter(
+        (r) => !(r.kind === item.kind && r.handle === item.handle),
+      ),
+    );
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -97,39 +125,39 @@ export default function ReviewerPicker({
     }
   }
 
-  const filteredResults = results.filter(
-    (r) =>
-      !reviewers.some((existing) => existing.login === r.login) &&
-      r.login !== authorLogin,
-  );
+  const filteredResults = results.filter((hit) => {
+    const handle = hit.kind === "team" ? bareTeamSlug(hit.handle) : hit.handle;
+    if (reviewers.some((r) => r.kind === hit.kind && r.handle === handle))
+      return false;
+    if (hit.kind === "user" && handle === authorLogin) return false;
+    return true;
+  });
 
   return (
     <div className="relative" ref={containerRef}>
       {/* biome-ignore lint/a11y/noLabelWithoutControl: clicking the wrapper focuses the search input */}
       <label className="flex flex-wrap gap-1.5 border border-gray-30 rounded-sm bg-surface px-2 py-1.5 focus-within:ring-2 focus-within:ring-cyan focus-within:border-transparent cursor-text">
         {reviewers.map((r) => (
-          <span
-            key={r.login}
-            className="flex items-center gap-1.5 border border-gray-20 bg-gray-5 rounded-sm pl-1 pr-1.5 py-0.5 text-xs"
-          >
-            <img
-              src={r.avatarUrl}
-              alt={r.login}
-              className="h-4 w-4 rounded-full"
+          <ChipAvatar key={`${r.kind}:${r.handle}`}>
+            <ReviewerGlyph
+              kind={r.kind}
+              avatarUrl={r.avatarUrl}
+              alt={r.displayName}
+              size="chip"
             />
-            <span className="font-medium">{r.login}</span>
+            <span className="font-medium">{r.handle}</span>
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                removeReviewer(r.login);
+                removeReviewer(r);
               }}
               className="text-gray-50 hover:text-foreground transition-colors cursor-pointer"
-              aria-label={`Remove ${r.login}`}
+              aria-label={`Remove ${r.displayName}`}
             >
               ×
             </button>
-          </span>
+          </ChipAvatar>
         ))}
         <input
           ref={inputRef}
@@ -141,7 +169,7 @@ export default function ReviewerPicker({
           }}
           onFocus={() => setOpen(true)}
           onKeyDown={handleKeyDown}
-          placeholder={reviewers.length === 0 ? "Search GitHub users…" : ""}
+          placeholder={reviewers.length === 0 ? "Search people or teams…" : ""}
           className="flex-1 min-w-32 bg-transparent text-sm text-foreground placeholder-gray-50 focus:outline-none"
         />
       </label>
@@ -164,19 +192,23 @@ export default function ReviewerPicker({
                 No matches
               </div>
             ) : (
-              filteredResults.map((r) => (
+              filteredResults.map((hit) => (
                 <button
-                  key={r.login}
+                  key={`${hit.kind}:${hit.handle}`}
                   type="button"
-                  onClick={() => addReviewer(r)}
+                  onClick={() => addReviewer(hit)}
                   className="w-full text-left px-3 py-2 text-sm border-b border-gray-20 last:border-b-0 hover:bg-yellow-light transition-colors flex items-center gap-2 cursor-pointer"
                 >
-                  <img
-                    src={r.avatarUrl}
-                    alt={r.login}
-                    className="h-5 w-5 rounded-full border border-gray-20"
+                  <ReviewerGlyph
+                    kind={hit.kind}
+                    avatarUrl={hit.avatarUrl}
+                    alt={hit.name ?? hit.handle}
+                    size="row"
                   />
-                  <span>{r.login}</span>
+                  <span>{hit.handle}</span>
+                  {hit.name && hit.name !== hit.handle && (
+                    <span className="ml-1.5 text-gray-50">{hit.name}</span>
+                  )}
                 </button>
               ))
             )}
@@ -184,5 +216,68 @@ export default function ReviewerPicker({
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+function ChipAvatar({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="flex items-center gap-1.5 border border-gray-20 bg-gray-5 rounded-sm pl-1 pr-1.5 py-0.5 text-xs">
+      {children}
+    </span>
+  );
+}
+
+/** Renders the avatar (user) or team icon (team) for both the chip and the
+ *  dropdown row. Sizing differs between the two contexts so we toggle via the
+ *  `size` prop rather than hard-coding. */
+function ReviewerGlyph({
+  kind,
+  avatarUrl,
+  alt,
+  size,
+}: {
+  kind: "user" | "team";
+  avatarUrl: string | null;
+  alt: string;
+  size: "chip" | "row";
+}) {
+  const sizeClass = size === "chip" ? "h-4 w-4" : "h-5 w-5";
+  const border = size === "row" ? "border border-gray-20" : "";
+  if (kind === "team") {
+    return (
+      <TeamIcon
+        className={`${sizeClass} rounded-full bg-gray-5 p-0.5 text-gray-70 ${border}`}
+      />
+    );
+  }
+  if (avatarUrl) {
+    return (
+      <img
+        src={avatarUrl}
+        alt={alt}
+        className={`${sizeClass} rounded-full ${border}`}
+      />
+    );
+  }
+  return <span className={`${sizeClass} rounded-full bg-gray-10 ${border}`} />;
+}
+
+function TeamIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      aria-hidden
+    >
+      <title>Team</title>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+      />
+    </svg>
   );
 }

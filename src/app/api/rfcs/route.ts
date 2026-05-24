@@ -66,7 +66,10 @@ interface CreateRFCBody {
   title?: string;
   rfcBody?: string;
   prBody?: string;
-  reviewers?: string[];
+  /** GitHub user logins to request review from. */
+  users?: string[];
+  /** Bare team slugs (no `org/` prefix) to request review from. */
+  teams?: string[];
   draft?: boolean;
   /** For `layout: multi-directory` repos, the team subdirectory to commit into. */
   team?: string;
@@ -86,7 +89,8 @@ export async function POST(request: Request) {
     title,
     rfcBody,
     prBody,
-    reviewers = [],
+    users = [],
+    teams = [],
     draft = false,
     team,
   } = body;
@@ -133,7 +137,8 @@ export async function POST(request: Request) {
       prBody: prBody ?? "",
       slug,
       username: user.login,
-      reviewers: reviewers.filter((r): r is string => typeof r === "string"),
+      reviewers: users.filter((r): r is string => typeof r === "string"),
+      teamReviewers: teams.filter((r): r is string => typeof r === "string"),
       draft,
       team: teamTrimmed,
     });

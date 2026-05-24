@@ -1861,40 +1861,6 @@ export async function searchAccessibleRepos(
   }
 }
 
-export interface UserSearchResult {
-  login: string;
-  avatarUrl: string;
-}
-
-/**
- * Search GitHub users by login or name fragment. Used by the reviewer picker
- * on the create-RFC page; returns at most 10 users to keep the dropdown small.
- */
-export async function searchUsers(
-  accessToken: string,
-  query: string,
-): Promise<UserSearchResult[]> {
-  if (!query.trim()) return [];
-  try {
-    const octokit = await getOctokit(accessToken);
-    const { data } = await octokit.rest.search.users({
-      q: `${query} in:login`,
-      per_page: 10,
-    });
-    return data.items.map((u) => ({
-      login: u.login,
-      avatarUrl: u.avatar_url,
-    }));
-  } catch (error) {
-    captureServerException(error as Error, undefined, {
-      function: "searchUsers",
-      query,
-      context: "searching_users",
-    });
-    return [];
-  }
-}
-
 export interface CreateRFCInput {
   accessToken: string;
   owner: string;
@@ -1908,8 +1874,10 @@ export interface CreateRFCInput {
   slug: string;
   /** GitHub login of the current user; used in the branch name. */
   username: string;
-  /** Optional reviewers to request on the new PR. */
+  /** Optional user logins to request review from on the new PR. */
   reviewers: string[];
+  /** Optional bare team slugs (no `org/` prefix) to request review from. */
+  teamReviewers?: string[];
   /** Open as draft PR. */
   draft: boolean;
   /** Override the RFC directory (default: load from `.rfc123.json` / heuristic). */
@@ -1986,6 +1954,7 @@ export async function createRFC(
     slug,
     username,
     reviewers,
+    teamReviewers = [],
     draft,
   } = input;
 
@@ -2092,13 +2061,14 @@ export async function createRFC(
 
     // 7. Request reviewers (best effort – don't fail the whole create if a
     //    reviewer can't be requested, e.g. they're not a repo collaborator).
-    if (reviewers.length > 0) {
+    if (reviewers.length > 0 || teamReviewers.length > 0) {
       try {
         await octokit.rest.pulls.requestReviewers({
           owner,
           repo,
           pull_number: pr.number,
-          reviewers,
+          reviewers: reviewers.length ? reviewers : undefined,
+          team_reviewers: teamReviewers.length ? teamReviewers : undefined,
         });
       } catch (error) {
         captureServerException(error as Error, undefined, {
@@ -2108,6 +2078,7 @@ export async function createRFC(
           repo,
           prNumber: pr.number,
           reviewers,
+          teamReviewers,
         });
       }
     }

@@ -90,6 +90,11 @@ export interface RFCDetail extends RFC {
   body: string;
   markdownContent: string;
   markdownFilePath: string | null;
+  /** Blob SHA of the markdown file on the PR head branch. Required by the
+   *  in-app editor to pass `baseFileSha` so concurrent edits surface as a 409
+   *  instead of silently clobbering newer commits. Null when the PR has no
+   *  markdown file. */
+  markdownFileSha: string | null;
   /** PR head branch ref; used to resolve relative image paths to repo files */
   headRef: string;
   /** Head commit SHA – agents/UI use this for line-anchored review APIs. */
@@ -178,6 +183,11 @@ export interface Comment {
   line?: number;
   diffHunk?: string;
   inReplyToId?: number;
+  /** True for inline comments whose anchor line no longer exists in the PR
+   *  diff (GitHub returns `line: null` once the file moves past them). The UI
+   *  dims these and tags them as "Outdated". General (non-inline) comments
+   *  are never outdated. */
+  outdated?: boolean;
 }
 
 export type { CommentThread } from "./comment-threads";
@@ -779,12 +789,13 @@ export async function getRFCDetail(
     // Check cache for RFC content (PR details + markdown + reviewers).
     // The `:v2` suffix invalidates pre-enrichment shapes that lacked
     // per-reviewer state + submittedAt.
-    const contentCacheKey = `rfc:${owner}:${repo}:${prNumber}:content:v2`;
+    const contentCacheKey = `rfc:${owner}:${repo}:${prNumber}:content:v3`;
     interface CachedRFCContent {
       pr: any;
       files: any[];
       markdownContent: string;
       markdownFilePath: string | null;
+      markdownFileSha: string | null;
       headRef: string;
       markdownEtag?: string;
       reviewers: RFCDetail["reviewers"];
@@ -802,6 +813,7 @@ export async function getRFCDetail(
     let files: any[] = [];
     let markdownContent = "";
     let markdownFilePath: string | null = null;
+    let markdownFileSha: string | null = null;
     let reviewers: RFCDetail["reviewers"] = [];
     let requestedReviewerLogins: string[] = [];
     let cacheValid = false;
@@ -840,6 +852,7 @@ export async function getRFCDetail(
         files = cachedContent.files;
         markdownContent = cachedContent.markdownContent;
         markdownFilePath = cachedContent.markdownFilePath;
+        markdownFileSha = cachedContent.markdownFileSha ?? null;
         reviewers = cachedContent.reviewers;
         requestedReviewerLogins = cachedContent.requestedReviewerLogins ?? [];
       }
@@ -899,7 +912,10 @@ export async function getRFCDetail(
             `[getRFCDetail] repos.getContent() for markdown took ${(performance.now() - tMd).toFixed(0)}ms`,
           );
 
-          const fileContent = fileResp.data as { content?: string };
+          const fileContent = fileResp.data as {
+            content?: string;
+            sha?: string;
+          };
           const rawEtag = fileResp.headers?.["etag"] as string | undefined;
           if (rawEtag) {
             markdownEtag = rawEtag;
@@ -910,6 +926,7 @@ export async function getRFCDetail(
               "base64",
             ).toString("utf-8");
           }
+          markdownFileSha = fileContent?.sha ?? null;
         } catch (error) {
           console.error("Error fetching markdown file:", error);
           captureServerException(error as Error, undefined, {
@@ -994,6 +1011,7 @@ export async function getRFCDetail(
           files,
           markdownContent,
           markdownFilePath,
+          markdownFileSha,
           headRef: pr.head.ref,
           reviewers,
           requestedReviewerLogins,
@@ -1033,6 +1051,7 @@ export async function getRFCDetail(
       body: pr.body || "",
       markdownContent,
       markdownFilePath,
+      markdownFileSha,
       headRef: pr.head.ref,
       headSha: pr.head.sha,
       reviewers,
@@ -1141,7 +1160,7 @@ async function invalidateRfcCaches(
   prNumber: number,
 ): Promise<void> {
   await Promise.all([
-    deleteCachedData(`rfc:${owner}:${repo}:${prNumber}:content:v2`),
+    deleteCachedData(`rfc:${owner}:${repo}:${prNumber}:content:v3`),
     deleteCachedData(`rfcs:${owner}:${repo}:graphql:with-teams:v2`),
     deleteCachedData(`rfcs:${owner}:${repo}:graphql:no-teams:v2`),
   ]);
@@ -1387,6 +1406,121 @@ export async function setRfcRequestedReviewers(
   }
 }
 
+/**
+ * Thrown when the markdown file's SHA on GitHub has moved past what the client
+ * sent. Surfaces as 409 to the route, which the UI turns into a
+ * "Reset and refresh" banner.
+ */
+export class ContentConflictError extends Error {
+  constructor() {
+    super("content_conflict");
+    this.name = "ContentConflictError";
+  }
+}
+
+/**
+ * Author-only: commit a new revision of the RFC's markdown file to the PR's
+ * head branch. `baseFileSha` is the file SHA the client was viewing when it
+ * started editing — if GitHub's current SHA differs, the write is refused with
+ * {@link ContentConflictError} instead of clobbering newer work.
+ *
+ * Returns the new file SHA + the head-branch commit SHA so the client can
+ * stamp its local draft without an immediate full refetch.
+ */
+export async function updateRFCContent(
+  accessToken: string,
+  owner: string,
+  repo: string,
+  prNumber: number,
+  input: { content: string; message: string; baseFileSha: string },
+): Promise<{ fileSha: string; commitSha: string }> {
+  const { octokit, pr } = await assertAuthor(
+    accessToken,
+    owner,
+    repo,
+    prNumber,
+  );
+
+  const filename: string | null = await (async () => {
+    const { data: files } = await octokit.rest.pulls.listFiles({
+      owner,
+      repo,
+      pull_number: prNumber,
+    });
+    return files.find((f) => f.filename.endsWith(".md"))?.filename ?? null;
+  })();
+  if (!filename) {
+    throw new Error("This RFC has no markdown file to edit.");
+  }
+
+  try {
+    const { data: result } =
+      await octokit.rest.repos.createOrUpdateFileContents({
+        owner,
+        repo,
+        path: filename,
+        message: input.message,
+        content: Buffer.from(input.content, "utf-8").toString("base64"),
+        branch: pr.head.ref,
+        sha: input.baseFileSha,
+      });
+    await invalidateRfcCaches(owner, repo, prNumber);
+    return {
+      fileSha: result.content?.sha ?? "",
+      commitSha: result.commit.sha ?? "",
+    };
+  } catch (e) {
+    const err = e as { status?: number; message?: string };
+    // GitHub returns 409 when the supplied SHA is stale. We also see 422 with
+    // a "does not match" message in the same scenario on some branches.
+    if (
+      err?.status === 409 ||
+      (err?.status === 422 && /does not match|sha/i.test(err.message ?? ""))
+    ) {
+      throw new ContentConflictError();
+    }
+    captureServerException(e as Error, undefined, {
+      function: "updateRFCContent",
+      owner,
+      repo,
+      prNumber,
+    });
+    throw e;
+  }
+}
+
+/**
+ * Author-only: update the PR's title. Returns the new title so the client can
+ * reconcile without a follow-up GET.
+ */
+export async function updateRFCTitle(
+  accessToken: string,
+  owner: string,
+  repo: string,
+  prNumber: number,
+  title: string,
+): Promise<{ title: string }> {
+  const { octokit } = await assertAuthor(accessToken, owner, repo, prNumber);
+  try {
+    const { data } = await octokit.rest.pulls.update({
+      owner,
+      repo,
+      pull_number: prNumber,
+      title,
+    });
+    await invalidateRfcCaches(owner, repo, prNumber);
+    return { title: data.title };
+  } catch (e) {
+    captureServerException(e as Error, undefined, {
+      function: "updateRFCTitle",
+      owner,
+      repo,
+      prNumber,
+    });
+    throw e;
+  }
+}
+
 interface CurrentUser {
   id: number;
   login: string;
@@ -1481,7 +1615,7 @@ export async function getRFCTitle(
   try {
     const t0 = performance.now();
     // Same key as getRFCDetail (`:v2` – older `:content` keys are obsolete).
-    const contentCacheKey = `rfc:${owner}:${repo}:${prNumber}:content:v2`;
+    const contentCacheKey = `rfc:${owner}:${repo}:${prNumber}:content:v3`;
     const cached = await getCachedJsonData<{ pr: { title: string } }>(
       contentCacheKey,
     );

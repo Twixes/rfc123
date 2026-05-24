@@ -58,6 +58,9 @@ export async function GET(
         line: c.line || c.original_line,
         diffHunk: c.diff_hunk,
         inReplyToId: c.in_reply_to_id ?? undefined,
+        // GitHub nulls `line` once the comment's anchor moves off the diff;
+        // `original_line` still positions the comment, but it's outdated.
+        outdated: c.line == null,
       })),
       ...issueComments.map((c) => ({
         id: c.id,

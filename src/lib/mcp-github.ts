@@ -260,9 +260,10 @@ export async function fetchAllRfcComments(
       body: c.body ?? "",
       createdAt: c.created_at,
       path: c.path,
-      line: c.line ?? undefined,
+      line: c.line ?? c.original_line ?? undefined,
       inReplyToId: c.in_reply_to_id,
       diffHunk: c.diff_hunk,
+      outdated: c.line == null,
     })),
   ].sort(
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),

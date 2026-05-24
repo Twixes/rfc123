@@ -1,14 +1,22 @@
 "use client";
 
+import {
+  Combobox,
+  ComboboxButton,
+  ComboboxInput,
+  ComboboxOption,
+  ComboboxOptions,
+} from "@headlessui/react";
 import { motion } from "motion/react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import Checkbox from "@/components/Checkbox";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
+import { RelativeTime } from "@/components/RelativeTime";
 import RepoSelector from "@/components/RepoSelector";
 import ReviewerPicker, { type Reviewer } from "@/components/ReviewerPicker";
 import RFCsTopBar from "@/components/RFCsTopBar";
+import Tooltip from "@/components/Tooltip";
 import type { RepoOption } from "@/lib/github";
 import {
   defaultRfcConfig,
@@ -40,11 +48,22 @@ interface PersistedDraft {
   title: string;
   body: string;
   reviewers: Reviewer[];
-  draft: boolean;
   /** owner/name of the repo the author picked. */
   selectedRepoFullName?: string;
   /** Per-repo team selection for `layout: multi-directory` repos. */
   team?: string;
+  /** ISO timestamp of the last save. Used to render the restore banner. */
+  lastEditedAt?: string;
+}
+
+/** True when the persisted draft has anything worth restoring. Skips the banner
+ *  for the no-op state (empty title, untouched template body, no reviewers). */
+function hasRestorableContent(d: PersistedDraft): boolean {
+  return (
+    d.title.trim().length > 0 ||
+    (d.body.trim().length > 0 && d.body !== DEFAULT_RFC_TEMPLATE) ||
+    d.reviewers.length > 0
+  );
 }
 
 export default function RFCNewClient({ session }: RFCNewClientProps) {
@@ -57,10 +76,14 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState(DEFAULT_RFC_TEMPLATE);
   const [reviewers, setReviewers] = useState<Reviewer[]>([]);
-  const [isDraft, setIsDraft] = useState(false);
   const [activeTab, setActiveTab] = useState<"write" | "preview">("write");
-  const [submitting, setSubmitting] = useState(false);
+  const [submittingMode, setSubmittingMode] = useState<
+    "review" | "draft" | null
+  >(null);
   const [error, setError] = useState<string | null>(null);
+  /** Snapshot of an existing localStorage draft, surfaced via the restore
+   *  banner. Non-null while the user hasn't yet picked restore or discard. */
+  const [pendingDraft, setPendingDraft] = useState<PersistedDraft | null>(null);
   const draftLoadedRef = useRef(false);
 
   // Per-repo `.rfc123.json`; null while loading. Falls back to a synthetic
@@ -71,27 +94,25 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
 
   const userLogin = session?.user?.name ?? undefined;
 
-  // Load any in-progress draft from localStorage on mount. Runs once, before
-  // repos finish loading – so even typing made before picking a repo is kept.
+  // Snapshot any in-progress draft from localStorage on mount – but do NOT
+  // populate the form. Instead we surface a restore banner so the user is
+  // never surprised by previously-typed content reappearing.
   useEffect(() => {
     try {
       const stored = localStorage.getItem(DRAFT_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored) as PersistedDraft;
-        if (parsed.title) setTitle(parsed.title);
-        if (parsed.body) setBody(parsed.body);
-        if (parsed.reviewers) setReviewers(parsed.reviewers);
-        if (typeof parsed.draft === "boolean") setIsDraft(parsed.draft);
-        if (typeof parsed.team === "string") setTeam(parsed.team);
+        if (hasRestorableContent(parsed)) {
+          setPendingDraft(parsed);
+        }
       }
     } catch {}
     draftLoadedRef.current = true;
   }, []);
 
-  // Pick the initial selected repo from URL params or the saved draft. We
-  // synthesize a `RepoOption` from those identifiers rather than waiting for
-  // a repo list to confirm – the config + create endpoints will surface any
-  // real access issue when the user submits.
+  // Pick the initial selected repo from URL params only. The saved-draft repo
+  // is restored alongside the rest of the draft from the banner — auto-picking
+  // it here would partially restore the draft before the user opted in.
   useEffect(() => {
     if (selectedRepo) return;
     if (presetOwner && presetRepo) {
@@ -101,23 +122,7 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
         fullName: `${presetOwner}/${presetRepo}`,
         canPush: true,
       });
-      return;
     }
-    try {
-      const stored = localStorage.getItem(DRAFT_STORAGE_KEY);
-      if (!stored) return;
-      const parsed = JSON.parse(stored) as PersistedDraft;
-      if (!parsed.selectedRepoFullName) return;
-      const [owner, name] = parsed.selectedRepoFullName.split("/");
-      if (owner && name) {
-        setSelectedRepo({
-          owner,
-          name,
-          fullName: parsed.selectedRepoFullName,
-          canPush: true,
-        });
-      }
-    } catch {}
   }, [presetOwner, presetRepo, selectedRepo]);
 
   // Mirror the picked repo into the URL so the page is shareable/bookmarkable.
@@ -141,22 +146,25 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
   }, [selectedRepo]);
 
   // Persist the in-progress draft on every change. No repo gating – drafting
-  // before picking a repo is the most common entry path.
+  // before picking a repo is the most common entry path. Paused while the
+  // restore banner is showing so we don't clobber the snapshot before the
+  // user decides what to do with it.
   useEffect(() => {
     if (!draftLoadedRef.current) return;
+    if (pendingDraft) return;
     const handle = setTimeout(() => {
       const draftPayload: PersistedDraft = {
         title,
         body,
         reviewers,
-        draft: isDraft,
         selectedRepoFullName: selectedRepo?.fullName,
         team,
+        lastEditedAt: new Date().toISOString(),
       };
       localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draftPayload));
     }, 200);
     return () => clearTimeout(handle);
-  }, [selectedRepo, title, body, reviewers, isDraft, team]);
+  }, [selectedRepo, title, body, reviewers, team, pendingDraft]);
 
   // Load the picked repo's `.rfc123.json` so we know layout/team list and can
   // render an accurate path preview. Falls back to the default config when the
@@ -202,7 +210,7 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
     body.trim().length > 0 &&
     slug.length > 0 &&
     teamValid &&
-    !submitting;
+    submittingMode === null;
 
   // Live preview of where this RFC will land. Mirrors server-side `rfcFilePath`.
   // Date is recomputed inside the memo so we don't carry a stale closure value
@@ -217,10 +225,34 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
     });
   }, [selectedRepo, slug, repoConfig, trimmedTeam]);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  function restoreDraft() {
+    if (!pendingDraft) return;
+    setTitle(pendingDraft.title ?? "");
+    if (pendingDraft.body) setBody(pendingDraft.body);
+    setReviewers(pendingDraft.reviewers ?? []);
+    if (typeof pendingDraft.team === "string") setTeam(pendingDraft.team);
+    if (!selectedRepo && pendingDraft.selectedRepoFullName) {
+      const [owner, name] = pendingDraft.selectedRepoFullName.split("/");
+      if (owner && name) {
+        setSelectedRepo({
+          owner,
+          name,
+          fullName: pendingDraft.selectedRepoFullName,
+          canPush: true,
+        });
+      }
+    }
+    setPendingDraft(null);
+  }
+
+  function discardDraft() {
+    localStorage.removeItem(DRAFT_STORAGE_KEY);
+    setPendingDraft(null);
+  }
+
+  async function submit(draft: boolean) {
     if (!canSubmit || !selectedRepo) return;
-    setSubmitting(true);
+    setSubmittingMode(draft ? "draft" : "review");
     setError(null);
     try {
       // Step 1: generate the PR body summary (does not need the final URL yet –
@@ -248,7 +280,7 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
           rfcBody: body,
           prBody,
           reviewers: reviewers.map((r) => r.login),
-          draft: isDraft,
+          draft,
           team:
             repoConfig?.layout === "multi-directory" ? trimmedTeam : undefined,
         }),
@@ -259,7 +291,7 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
           error?: string;
         };
         setError(errBody.error ?? "Failed to create RFC");
-        setSubmitting(false);
+        setSubmittingMode(null);
         return;
       }
 
@@ -279,7 +311,7 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
     } catch (e) {
       console.error(e);
       setError((e as Error).message || "Something went wrong");
-      setSubmitting(false);
+      setSubmittingMode(null);
     }
   }
 
@@ -300,7 +332,46 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
           write a summary for the PR description.
         </p>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {pendingDraft && (
+          <div className="mb-6 flex flex-col sm:flex-row sm:items-center gap-3 rounded-md border border-yellow bg-yellow-light px-4 py-3">
+            <div className="flex-1 text-sm text-foreground">
+              <span className="font-medium">
+                You have an unsaved draft from{" "}
+                {pendingDraft.lastEditedAt ? (
+                  <RelativeTime date={pendingDraft.lastEditedAt} />
+                ) : (
+                  "recently"
+                )}
+                .
+              </span>{" "}
+              Want to restore it?
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={restoreDraft}
+                className="rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-surface transition-all hover:opacity-80 cursor-pointer"
+              >
+                Restore
+              </button>
+              <button
+                type="button"
+                onClick={discardDraft}
+                className="rounded-md border border-gray-20 bg-surface px-3 py-1.5 text-xs font-medium text-foreground transition-all hover:bg-gray-5 cursor-pointer"
+              >
+                Discard
+              </button>
+            </div>
+          </div>
+        )}
+
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            submit(false);
+          }}
+          className="space-y-4"
+        >
           {/* Repository */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
@@ -322,32 +393,21 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
             />
           </div>
 
-          {/* Team (only for `layout: multi-directory` repos) */}
+          {/* Directory (only for `layout: multi-directory` repos) */}
           {selectedRepo && repoConfig?.layout === "multi-directory" && (
             <div>
-              <label
-                htmlFor="rfc-team"
-                className="block text-sm font-medium text-foreground mb-1.5"
-              >
-                Team
-              </label>
-              <input
-                id="rfc-team"
-                type="text"
-                list="rfc-team-options"
+              <span className="block text-sm font-medium text-foreground mb-1.5">
+                Directory
+              </span>
+              <DirectoryPicker
                 value={team}
-                onChange={(e) => setTeam(e.target.value)}
-                placeholder="e.g. engineering"
-                className="w-full border border-gray-30 rounded-sm bg-surface px-3 py-2 text-sm text-foreground hover:border-gray-40 focus:outline-none focus:ring-2 focus:ring-cyan focus:border-transparent transition-colors"
+                onChange={setTeam}
+                options={repoConfig.teams}
               />
-              <datalist id="rfc-team-options">
-                {repoConfig.teams.map((t) => (
-                  <option key={t} value={t} />
-                ))}
-              </datalist>
               <p className="mt-1.5 text-xs text-gray-50">
-                Pick an existing team or type a new one to create a new
-                directory.
+                This is a multi-directory repo per its{" "}
+                <code className="font-mono text-[11px]">.rfc123.json</code>.
+                Pick an existing directory or type a new name.
               </p>
             </div>
           )}
@@ -357,7 +417,7 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
               between the raw textarea and a rendered preview. */}
           <div>
             <div className="border border-gray-20 rounded-md bg-surface overflow-hidden focus-within:border-gray-30 transition-colors">
-              <div className="flex items-start gap-3 px-5 sm:px-6 pt-5 sm:pt-6 pb-3 border-b border-gray-20">
+              <div className="flex items-center gap-3 px-5 sm:px-6 pt-5 py-4 border-b border-gray-20">
                 <input
                   id="rfc-title"
                   type="text"
@@ -369,7 +429,7 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
                   autoFocus
                   className="flex-1 min-w-0 bg-transparent font-serif text-3xl sm:text-4xl leading-tight tracking-tight text-foreground placeholder-gray-40 focus:outline-none"
                 />
-                <div className="flex border border-gray-20 rounded-sm overflow-hidden text-xs shrink-0 mt-1">
+                <div className="flex border border-gray-20 rounded-sm overflow-hidden text-xs shrink-0">
                   <button
                     type="button"
                     onClick={() => setActiveTab("write")}
@@ -443,17 +503,10 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
               authorLogin={userLogin}
             />
             <p className="mt-1.5 text-xs text-gray-50">
-              Search GitHub usernames. Reviewers will be requested on the PR.
+              These folks will see this RFC in their inbox when you mark it
+              ready for review.
             </p>
           </div>
-
-          {/* Draft toggle */}
-          <Checkbox
-            checked={isDraft}
-            onChange={setIsDraft}
-            label="Open as draft"
-            description="Won't notify reviewers till marked ready for review."
-          />
 
           {error && (
             <div className="border border-magenta bg-magenta-light text-foreground rounded-sm px-3 py-2 text-sm">
@@ -462,23 +515,27 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
           )}
 
           <div className="flex flex-col sm:flex-row gap-3 sm:items-center pt-4 border-t border-gray-20">
-            <button
-              type="submit"
-              disabled={!canSubmit}
-              className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-surface transition-all hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-30 cursor-pointer"
-            >
-              {submitting
-                ? "Opening PR…"
-                : isDraft
-                  ? "Open RFC as draft"
+            <Tooltip content="Opens a PR as ready to review. Reviewers will be notified right away.">
+              <button
+                type="submit"
+                disabled={!canSubmit}
+                className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-surface transition-all hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-30 cursor-pointer"
+              >
+                {submittingMode === "review"
+                  ? "Opening PR…"
                   : "Open RFC for review"}
-            </button>
-            <Link
-              href="/rfcs"
-              className="rounded-md border border-gray-20 bg-surface px-3 py-1.5 text-xs font-medium text-foreground transition-all hover:bg-gray-5 self-start sm:self-auto"
-            >
-              Cancel
-            </Link>
+              </button>
+            </Tooltip>
+            <Tooltip content="Opens a draft PR. Reviewers won't be notified until you mark this ready for review.">
+              <button
+                type="button"
+                disabled={!canSubmit}
+                onClick={() => submit(true)}
+                className="rounded-md border border-gray-20 bg-surface px-4 py-2 text-sm font-medium text-foreground transition-all hover:bg-gray-5 disabled:cursor-not-allowed disabled:opacity-30 cursor-pointer"
+              >
+                {submittingMode === "draft" ? "Saving…" : "Save as draft"}
+              </button>
+            </Tooltip>
             <span className="text-xs text-gray-50 sm:ml-auto">
               Saved locally as you type.
             </span>
@@ -486,5 +543,104 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
         </form>
       </motion.div>
     </div>
+  );
+}
+
+function DirectoryPicker({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+}) {
+  const [query, setQuery] = useState("");
+
+  const trimmedQuery = query.trim();
+  const lowered = trimmedQuery.toLowerCase();
+  const filtered = trimmedQuery
+    ? options.filter((o) => o.toLowerCase().includes(lowered))
+    : options;
+  const exactMatch = options.some((o) => o.toLowerCase() === lowered);
+  const showCreateOption = trimmedQuery.length > 0 && !exactMatch;
+
+  return (
+    <Combobox
+      value={value}
+      onChange={(v: string | null) => {
+        onChange(v ?? "");
+        setQuery("");
+      }}
+      immediate
+    >
+      <div className="relative">
+        <ComboboxInput
+          aria-label="Directory"
+          displayValue={(v: string) => v}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            onChange(e.target.value);
+          }}
+          placeholder="e.g. engineering"
+          className="w-full border border-gray-30 rounded-sm bg-surface pl-3 pr-9 py-2 text-sm text-foreground hover:border-gray-40 focus:outline-none focus:ring-2 focus:ring-cyan focus:border-transparent transition-colors"
+        />
+        <ComboboxButton className="absolute inset-y-0 right-0 flex items-center px-2.5 text-gray-50 hover:text-foreground cursor-pointer">
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden
+          >
+            <title>Toggle directory list</title>
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M19 9l-7 7-7-7"
+            />
+          </svg>
+        </ComboboxButton>
+      </div>
+      <ComboboxOptions
+        anchor={{ to: "bottom start", gap: 4 }}
+        className="w-[var(--input-width)] flex flex-col border border-gray-20 rounded-md bg-surface shadow-sm z-50 focus:outline-none overflow-clip"
+      >
+        <div className="flex-1 min-h-0 overflow-auto overscroll-contain py-1">
+          {filtered.map((opt) => (
+            <ComboboxOption
+              key={opt}
+              value={opt}
+              className="px-3 py-1.5 text-sm cursor-pointer text-foreground data-[focus]:bg-yellow-light data-[selected]:font-medium"
+            >
+              {opt}
+            </ComboboxOption>
+          ))}
+          {showCreateOption && (
+            <ComboboxOption
+              value={trimmedQuery}
+              className="px-3 py-2 text-sm cursor-pointer text-foreground border-t border-gray-20 bg-gray-5 data-[focus]:bg-yellow-light flex items-center gap-1.5"
+            >
+              <span aria-hidden className="text-base leading-none text-gray-50">
+                +
+              </span>
+              <span>
+                Add new directory{" "}
+                <span className="font-mono text-xs">{trimmedQuery}</span> -
+                it'll be created when you open the RFC
+              </span>
+            </ComboboxOption>
+          )}
+        </div>
+        {!showCreateOption && (
+          <div className="px-3 py-2 text-xs text-gray-50 border-t border-gray-20 bg-gray-5">
+            {filtered.length === 0
+              ? "No directories yet. Type a name above to add one."
+              : "Type a new name above to add a directory."}
+          </div>
+        )}
+      </ComboboxOptions>
+    </Combobox>
   );
 }

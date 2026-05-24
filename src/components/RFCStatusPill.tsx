@@ -78,7 +78,7 @@ export function RFCStatusPill({
   }
 
   return (
-    <Menu as="div" className="relative">
+    <Menu as="div" className="relative flex">
       <MenuButton
         disabled={busy}
         className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.18em] text-gray-70 hover:text-foreground transition-colors cursor-pointer disabled:cursor-wait disabled:opacity-60"

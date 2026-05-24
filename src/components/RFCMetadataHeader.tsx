@@ -1,23 +1,52 @@
 import type { ReactNode } from "react";
+import {
+  EditableReviewers,
+  type ReviewerItem,
+} from "@/components/EditableReviewers";
 import { ProfilePictures } from "@/components/ProfilePictures";
 import { RelativeTime } from "@/components/RelativeTime";
+import { RFCStatusPill, type RfcStateAction } from "@/components/RFCStatusPill";
 import type { RFCDetail } from "@/lib/github";
+
+/** Author-only callbacks + transient flags. Presence implies the viewer is
+ *  the RFC's author; the header switches the status pill into a state menu
+ *  and the reviewers row into an inline editor. */
+export interface AuthorControls {
+  busyStateAction: RfcStateAction | null;
+  onStateAction: (action: RfcStateAction) => void;
+  onReviewersChange: (next: ReviewerItem[]) => void;
+  reviewersSaving: boolean;
+}
 
 interface RFCMetadataHeaderProps {
   rfc: RFCDetail;
   /** Optional inline controls rendered in the right-hand action cluster (e.g. view mode toggle). */
   actions?: ReactNode;
+  authorControls?: AuthorControls;
 }
 
-const STATUS_TONE: Record<RFCDetail["status"], { dot: string; label: string }> =
-  {
-    open: { dot: "bg-cyan", label: "Open" },
-    merged: { dot: "bg-yellow", label: "Merged" },
-    closed: { dot: "bg-gray-40", label: "Closed" },
-  };
-
-export function RFCMetadataHeader({ rfc, actions }: RFCMetadataHeaderProps) {
-  const tone = STATUS_TONE[rfc.status];
+export function RFCMetadataHeader({
+  rfc,
+  actions,
+  authorControls,
+}: RFCMetadataHeaderProps) {
+  const isAuthor = !!authorControls;
+  // Derived from `rfc.reviewers` + `rfc.requestedTeamSlugs` so the editor row
+  // stays in lockstep with the canonical state.
+  const reviewerItems: ReviewerItem[] = [
+    ...rfc.reviewers.map<ReviewerItem>((r) => ({
+      kind: "user",
+      handle: r.login,
+      displayName: r.login,
+      avatarUrl: r.avatar,
+    })),
+    ...rfc.requestedTeamSlugs.map<ReviewerItem>((slug) => ({
+      kind: "team",
+      handle: slug.includes("/") ? slug.split("/")[1] : slug,
+      displayName: slug,
+      avatarUrl: null,
+    })),
+  ];
 
   return (
     <section className="mb-6">
@@ -27,13 +56,12 @@ export function RFCMetadataHeader({ rfc, actions }: RFCMetadataHeaderProps) {
           RFC #{rfc.number}
         </span>
         <span className="h-px flex-1 bg-gray-20" />
-        <span className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.18em] text-gray-70">
-          <span
-            className={`inline-block h-1.5 w-1.5 rounded-full ${tone.dot}`}
-            aria-hidden
-          />
-          {tone.label}
-        </span>
+        <RFCStatusPill
+          rfc={rfc}
+          isAuthor={isAuthor}
+          busy={!!authorControls && authorControls.busyStateAction !== null}
+          onAction={(action) => authorControls?.onStateAction(action)}
+        />
         {rfc.reviewRequested && (
           <span className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.18em] text-magenta">
             <span
@@ -109,18 +137,27 @@ export function RFCMetadataHeader({ rfc, actions }: RFCMetadataHeaderProps) {
           </dd>
         </div>
 
-        {rfc.reviewers.length > 0 && (
+        {(isAuthor || reviewerItems.length > 0) && (
           <>
             <span className="h-3 w-px bg-gray-20" aria-hidden />
             <div className="flex items-center gap-2">
-              <dt className="text-gray-50">Reviewing</dt>
+              <dt className="text-gray-50">Reviewers</dt>
               <dd>
-                <ProfilePictures
-                  users={rfc.reviewers.map((r) => ({
-                    name: r.login,
-                    avatar: r.avatar,
-                  }))}
-                />
+                {authorControls ? (
+                  <EditableReviewers
+                    items={reviewerItems}
+                    org={rfc.owner}
+                    onChange={authorControls.onReviewersChange}
+                    saving={authorControls.reviewersSaving}
+                  />
+                ) : (
+                  <ProfilePictures
+                    users={rfc.reviewers.map((r) => ({
+                      name: r.login,
+                      avatar: r.avatar,
+                    }))}
+                  />
+                )}
               </dd>
             </div>
           </>

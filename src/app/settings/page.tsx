@@ -59,7 +59,6 @@ export default async function SettingsPage({
               ? { kind: "err", text: params.slack_error }
               : null
           }
-          isDev={process.env.NODE_ENV === "development"}
         />
       </div>
     </div>

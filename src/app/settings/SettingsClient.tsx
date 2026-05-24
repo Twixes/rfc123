@@ -30,12 +30,10 @@ export default function SettingsClient({
   initialPrefs,
   initialSlackLinks,
   slackBanner,
-  isDev,
 }: {
   initialPrefs: Prefs;
   initialSlackLinks: SlackLink[];
   slackBanner: Banner | null;
-  isDev: boolean;
 }) {
   // The "default to browser timezone" promise: detect on first render if no
   // timezone has been saved. Server-rendered HTML uses null until hydration.
@@ -48,7 +46,7 @@ export default function SettingsClient({
   const [saveStatus, setSaveStatus] = useState<
     "idle" | "saving" | "saved" | { error: string }
   >("idle");
-  const [devSendStatus, setDevSendStatus] = useState<
+  const [briefingSendStatus, setBriefingSendStatus] = useState<
     | { kind: "idle" }
     | { kind: "sending" }
     | { kind: "sent"; count: number }
@@ -154,7 +152,7 @@ export default function SettingsClient({
   }
 
   async function handleSendBriefingNow() {
-    setDevSendStatus({ kind: "sending" });
+    setBriefingSendStatus({ kind: "sending" });
     try {
       const res = await fetch("/api/internal/send-briefing-now", {
         method: "POST",
@@ -168,12 +166,12 @@ export default function SettingsClient({
         throw new Error(json.error ?? `HTTP ${res.status}`);
       }
       if (json.sent) {
-        setDevSendStatus({ kind: "sent", count: json.count ?? 0 });
+        setBriefingSendStatus({ kind: "sent", count: json.count ?? 0 });
       } else {
-        setDevSendStatus({ kind: "empty" });
+        setBriefingSendStatus({ kind: "empty" });
       }
     } catch (e) {
-      setDevSendStatus({ kind: "error", message: (e as Error).message });
+      setBriefingSendStatus({ kind: "error", message: (e as Error).message });
     }
   }
 
@@ -303,25 +301,25 @@ export default function SettingsClient({
 
           <SaveIndicator status={saveStatus} />
 
-          {isDev && (
-            <div className="mt-4 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleSendBriefingNow}
-                disabled={!hasActiveSlack || devSendStatus.kind === "sending"}
-                title="Development-only: bypasses the hour/weekday/idempotency gates and DMs the briefing to your active Slack workspace right now. This button is not shown in production."
-                className="inline-flex items-center rounded-md border border-magenta/40 bg-magenta-light px-3 py-1.5 text-sm text-magenta hover:bg-magenta/15 disabled:opacity-50 disabled:cursor-not-allowed transition"
-              >
-                {devSendStatus.kind === "sending"
-                  ? "Sending…"
-                  : "Send briefing now"}
-              </button>
-              <DevSendIndicator
-                status={devSendStatus}
-                hasActiveSlack={hasActiveSlack}
-              />
-            </div>
-          )}
+          <div className="mt-4 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleSendBriefingNow}
+              disabled={
+                !hasActiveSlack || briefingSendStatus.kind === "sending"
+              }
+              title="DM the briefing to your active Slack workspace right now, bypassing the hour/weekday/idempotency gates."
+              className="inline-flex items-center rounded-md border border-gray-30 px-3 py-1.5 text-sm text-foreground hover:bg-gray-5 disabled:opacity-50 disabled:cursor-not-allowed transition"
+            >
+              {briefingSendStatus.kind === "sending"
+                ? "Sending…"
+                : "Send briefing now"}
+            </button>
+            <BriefingSendIndicator
+              status={briefingSendStatus}
+              hasActiveSlack={hasActiveSlack}
+            />
+          </div>
         </section>
       </div>
     </div>
@@ -346,7 +344,7 @@ function SaveIndicator({
   );
 }
 
-function DevSendIndicator({
+function BriefingSendIndicator({
   status,
   hasActiveSlack,
 }: {

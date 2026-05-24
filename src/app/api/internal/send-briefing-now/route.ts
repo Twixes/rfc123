@@ -12,15 +12,11 @@ import {
 import { postMessage } from "@/lib/slack";
 
 /**
- * Dev-only: send the current user's daily briefing immediately, bypassing
- * the hour/weekday/idempotency gates the real cron applies. Useful for
- * eyeballing the Slack message without waiting for the next scheduled run.
+ * Send the current user's daily briefing immediately, bypassing the
+ * hour/weekday/idempotency gates the real cron applies. Useful for
+ * previewing the Slack message without waiting for the next scheduled run.
  */
 export async function POST() {
-  if (process.env.NODE_ENV !== "development") {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
-
   const session = await auth();
   const accessToken = (session as { accessToken?: string } | null)?.accessToken;
   if (!accessToken) {

@@ -63,6 +63,8 @@ interface CreateRFCBody {
   prBody?: string;
   reviewers?: string[];
   draft?: boolean;
+  /** For `layout: by-team` repos, the team subdirectory to commit into. */
+  team?: string;
 }
 
 export async function POST(request: Request) {
@@ -81,6 +83,7 @@ export async function POST(request: Request) {
     prBody,
     reviewers = [],
     draft = false,
+    team,
   } = body;
 
   if (!owner || !repo || !title?.trim() || !rfcBody?.trim()) {
@@ -114,6 +117,7 @@ export async function POST(request: Request) {
       username: user.login,
       reviewers: reviewers.filter((r): r is string => typeof r === "string"),
       draft,
+      team: typeof team === "string" && team.trim() ? team.trim() : undefined,
     });
 
     return NextResponse.json({ ...result, slug });

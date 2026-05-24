@@ -4,11 +4,23 @@ import { motion } from "motion/react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
+import Checkbox from "@/components/Checkbox";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import RepoPickerForCreate from "@/components/RepoPickerForCreate";
 import ReviewerPicker, { type Reviewer } from "@/components/ReviewerPicker";
 import RFCsTopBar from "@/components/RFCsTopBar";
 import type { WritableRepo } from "@/lib/github";
+import {
+  defaultRfcConfig,
+  type RfcConfig,
+  rfcFilePath,
+  todayYmd,
+} from "@/lib/rfc-config";
+
+/** Shape returned by `/api/repos/[owner]/[repo]/config` – the loaded config
+ *  plus the team-directory list, which `.rfc123.json` doesn't store. */
+type RepoConfigResponse = RfcConfig & { teams: string[] };
+
 import { DEFAULT_RFC_TEMPLATE } from "@/lib/rfc-template";
 import { slugify } from "@/lib/slugify";
 
@@ -31,6 +43,8 @@ interface PersistedDraft {
   draft: boolean;
   /** owner/name of the repo the author picked, restored once /api/writable-repos returns. */
   selectedRepoFullName?: string;
+  /** Per-repo team selection for `layout: by-team` repos. */
+  team?: string;
 }
 
 export default function RFCNewClient({ session }: RFCNewClientProps) {
@@ -50,6 +64,12 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
   const [error, setError] = useState<string | null>(null);
   const draftLoadedRef = useRef(false);
 
+  // Per-repo `.rfc123.json`; null while loading. Falls back to a synthetic
+  // single-layout config for repos without one (matches the server's
+  // loadRfcConfig fallback so the preview matches what we'll actually commit).
+  const [repoConfig, setRepoConfig] = useState<RepoConfigResponse | null>(null);
+  const [team, setTeam] = useState<string>("");
+
   const userLogin = session?.user?.name ?? undefined;
 
   // Load any in-progress draft from localStorage on mount. Runs once, before
@@ -63,6 +83,7 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
         if (parsed.body) setBody(parsed.body);
         if (parsed.reviewers) setReviewers(parsed.reviewers);
         if (typeof parsed.draft === "boolean") setIsDraft(parsed.draft);
+        if (typeof parsed.team === "string") setTeam(parsed.team);
       }
     } catch {}
     draftLoadedRef.current = true;
@@ -127,22 +148,70 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
         reviewers,
         draft: isDraft,
         selectedRepoFullName: selectedRepo?.fullName,
+        team,
       };
       localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draftPayload));
     }, 200);
     return () => clearTimeout(handle);
-  }, [selectedRepo, title, body, reviewers, isDraft]);
+  }, [selectedRepo, title, body, reviewers, isDraft, team]);
+
+  // Load the picked repo's `.rfc123.json` so we know layout/team list and can
+  // render an accurate path preview. Falls back to the default config when the
+  // endpoint errors – matches the server's legacy-repo fallback.
+  useEffect(() => {
+    if (!selectedRepo) {
+      setRepoConfig(null);
+      return;
+    }
+    const controller = new AbortController();
+    setRepoConfig(null);
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/repos/${encodeURIComponent(selectedRepo.owner)}/${encodeURIComponent(selectedRepo.name)}/config`,
+          { signal: controller.signal },
+        );
+        if (!res.ok) throw new Error("config fetch failed");
+        const data: RepoConfigResponse = await res.json();
+        setRepoConfig(data);
+        if (data.layout === "multi-directory" && data.teams.length > 0) {
+          setTeam((prev) => prev || data.teams[0]);
+        }
+      } catch (e) {
+        if ((e as Error).name === "AbortError") return;
+        setRepoConfig({ ...defaultRfcConfig(), teams: [] });
+      }
+    })();
+    return () => controller.abort();
+  }, [selectedRepo]);
 
   const slug = useMemo(() => slugify(title), [title]);
+  const trimmedTeam = team.trim();
+  const teamRequired = repoConfig?.layout === "multi-directory";
+  const teamValid = !teamRequired || trimmedTeam.length > 0;
   const canSubmit =
     !!selectedRepo &&
     selectedRepo.canPush &&
     title.trim().length > 0 &&
     body.trim().length > 0 &&
     slug.length > 0 &&
+    teamValid &&
     !submitting;
 
   const cannotPushSelected = selectedRepo && !selectedRepo.canPush;
+
+  // Live preview of where this RFC will land. Mirrors server-side `rfcFilePath`.
+  // Date is recomputed inside the memo so we don't carry a stale closure value
+  // if the wizard sits open across midnight.
+  const previewPath = useMemo(() => {
+    if (!selectedRepo || !slug) return null;
+    const cfg = repoConfig ?? defaultRfcConfig();
+    return rfcFilePath(cfg, {
+      team: cfg.layout === "multi-directory" ? trimmedTeam || null : null,
+      slug,
+      date: todayYmd(),
+    });
+  }, [selectedRepo, slug, repoConfig, trimmedTeam]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -176,6 +245,8 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
           prBody,
           reviewers: reviewers.map((r) => r.login),
           draft: isDraft,
+          team:
+            repoConfig?.layout === "multi-directory" ? trimmedTeam : undefined,
         }),
       });
 
@@ -229,21 +300,15 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
           {/* Repository */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-sm font-medium text-foreground">
+              <span className="text-sm font-medium text-foreground">
                 Repository
-              </label>
-              <a
-                href={
-                  selectedRepo?.isOrg
-                    ? `https://github.com/organizations/${selectedRepo.owner}/repositories/new`
-                    : "https://github.com/new"
-                }
-                target="_blank"
-                rel="noopener noreferrer"
+              </span>
+              <Link
+                href="/onboarding"
                 className="text-xs text-gray-50 hover:text-foreground underline decoration-cyan underline-offset-2 transition-colors"
               >
-                To create a new repository, go to GitHub →
-              </a>
+                Set up a new dedicated RFCs repo →
+              </Link>
             </div>
             <RepoPickerForCreate
               repos={repos}
@@ -258,14 +323,49 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
             )}
             {selectedRepo && selectedRepo.canPush && !selectedRepo.hasRFCs && (
               <p className="mt-2 text-xs text-gray-50">
-                This repo doesn't have RFCs yet. Your first RFC will create a{" "}
-                <code className="bg-gray-5 border border-gray-20 rounded-sm px-1 font-mono text-[11px]">
-                  requests-for-comments/
-                </code>{" "}
-                directory.
+                This repo doesn't have RFCs yet. Your first RFC will land at the
+                repo root with a date-prefixed filename. For a cleaner setup,
+                consider{" "}
+                <Link
+                  href="/onboarding"
+                  className="underline decoration-cyan underline-offset-2"
+                >
+                  creating a dedicated RFCs repo
+                </Link>
+                .
               </p>
             )}
           </div>
+
+          {/* Team (only for `layout: by-team` repos) */}
+          {selectedRepo && repoConfig?.layout === "multi-directory" && (
+            <div>
+              <label
+                htmlFor="rfc-team"
+                className="block text-sm font-medium text-foreground mb-1.5"
+              >
+                Team
+              </label>
+              <input
+                id="rfc-team"
+                type="text"
+                list="rfc-team-options"
+                value={team}
+                onChange={(e) => setTeam(e.target.value)}
+                placeholder="e.g. engineering"
+                className="w-full border border-gray-30 rounded-sm bg-surface px-3 py-2 text-sm text-foreground hover:border-gray-40 focus:outline-none focus:ring-2 focus:ring-cyan focus:border-transparent transition-colors"
+              />
+              <datalist id="rfc-team-options">
+                {repoConfig.teams.map((t) => (
+                  <option key={t} value={t} />
+                ))}
+              </datalist>
+              <p className="mt-1.5 text-xs text-gray-50">
+                Pick an existing team or type a new one to create a new
+                directory.
+              </p>
+            </div>
+          )}
 
           {/* Title + Body – one unified card. Title is a large serif heading
               input; tabs in the right of the title row swap the lower half
@@ -330,10 +430,10 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
                 </div>
               )}
             </div>
-            {slug && (
+            {previewPath && (
               <p className="mt-2 text-xs text-gray-50">
                 <code className="bg-gray-5 border border-gray-20 rounded-sm px-1 font-mono text-[11px]">
-                  requests-for-comments/{slug}.md
+                  {previewPath}
                 </code>
                 {userLogin && (
                   <>
@@ -349,9 +449,9 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
 
           {/* Reviewers */}
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">
+            <span className="block text-sm font-medium text-foreground mb-1.5">
               Reviewers
-            </label>
+            </span>
             <ReviewerPicker
               reviewers={reviewers}
               onChange={setReviewers}
@@ -363,22 +463,16 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
           </div>
 
           {/* Draft toggle */}
-          <div>
-            <label className="flex items-center gap-1.5 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={isDraft}
-                onChange={(e) => setIsDraft(e.target.checked)}
-                className="h-4 w-4 cursor-pointer accent-cyan"
-              />
-              <span className="text-sm text-foreground">
+          <Checkbox
+            checked={isDraft}
+            onChange={setIsDraft}
+            label={
+              <>
                 Open as <strong>draft</strong>
-              </span>
-              <span className="text-xs text-gray-50">
-                – won't notify reviewers
-              </span>
-            </label>
-          </div>
+              </>
+            }
+            description="Won't notify reviewers."
+          />
 
           {error && (
             <div className="border border-magenta bg-magenta-light text-foreground rounded-sm px-3 py-2 text-sm">

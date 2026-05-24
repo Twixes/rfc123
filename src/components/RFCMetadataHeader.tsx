@@ -1,4 +1,6 @@
-import type { ReactNode } from "react";
+"use client";
+
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
   EditableReviewers,
   type ReviewerItem,
@@ -16,18 +18,27 @@ export interface AuthorControls {
   onStateAction: (action: RfcStateAction) => void;
   onReviewersChange: (next: ReviewerItem[]) => void;
   reviewersSaving: boolean;
+  /** When set, the title becomes click-to-edit. The handler should resolve
+   *  on success and throw on failure (the inline editor surfaces the error
+   *  message). Omitted when title editing is disallowed (e.g. RFC is merged
+   *  or the page already has body-edit mode open). */
+  onTitleSave?: (next: string) => Promise<void>;
 }
 
 interface RFCMetadataHeaderProps {
   rfc: RFCDetail;
-  /** Optional inline controls rendered in the right-hand action cluster (e.g. view mode toggle). */
+  /** Right-aligned controls in the row next to the H1 (Edit / Discuss). */
   actions?: ReactNode;
+  /** Right-aligned controls in the byline row alongside Reviewers/Comments
+   *  (e.g. the Pretty/Raw or Write/Preview segmented toggle). */
+  bylineActions?: ReactNode;
   authorControls?: AuthorControls;
 }
 
 export function RFCMetadataHeader({
   rfc,
   actions,
+  bylineActions,
   authorControls,
 }: RFCMetadataHeaderProps) {
   const isAuthor = !!authorControls;
@@ -99,9 +110,16 @@ export function RFCMetadataHeader({
 
       {/* Title block */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <h1 className="max-w-3xl text-balance text-3xl sm:text-5xl font-serif font-normal leading-[1.05] tracking-tight text-foreground">
-          {rfc.title}
-        </h1>
+        {authorControls?.onTitleSave ? (
+          <EditableRfcTitle
+            value={rfc.title}
+            onSave={authorControls.onTitleSave}
+          />
+        ) : (
+          <h1 className="max-w-3xl text-balance text-3xl sm:text-5xl font-serif font-normal leading-[1.05] tracking-tight text-foreground">
+            {rfc.title}
+          </h1>
+        )}
         {actions && <div className="shrink-0 sm:pb-1.5">{actions}</div>}
       </div>
 
@@ -162,7 +180,125 @@ export function RFCMetadataHeader({
             </div>
           </>
         )}
+
+        {bylineActions && (
+          <div className="ml-auto flex items-center">{bylineActions}</div>
+        )}
       </dl>
     </section>
+  );
+}
+
+interface EditableRfcTitleProps {
+  value: string;
+  onSave: (next: string) => Promise<void>;
+}
+
+/** Inline click-to-edit for the RFC title. The h1 looks the same in read mode;
+ *  clicking swaps it for a same-typography text input with check / cancel
+ *  buttons and Enter/Escape shortcuts. Errors bubble from the parent's save
+ *  handler and render directly under the input. */
+function EditableRfcTitle({ value, onSave }: EditableRfcTitleProps) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editing]);
+
+  function start() {
+    setDraft(value);
+    setError(null);
+    setEditing(true);
+  }
+
+  function cancel() {
+    setEditing(false);
+    setError(null);
+  }
+
+  async function commit() {
+    const trimmed = draft.trim();
+    if (!trimmed || trimmed === value) {
+      cancel();
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave(trimmed);
+      setEditing(false);
+    } catch (e) {
+      setError((e as Error).message || "Failed to save title.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={start}
+        title="Edit title"
+        className="group max-w-3xl text-left text-balance text-3xl sm:text-5xl font-serif font-normal leading-[1.05] tracking-tight text-foreground transition-colors hover:text-foreground/80 cursor-pointer"
+      >
+        {value}
+        <span
+          aria-hidden
+          className="ml-2 align-middle text-xs uppercase tracking-[0.18em] text-gray-50 opacity-0 transition-opacity group-hover:opacity-100"
+        >
+          Edit
+        </span>
+      </button>
+    );
+  }
+
+  return (
+    <div className="max-w-3xl flex-1">
+      <input
+        ref={inputRef}
+        type="text"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            cancel();
+          }
+        }}
+        disabled={saving}
+        aria-label="RFC title"
+        className="w-full bg-transparent text-balance text-3xl sm:text-5xl font-serif font-normal leading-[1.05] tracking-tight text-foreground placeholder-gray-40 focus:outline-none border-b border-cyan disabled:opacity-60"
+      />
+      <div className="mt-2 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={commit}
+          disabled={saving || !draft.trim() || draft.trim() === value}
+          className="rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-surface transition-all hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-30 cursor-pointer"
+        >
+          {saving ? "Saving…" : "Save title"}
+        </button>
+        <button
+          type="button"
+          onClick={cancel}
+          disabled={saving}
+          className="rounded-md border border-gray-20 bg-surface px-3 py-1.5 text-xs font-medium text-foreground transition-all hover:bg-gray-5 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+        >
+          Cancel
+        </button>
+        {error && <span className="text-xs text-magenta">{error}</span>}
+      </div>
+    </div>
   );
 }

@@ -1,17 +1,29 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DiscussWithAgentButton } from "@/components/DiscussWithAgentButton";
 import type { ReviewerItem } from "@/components/EditableReviewers";
 import { GeneralCommentsSection } from "@/components/GeneralCommentsSection";
 import { InlineCommentableMarkdown } from "@/components/InlineCommentableMarkdown";
 import { MarkdownRawView } from "@/components/MarkdownRawView";
+import { RelativeTime } from "@/components/RelativeTime";
+import { RFCBodyEditor } from "@/components/RFCBodyEditor";
 import RFCDetailLoadingSkeleton from "@/components/RFCDetailLoadingSkeleton";
 import { RFCMetadataHeader } from "@/components/RFCMetadataHeader";
 import RFCsTopBar from "@/components/RFCsTopBar";
 import RFCsTopBarActions from "@/components/RFCsTopBarActions";
+import Tooltip from "@/components/Tooltip";
 import type { Comment, RFCDetail, RfcStateAction } from "@/lib/github";
+import { useRfcDraft } from "@/lib/use-rfc-draft";
 import { ViewModeToggle } from "./ViewModeToggle";
+
+interface PersistedBodyDraft {
+  body: string;
+  /** File SHA the draft was started against. If GitHub's current SHA differs
+   *  on a later visit, the draft is "stale" and the user is offered a reset. */
+  baseFileSha: string;
+  lastEditedAt: string;
+}
 
 function parseCommentIdFromHash(hash: string): number | null {
   const match = hash.match(/^#comment-(\d+)$/);
@@ -40,6 +52,7 @@ export default function RFCDetailClient({
   const [commentsLoading, setCommentsLoading] = useState(true);
   const [optimisticComments, setOptimisticComments] = useState<Comment[]>([]);
   const [viewMode, setViewMode] = useState<"pretty" | "raw">("pretty");
+  const [editTab, setEditTab] = useState<"write" | "preview">("write");
   const [highlightedCommentId, setHighlightedCommentId] = useState<
     number | null
   >(null);
@@ -54,6 +67,41 @@ export default function RFCDetailClient({
     message: string;
     teamNoAccess?: { team: string; org: string; repo: string };
   } | null>(null);
+  /** Non-null when the author is editing the body. The string is the working
+   *  copy of the markdown — `rfc.markdownContent` stays the canonical version
+   *  until a successful save. */
+  const [editingBody, setEditingBody] = useState<string | null>(null);
+  const [commitMessage, setCommitMessage] = useState("");
+  const [savingBody, setSavingBody] = useState(false);
+  const [bodyConflict, setBodyConflict] = useState(false);
+  const [bodySaveError, setBodySaveError] = useState<string | null>(null);
+
+  const isAuthor = !!rfc && currentUser === rfc.author;
+  const canEditBody = isAuthor && !!rfc && rfc.status === "open";
+
+  const draftStorageKey = `rfc123:edit:${owner}/${repo}#${prNumber}`;
+  const bodyDraftSnapshot: PersistedBodyDraft | null = useMemo(() => {
+    if (editingBody == null) return null;
+    if (!rfc?.markdownFileSha) return null;
+    if (editingBody === rfc.markdownContent) return null;
+    return {
+      body: editingBody,
+      baseFileSha: rfc.markdownFileSha,
+      lastEditedAt: new Date().toISOString(),
+    };
+  }, [editingBody, rfc?.markdownContent, rfc?.markdownFileSha]);
+
+  const {
+    pendingDraft: pendingBodyDraft,
+    acceptDraft: acceptBodyDraft,
+    discardDraft: discardBodyDraft,
+    clearDraft: clearBodyDraft,
+  } = useRfcDraft<PersistedBodyDraft>({
+    storageKey: draftStorageKey,
+    hasRestorableContent: (d) =>
+      typeof d.body === "string" && d.body.length > 0,
+    current: bodyDraftSnapshot,
+  });
 
   const loadComments = useCallback(async () => {
     setCommentsLoading(true);
@@ -246,6 +294,127 @@ export default function RFCDetailClient({
     }
   }
 
+  async function handleTitleSave(nextTitle: string): Promise<void> {
+    const res = await fetch(
+      `/api/rfcs/${prNumber}/title?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: nextTitle }),
+      },
+    );
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      throw new Error(body.error ?? "Failed to save title.");
+    }
+    const saved = (await res.json()) as { title: string };
+    setRfc((prev) =>
+      prev
+        ? {
+            ...prev,
+            title: saved.title,
+            updatedAt: new Date().toISOString(),
+          }
+        : prev,
+    );
+  }
+
+  function enterBodyEdit() {
+    if (!rfc) return;
+    setEditingBody(rfc.markdownContent);
+    setEditTab("write");
+    setCommitMessage("");
+    setBodyConflict(false);
+    setBodySaveError(null);
+  }
+
+  function exitBodyEdit(opts: { clearDraft?: boolean } = {}) {
+    setEditingBody(null);
+    setBodyConflict(false);
+    setBodySaveError(null);
+    if (opts.clearDraft) clearBodyDraft();
+  }
+
+  function resumeBodyDraft() {
+    if (!pendingBodyDraft || !rfc) return;
+    setEditingBody(pendingBodyDraft.body);
+    setCommitMessage("");
+    setBodyConflict(false);
+    setBodySaveError(null);
+    acceptBodyDraft();
+  }
+
+  async function resetAndRefresh() {
+    clearBodyDraft();
+    setEditingBody(null);
+    setBodyConflict(false);
+    setBodySaveError(null);
+    await loadRFC({ silent: true });
+  }
+
+  async function handleSaveBody() {
+    if (editingBody == null || !rfc?.markdownFileSha) return;
+    if (editingBody === rfc.markdownContent) {
+      // Nothing changed — just exit. Save shouldn't be reachable here, but
+      // belt + suspenders.
+      exitBodyEdit({ clearDraft: true });
+      return;
+    }
+    const trimmedMessage = commitMessage.trim();
+    if (!trimmedMessage) return;
+    setSavingBody(true);
+    setBodyConflict(false);
+    setBodySaveError(null);
+    try {
+      const res = await fetch(
+        `/api/rfcs/${prNumber}/content?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            body: editingBody,
+            commitMessage: trimmedMessage,
+            baseFileSha: rfc.markdownFileSha,
+          }),
+        },
+      );
+      if (res.status === 409) {
+        setBodyConflict(true);
+        return;
+      }
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        setBodySaveError(body.error ?? "Failed to save changes.");
+        return;
+      }
+      const saved = (await res.json()) as {
+        fileSha: string;
+        commitSha: string;
+      };
+      // Optimistic local update: stamp the new body + SHA so a follow-up
+      // background refetch isn't required for the UI to feel correct.
+      setRfc((prev) =>
+        prev
+          ? {
+              ...prev,
+              markdownContent: editingBody,
+              markdownFileSha: saved.fileSha,
+              headSha: saved.commitSha,
+              updatedAt: new Date().toISOString(),
+            }
+          : prev,
+      );
+      exitBodyEdit({ clearDraft: true });
+      // Pick up the new commit's other side effects (e.g. outdated inline
+      // comments) without blanking the page.
+      loadRFC({ silent: true });
+    } catch (e) {
+      setBodySaveError((e as Error).message || "Failed to save changes.");
+    } finally {
+      setSavingBody(false);
+    }
+  }
+
   async function handleReviewersChange(next: ReviewerItem[]) {
     if (!rfc) return;
     const previous = rfc;
@@ -385,31 +554,121 @@ export default function RFCDetailClient({
       <RFCMetadataHeader
         rfc={rfc}
         authorControls={
-          currentUser === rfc.author
+          isAuthor
             ? {
                 busyStateAction,
                 onStateAction: handleStateAction,
                 onReviewersChange: handleReviewersChange,
                 reviewersSaving,
+                // Title editing only available when the RFC is open and the
+                // body isn't already being edited — the two modes are
+                // mutually exclusive per spec.
+                onTitleSave:
+                  rfc.status === "open" && editingBody == null
+                    ? handleTitleSave
+                    : undefined,
               }
             : undefined
         }
         actions={
           <div className="flex items-center gap-2">
-            <DiscussWithAgentButton
-              owner={owner}
-              repo={repo}
-              prNumber={rfc.number}
-              title={rfc.title}
-              author={rfc.author}
-            />
-            <ViewModeToggle value={viewMode} onChange={setViewMode} />
+            {canEditBody && editingBody == null && (
+              <button
+                type="button"
+                onClick={enterBodyEdit}
+                className="inline-flex items-center gap-1.5 rounded-md border border-gray-30 bg-surface px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-gray-5 cursor-pointer"
+              >
+                <svg
+                  className="h-3.5 w-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden
+                >
+                  <title>Pencil</title>
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15.232 5.232l3.536 3.536M16.732 3.732a2.5 2.5 0 113.536 3.536L7.5 20.036H4v-3.536L16.732 3.732z"
+                  />
+                </svg>
+                Edit
+              </button>
+            )}
+            {editingBody == null && (
+              <DiscussWithAgentButton
+                owner={owner}
+                repo={repo}
+                prNumber={rfc.number}
+                title={rfc.title}
+                author={rfc.author}
+              />
+            )}
           </div>
+        }
+        bylineActions={
+          editingBody == null ? (
+            <ViewModeToggle
+              value={viewMode}
+              onChange={setViewMode}
+              options={[
+                { value: "pretty", label: "Pretty" },
+                { value: "raw", label: "Raw" },
+              ]}
+            />
+          ) : (
+            <ViewModeToggle
+              value={editTab}
+              onChange={setEditTab}
+              options={[
+                { value: "write", label: "Write" },
+                { value: "preview", label: "Preview" },
+              ]}
+            />
+          )
         }
       />
 
+      {editingBody == null && canEditBody && pendingBodyDraft && (
+        <BodyDraftRestoreBanner
+          draft={pendingBodyDraft}
+          stale={
+            !!rfc.markdownFileSha &&
+            pendingBodyDraft.baseFileSha !== rfc.markdownFileSha
+          }
+          onResume={resumeBodyDraft}
+          onDiscard={discardBodyDraft}
+        />
+      )}
+
       <div className="relative border-t border-gray-20 pt-4">
-        {viewMode === "pretty" ? (
+        {editingBody != null ? (
+          <BodyEditMode
+            body={editingBody}
+            onBodyChange={setEditingBody}
+            mode={editTab}
+            onModeChange={setEditTab}
+            commitMessage={commitMessage}
+            onCommitMessageChange={setCommitMessage}
+            saving={savingBody}
+            onSave={handleSaveBody}
+            onCancel={() => {
+              const dirty = editingBody !== rfc.markdownContent;
+              if (
+                dirty &&
+                !window.confirm("Discard your unsaved edits to this RFC?")
+              ) {
+                return;
+              }
+              exitBodyEdit({ clearDraft: true });
+            }}
+            disabled={editingBody === rfc.markdownContent}
+            conflict={bodyConflict}
+            onResetAndRefresh={resetAndRefresh}
+            saveError={bodySaveError}
+          />
+        ) : viewMode === "pretty" ? (
           <InlineCommentableMarkdown
             content={rfc.markdownContent}
             prNumber={rfc.number}
@@ -436,6 +695,213 @@ export default function RFCDetailClient({
         highlightedCommentId={highlightedCommentId}
         onCommentPosted={handleGeneralComment}
       />
+    </div>
+  );
+}
+
+interface BodyEditModeProps {
+  body: string;
+  onBodyChange: (next: string) => void;
+  /** Page-level Write/Preview toggle drives the editor — RFCBodyEditor hides
+   *  its internal tabs when controlled. */
+  mode: "write" | "preview";
+  onModeChange: (next: "write" | "preview") => void;
+  commitMessage: string;
+  onCommitMessageChange: (next: string) => void;
+  saving: boolean;
+  onSave: () => void;
+  onCancel: () => void;
+  /** True when there's nothing to save (body matches what's on GitHub). */
+  disabled: boolean;
+  /** Last save attempt hit a SHA mismatch (someone else pushed first). */
+  conflict: boolean;
+  onResetAndRefresh: () => void;
+  saveError: string | null;
+}
+
+function BodyEditMode({
+  body,
+  onBodyChange,
+  mode,
+  onModeChange,
+  commitMessage,
+  onCommitMessageChange,
+  saving,
+  onSave,
+  onCancel,
+  disabled,
+  conflict,
+  onResetAndRefresh,
+  saveError,
+}: BodyEditModeProps) {
+  return (
+    <div className="space-y-4">
+      {conflict && (
+        <div className="rounded-md border border-magenta bg-magenta-light px-4 py-3 text-sm">
+          <p className="font-medium text-foreground">
+            This RFC was updated on GitHub after you started editing.
+          </p>
+          <p className="mt-1 text-gray-70">
+            Your edits can't be saved as-is. Reset to discard them and reload,
+            or copy your text out first.
+          </p>
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onResetAndRefresh}
+              className="rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-surface transition-all hover:opacity-80 cursor-pointer"
+            >
+              Reset and refresh
+            </button>
+            <span className="text-xs text-gray-70">
+              Keep this editor open if you'd rather copy your draft out first.
+            </span>
+          </div>
+        </div>
+      )}
+      <RFCBodyEditor
+        body={body}
+        onBodyChange={onBodyChange}
+        mode={mode}
+        onModeChange={onModeChange}
+      />
+      {saveError && !conflict && (
+        <div className="rounded-sm border border-magenta bg-magenta-light px-3 py-2 text-sm text-foreground">
+          {saveError}
+        </div>
+      )}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <label className="flex flex-col gap-1.5 sm:flex-1">
+          <span className="text-xs font-medium uppercase tracking-[0.18em] text-gray-50">
+            Commit message
+          </span>
+          <input
+            type="text"
+            value={commitMessage}
+            onChange={(e) => onCommitMessageChange(e.target.value)}
+            placeholder="Update RFC"
+            className="w-full rounded-sm border border-gray-30 bg-surface px-3 py-2 text-sm text-foreground hover:border-gray-40 focus:outline-none focus:ring-2 focus:ring-cyan focus:border-transparent transition-colors"
+          />
+        </label>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={saving}
+            className="rounded-md border border-gray-20 bg-surface px-4 py-2 text-sm font-medium text-foreground transition-all hover:bg-gray-5 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+          >
+            Discard changes
+          </button>
+          <SaveButton
+            disabled={disabled}
+            saving={saving}
+            conflict={conflict}
+            commitMessage={commitMessage}
+            onSave={onSave}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface SaveButtonProps {
+  /** True when the body matches what's on GitHub — nothing to save. */
+  disabled: boolean;
+  saving: boolean;
+  conflict: boolean;
+  commitMessage: string;
+  onSave: () => void;
+}
+
+/** Save button + disabled-reason tooltip. The reason rotates through the
+ *  states that block saving so the user knows exactly what to fix. */
+function SaveButton({
+  disabled,
+  saving,
+  conflict,
+  commitMessage,
+  onSave,
+}: SaveButtonProps) {
+  const commitMessageEmpty = commitMessage.trim().length === 0;
+  const disabledReason: string | null = conflict
+    ? "Resolve the conflict before saving."
+    : disabled
+      ? "Nothing to save — the body hasn't changed."
+      : commitMessageEmpty
+        ? "Write a commit message to save."
+        : null;
+  const isDisabled = saving || disabledReason !== null;
+
+  const button = (
+    <button
+      type="button"
+      onClick={onSave}
+      disabled={isDisabled}
+      className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-surface transition-all hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-30 cursor-pointer"
+    >
+      {saving ? "Saving…" : "Save"}
+    </button>
+  );
+
+  if (!disabledReason) return button;
+  // Wrap the disabled button in a span so the tooltip trigger still receives
+  // pointer events (disabled <button> elements swallow them in some browsers).
+  return (
+    <Tooltip content={disabledReason}>
+      <span className="inline-flex">{button}</span>
+    </Tooltip>
+  );
+}
+
+interface BodyDraftRestoreBannerProps {
+  draft: PersistedBodyDraft;
+  /** True when the draft was started against a different file SHA than what
+   *  GitHub currently has — restoring would risk overwriting newer commits. */
+  stale: boolean;
+  onResume: () => void;
+  onDiscard: () => void;
+}
+
+function BodyDraftRestoreBanner({
+  draft,
+  stale,
+  onResume,
+  onDiscard,
+}: BodyDraftRestoreBannerProps) {
+  return (
+    <div
+      className={`mb-4 flex flex-col gap-3 rounded-md border px-4 py-3 sm:flex-row sm:items-center ${
+        stale
+          ? "border-magenta bg-magenta-light"
+          : "border-yellow bg-yellow-light"
+      }`}
+    >
+      <div className="flex-1 text-sm text-foreground">
+        <span className="font-medium">
+          You have an unsaved edit from{" "}
+          <RelativeTime date={draft.lastEditedAt} />.
+        </span>{" "}
+        {stale
+          ? "The RFC has new commits since then — resuming would overwrite them. Discard recommended."
+          : "Want to resume editing?"}
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <button
+          type="button"
+          onClick={onResume}
+          className="rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-surface transition-all hover:opacity-80 cursor-pointer"
+        >
+          {stale ? "Resume anyway" : "Resume editing"}
+        </button>
+        <button
+          type="button"
+          onClick={onDiscard}
+          className="rounded-md border border-gray-20 bg-surface px-3 py-1.5 text-xs font-medium text-foreground transition-all hover:bg-gray-5 cursor-pointer"
+        >
+          Discard
+        </button>
+      </div>
     </div>
   );
 }

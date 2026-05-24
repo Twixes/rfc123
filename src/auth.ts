@@ -1,6 +1,15 @@
 import NextAuth from "next-auth";
 import GitHub from "next-auth/providers/github";
 
+/** Pulls the GitHub OAuth token off the session if present. The token is
+ *  grafted onto the session in the `session` callback below; NextAuth's stock
+ *  Session type doesn't reflect that, hence the unchecked cast. Returns null
+ *  when unauthenticated so route handlers can short-circuit cleanly. */
+export function getAccessToken(session: unknown): string | null {
+  const token = (session as { accessToken?: unknown } | null)?.accessToken;
+  return typeof token === "string" && token.length > 0 ? token : null;
+}
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
     GitHub({

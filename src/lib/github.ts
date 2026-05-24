@@ -1,5 +1,6 @@
 import { Octokit } from "octokit";
 import {
+  deleteCachedData,
   getCachedJsonData,
   getCachedJsonDataBatch,
   setCachedJsonData,
@@ -7,7 +8,28 @@ import {
 } from "./cache";
 import { captureServerException } from "./posthog-server";
 import { randomSuffix } from "./random-suffix";
+import {
+  defaultRfcConfig,
+  parseRfcConfig,
+  RFC_CONFIG_PATH,
+  type RfcConfig,
+  type RfcLayout,
+  rfcFilePath,
+  serializeRfcConfig,
+  todayYmd,
+} from "./rfc-config";
 import { slugify } from "./slugify";
+
+export type {
+  RfcConfig,
+  RfcLayout,
+} from "./rfc-config";
+export {
+  defaultRfcConfig,
+  RFC_CONFIG_PATH,
+  rfcFilePath,
+  todayYmd,
+} from "./rfc-config";
 
 export interface RepoOption {
   owner: string;
@@ -214,21 +236,19 @@ async function detectRepoHasRfcs(
   ) {
     return true;
   }
-  const [variantFull, variantShort] = await Promise.allSettled([
+  // `.rfc123.json` is the authoritative "this is an RFC repo" marker – any
+  // repo carrying it (wizard-created or hand-adopted) counts even if its name
+  // and layout don't match the legacy heuristics.
+  const probes = await Promise.allSettled([
+    octokit.rest.repos.getContent({ owner, repo: name, path: RFC_CONFIG_PATH }),
     octokit.rest.repos.getContent({
       owner,
       repo: name,
       path: "requests-for-comments",
     }),
-    octokit.rest.repos.getContent({
-      owner,
-      repo: name,
-      path: "RFCs",
-    }),
+    octokit.rest.repos.getContent({ owner, repo: name, path: "RFCs" }),
   ]);
-  return (
-    variantFull.status === "fulfilled" || variantShort.status === "fulfilled"
-  );
+  return probes.some((p) => p.status === "fulfilled");
 }
 
 export async function listReposWithRFCs(
@@ -1333,8 +1353,10 @@ export interface CreateRFCInput {
   reviewers: string[];
   /** Open as draft PR. */
   draft: boolean;
-  /** Override the RFC directory (default: auto-detect from existing layout). */
+  /** Override the RFC directory (default: load from `.rfc123.json` / heuristic). */
   directory?: string;
+  /** Team subdirectory for `layout: by-team` repos. Ignored for single layout. */
+  team?: string;
   /** Override the branch name (default: `rfc/<username>/<slug>`). */
   branchName?: string;
 }
@@ -1432,14 +1454,18 @@ export async function createRFC(
     });
     const baseSha = baseRef.object.sha;
 
-    // 3. Choose branch / file path. If either collides, append the same
-    //    random 4-letter suffix to both so they stay aligned. Slugify the
-    //    username defensively – GitHub logins are already URL-safe, but the
-    //    client preview passes display names which may contain spaces/caps.
-    const directory =
-      input.directory ?? (await detectRfcDirectory(accessToken, owner, repo));
+    // 3. Resolve where the RFC lives. We honor `.rfc123.json` when present;
+    //    otherwise we fall back to the historical directory heuristic. New
+    //    RFCs always get a date prefix (`YYYY-MM-DD-…`), even in legacy repos.
+    const baseConfig = await loadRfcConfig(accessToken, owner, repo);
+    const config: RfcConfig = input.directory
+      ? { ...baseConfig, directory: input.directory }
+      : baseConfig;
+    const team =
+      config.layout === "multi-directory" ? (input.team ?? null) : null;
+    const date = todayYmd();
     const baseBranch = input.branchName ?? `rfc/${slugify(username)}/${slug}`;
-    const baseFilePath = `${directory}/${slug}.md`;
+    const baseFilePath = rfcFilePath(config, { team, slug, date });
 
     let branchName = baseBranch;
     let filePath = baseFilePath;
@@ -1455,7 +1481,11 @@ export async function createRFC(
     while (collision && attempts < 5) {
       const suffix = randomSuffix();
       branchName = `${baseBranch}-${suffix}`;
-      filePath = `${directory}/${slug}-${suffix}.md`;
+      filePath = rfcFilePath(config, {
+        team,
+        slug: `${slug}-${suffix}`,
+        date,
+      });
       collision = await hasBranchOrFile(
         octokit,
         owner,
@@ -1531,7 +1561,7 @@ export async function createRFC(
       filePath,
       htmlUrl: pr.html_url,
       draft,
-      directory,
+      directory: config.directory,
     };
   } catch (error) {
     captureServerException(error as Error, undefined, {
@@ -1563,4 +1593,309 @@ async function hasBranchOrFile(
     }),
   ]);
   return branchRes.status === "fulfilled" || fileRes.status === "fulfilled";
+}
+
+const RFC_CONFIG_CACHE_PREFIX = "rfc_config:v1";
+
+function rfcConfigCacheKey(owner: string, repo: string): string {
+  return `${RFC_CONFIG_CACHE_PREFIX}:${owner}:${repo}`;
+}
+
+/**
+ * Read `.rfc123.json` from `owner/repo`'s default branch. Returns a synthesized
+ * fallback config when the file is missing, with `directory` resolved via the
+ * historical `detectRfcDirectory` heuristic so legacy repos keep working.
+ */
+/**
+ * List the top-level directories of `owner/repo`. In a `multi-directory` RFC
+ * repo, these *are* the teams – no separate list to keep in sync. Hidden dirs
+ * (`.github`, etc.) are excluded. Not cached so newly-typed teams show up
+ * immediately in the picker after the first RFC commits the folder.
+ */
+export async function listRepoTeamDirectories(
+  accessToken: string,
+  owner: string,
+  repo: string,
+): Promise<string[]> {
+  const octokit = await getOctokit(accessToken);
+  try {
+    const { data } = await octokit.rest.repos.getContent({
+      owner,
+      repo,
+      path: "",
+    });
+    if (!Array.isArray(data)) return [];
+    return data
+      .filter((entry) => entry.type === "dir" && !entry.name.startsWith("."))
+      .map((entry) => entry.name)
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
+export async function loadRfcConfig(
+  accessToken: string,
+  owner: string,
+  repo: string,
+): Promise<RfcConfig> {
+  const cached = await getCachedJsonData<RfcConfig>(
+    rfcConfigCacheKey(owner, repo),
+  );
+  if (cached) return cached;
+  const octokit = await getOctokit(accessToken);
+  try {
+    const res = await octokit.rest.repos.getContent({
+      owner,
+      repo,
+      path: RFC_CONFIG_PATH,
+    });
+    if (
+      !Array.isArray(res.data) &&
+      "content" in res.data &&
+      typeof res.data.content === "string"
+    ) {
+      const raw = Buffer.from(res.data.content, "base64").toString("utf-8");
+      const config = parseRfcConfig(raw);
+      await setCachedJsonData(rfcConfigCacheKey(owner, repo), config, 3600, {
+        name: "loadRfcConfig:explicit",
+      });
+      return config;
+    }
+  } catch (e) {
+    const err = e as { status?: number; message?: string };
+    // Only fall through on a real 404 (file absent). Anything else (403, 5xx,
+    // network) gets surfaced – otherwise a transient GH outage would pin the
+    // synthesized legacy config in cache and new RFCs would land in the
+    // wrong directory for up to its TTL.
+    if (err?.status !== 404) {
+      captureServerException(e as Error, undefined, {
+        function: "loadRfcConfig",
+        owner,
+        repo,
+        context: "fetching_rfc_config",
+      });
+      throw e;
+    }
+  }
+  const directory = await detectRfcDirectory(accessToken, owner, repo);
+  const config = defaultRfcConfig({ directory });
+  // Short TTL so a later commit of `.rfc123.json` is picked up quickly rather
+  // than waiting an hour for the legacy assumption to expire.
+  await setCachedJsonData(rfcConfigCacheKey(owner, repo), config, 60, {
+    name: "loadRfcConfig:legacy",
+  });
+  return config;
+}
+
+export interface AvailableOwner {
+  login: string;
+  type: "User" | "Organization";
+  avatarUrl: string;
+  /**
+   * True if we believe the user can create repos in this owner. For personal
+   * accounts always true. For orgs we trust GitHub's org-list (it filters by
+   * OAuth-app approval for classic OAuth tokens); we treat any returned org
+   * as eligible and surface the real failure on create-repo if it bounces.
+   */
+  canCreateRepos: boolean;
+}
+
+/**
+ * List the user's account + every org they're a member of, for the onboarding
+ * wizard's "where should the RFCs repo live?" picker. Cheap (two GH calls),
+ * not cached – this only runs on the onboarding screen.
+ */
+export async function listAvailableOwners(
+  accessToken: string,
+): Promise<AvailableOwner[]> {
+  const octokit = await getOctokit(accessToken);
+  const [{ data: user }, orgs] = await Promise.all([
+    octokit.rest.users.getAuthenticated(),
+    octokit.paginate(octokit.rest.orgs.listForAuthenticatedUser, {
+      per_page: 100,
+    }),
+  ]);
+  return [
+    {
+      login: user.login,
+      type: "User",
+      avatarUrl: user.avatar_url,
+      canCreateRepos: true,
+    },
+    ...orgs.map((org) => ({
+      login: org.login,
+      type: "Organization" as const,
+      avatarUrl: org.avatar_url,
+      canCreateRepos: true,
+    })),
+  ];
+}
+
+/** Return true if `owner/name` is free to claim, false if already taken. */
+export async function checkRepoNameAvailable(
+  accessToken: string,
+  owner: string,
+  name: string,
+): Promise<boolean> {
+  const octokit = await getOctokit(accessToken);
+  try {
+    await octokit.rest.repos.get({ owner, repo: name });
+    return false;
+  } catch (e) {
+    const err = e as { status?: number };
+    if (err?.status === 404) return true;
+    throw e;
+  }
+}
+
+export interface CreateRfcRepoInput {
+  accessToken: string;
+  owner: string;
+  /** Personal account → false; organization → true. Determines the create endpoint. */
+  isOrg: boolean;
+  name: string;
+  visibility: "private" | "public";
+  layout: RfcLayout;
+  teams: string[];
+}
+
+export interface CreateRfcRepoResult {
+  owner: string;
+  name: string;
+  fullName: string;
+  defaultBranch: string;
+  htmlUrl: string;
+  config: RfcConfig;
+}
+
+/**
+ * Bootstrap a fresh dedicated RFCs repo. Steps:
+ *   1. POST /user/repos or /orgs/{org}/repos with `auto_init: true`.
+ *   2. Overwrite the auto-created README with one that explains the convention.
+ *   3. Commit `.rfc123.json` so the layout is portable / human-readable.
+ *   4. For `by-team` layouts, drop a `.gitkeep` into each starter team folder.
+ *
+ * If any post-create step fails we don't try to roll the repo back – the user
+ * lands on a usable (if minimal) repo and we surface a warning. The README and
+ * config are the only thing the rest of the app *needs* to behave correctly,
+ * and both are best-effort idempotent for retry.
+ */
+export async function createRfcRepo(
+  input: CreateRfcRepoInput,
+): Promise<CreateRfcRepoResult> {
+  const { accessToken, owner, isOrg, name, visibility, layout } = input;
+  const octokit = await getOctokit(accessToken);
+
+  const createParams = {
+    name,
+    description: "Requests for comments",
+    private: visibility === "private",
+    auto_init: true,
+  } as const;
+
+  const { data: repo } = isOrg
+    ? await octokit.rest.repos.createInOrg({ org: owner, ...createParams })
+    : await octokit.rest.repos.createForAuthenticatedUser(createParams);
+
+  const defaultBranch = repo.default_branch;
+  const teams =
+    layout === "multi-directory"
+      ? Array.from(
+          new Set(input.teams.map((t) => t.trim()).filter((t) => t.length > 0)),
+        )
+      : [];
+  const config = defaultRfcConfig({ layout });
+
+  // `auto_init: true` gave us a stub README – fetch its sha so we can
+  // overwrite it. Runs in parallel with the writes that don't need it.
+  const readmeShaPromise = octokit.rest.repos
+    .getContent({ owner, repo: name, path: "README.md", ref: defaultBranch })
+    .then(({ data }) =>
+      !Array.isArray(data) && "sha" in data ? data.sha : undefined,
+    )
+    .catch(() => undefined);
+
+  const writeFile = (
+    path: string,
+    message: string,
+    content: string,
+    sha?: string,
+  ) =>
+    octokit.rest.repos.createOrUpdateFileContents({
+      owner,
+      repo: name,
+      path,
+      message,
+      content: Buffer.from(content, "utf-8").toString("base64"),
+      branch: defaultBranch,
+      sha,
+    });
+
+  const readmeSha = await readmeShaPromise;
+  await Promise.all([
+    writeFile(
+      "README.md",
+      "Initialize RFCs repo",
+      renderRfcRepoReadme(config, teams),
+      readmeSha,
+    ),
+    writeFile(RFC_CONFIG_PATH, "Add .rfc123.json", serializeRfcConfig(config)),
+    ...teams.map((team) =>
+      writeFile(`${team}/.gitkeep`, `Add ${team}/ directory`, ""),
+    ),
+  ]);
+
+  // Seed the per-repo config cache so a follow-up `loadRfcConfig` (e.g. the
+  // /rfcs/new page-load right after the wizard hands off) serves the explicit
+  // config instead of paying a getContent round-trip + risking a 404 on
+  // replication lag. Also mark this repo as RFC-bearing so the picker and the
+  // /rfcs redirect see it immediately, even if the name doesn't match the
+  // legacy heuristics (e.g. user picked "proposals"). The per-user list
+  // caches get invalidated so the next call rebuilds them with the new repo.
+  await Promise.all([
+    setCachedJsonData(rfcConfigCacheKey(owner, name), config, 3600, {
+      name: "createRfcRepo:seed_config",
+    }),
+    setCachedJsonData(repoHasRfcsCacheKey(owner, name), true, 3600, {
+      name: "createRfcRepo:seed_has_rfcs",
+    }),
+    deleteCachedData(`repos_with_rfcs:${accessToken}`),
+    deleteCachedData(`writable_repos:${accessToken}`),
+  ]);
+
+  return {
+    owner,
+    name,
+    fullName: repo.full_name,
+    defaultBranch,
+    htmlUrl: repo.html_url,
+    config,
+  };
+}
+
+function renderRfcRepoReadme(config: RfcConfig, teams: string[]): string {
+  const exampleFilename = `${todayYmd()}-example-proposal.md`;
+  const layoutNote =
+    config.layout === "multi-directory"
+      ? `RFCs live in per-team directories at the repo root (${
+          teams.length > 0
+            ? teams.map((t) => `\`${t}/\``).join(", ")
+            : "you'll create these as you go"
+        }). Each filename is prefixed with the date it was drafted, e.g. \`engineering/${exampleFilename}\`.`
+      : `RFCs live at the repo root. Each filename is prefixed with the date it was drafted, e.g. \`${exampleFilename}\`.`;
+  return `# RFCs
+
+This repository hosts requests for comments – written proposals that get reviewed via GitHub pull requests.
+
+## Layout
+
+${layoutNote}
+
+The convention is encoded in [\`.rfc123.json\`](./.rfc123.json). Edit that file to change the directory, layout, or filename format; RFC123 reads it on every load.
+
+## Writing a new RFC
+
+Use RFC123 to draft RFCs with a guided editor that opens the PR, requests reviewers, and writes the PR description for you. You can also commit RFCs by hand following the layout above.
+`;
 }

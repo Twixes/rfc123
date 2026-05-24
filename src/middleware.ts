@@ -1,12 +1,14 @@
-import { auth } from "@/auth";
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 
 export default auth((req) => {
   const { nextUrl } = req;
   const isAuthenticated = !!(req.auth as { accessToken?: string })?.accessToken;
 
   // Paths that require authentication
-  const isProtectedPath = nextUrl.pathname.startsWith("/rfcs");
+  const isProtectedPath =
+    nextUrl.pathname.startsWith("/rfcs") ||
+    nextUrl.pathname.startsWith("/onboarding");
 
   // Don't redirect if already on auth pages
   const isAuthPage = nextUrl.pathname.startsWith("/api/auth");
@@ -32,5 +34,5 @@ export default auth((req) => {
 });
 
 export const config = {
-  matcher: ["/rfcs/:path*"],
+  matcher: ["/rfcs/:path*", "/onboarding/:path*"],
 };

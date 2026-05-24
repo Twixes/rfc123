@@ -10,11 +10,11 @@ import {
 import { motion } from "motion/react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { MarkdownRenderer } from "@/components/MarkdownRenderer";
+import { useEffect, useMemo, useState } from "react";
 import { RelativeTime } from "@/components/RelativeTime";
 import RepoSelector from "@/components/RepoSelector";
 import ReviewerPicker, { type Reviewer } from "@/components/ReviewerPicker";
+import { RFCBodyEditor } from "@/components/RFCBodyEditor";
 import RFCsTopBar from "@/components/RFCsTopBar";
 import Tooltip from "@/components/Tooltip";
 import type { RepoOption } from "@/lib/github";
@@ -24,6 +24,7 @@ import {
   rfcFilePath,
   todayYmd,
 } from "@/lib/rfc-config";
+import { useRfcDraft } from "@/lib/use-rfc-draft";
 
 /** Shape returned by `/api/repos/[owner]/[repo]/config` – the loaded config
  *  plus the team-directory list, which `.rfc123.json` doesn't store. */
@@ -76,15 +77,10 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState(DEFAULT_RFC_TEMPLATE);
   const [reviewers, setReviewers] = useState<Reviewer[]>([]);
-  const [activeTab, setActiveTab] = useState<"write" | "preview">("write");
   const [submittingMode, setSubmittingMode] = useState<
     "review" | "draft" | null
   >(null);
   const [error, setError] = useState<string | null>(null);
-  /** Snapshot of an existing localStorage draft, surfaced via the restore
-   *  banner. Non-null while the user hasn't yet picked restore or discard. */
-  const [pendingDraft, setPendingDraft] = useState<PersistedDraft | null>(null);
-  const draftLoadedRef = useRef(false);
 
   // Per-repo `.rfc123.json`; null while loading. Falls back to a synthetic
   // single-layout config for repos without one (matches the server's
@@ -94,21 +90,24 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
 
   const userLogin = session?.user?.name ?? undefined;
 
-  // Snapshot any in-progress draft from localStorage on mount – but do NOT
-  // populate the form. Instead we surface a restore banner so the user is
-  // never surprised by previously-typed content reappearing.
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(DRAFT_STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored) as PersistedDraft;
-        if (hasRestorableContent(parsed)) {
-          setPendingDraft(parsed);
-        }
-      }
-    } catch {}
-    draftLoadedRef.current = true;
-  }, []);
+  const draftSnapshot: PersistedDraft = useMemo(
+    () => ({
+      title,
+      body,
+      reviewers,
+      selectedRepoFullName: selectedRepo?.fullName,
+      team,
+      lastEditedAt: new Date().toISOString(),
+    }),
+    [title, body, reviewers, selectedRepo?.fullName, team],
+  );
+
+  const { pendingDraft, acceptDraft, discardDraft, clearDraft } =
+    useRfcDraft<PersistedDraft>({
+      storageKey: DRAFT_STORAGE_KEY,
+      hasRestorableContent,
+      current: draftSnapshot,
+    });
 
   // Pick the initial selected repo from URL params only. The saved-draft repo
   // is restored alongside the rest of the draft from the banner — auto-picking
@@ -144,27 +143,6 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
       `${window.location.pathname}?${params.toString()}`,
     );
   }, [selectedRepo]);
-
-  // Persist the in-progress draft on every change. No repo gating – drafting
-  // before picking a repo is the most common entry path. Paused while the
-  // restore banner is showing so we don't clobber the snapshot before the
-  // user decides what to do with it.
-  useEffect(() => {
-    if (!draftLoadedRef.current) return;
-    if (pendingDraft) return;
-    const handle = setTimeout(() => {
-      const draftPayload: PersistedDraft = {
-        title,
-        body,
-        reviewers,
-        selectedRepoFullName: selectedRepo?.fullName,
-        team,
-        lastEditedAt: new Date().toISOString(),
-      };
-      localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draftPayload));
-    }, 200);
-    return () => clearTimeout(handle);
-  }, [selectedRepo, title, body, reviewers, team, pendingDraft]);
 
   // Load the picked repo's `.rfc123.json` so we know layout/team list and can
   // render an accurate path preview. Falls back to the default config when the
@@ -242,12 +220,7 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
         });
       }
     }
-    setPendingDraft(null);
-  }
-
-  function discardDraft() {
-    localStorage.removeItem(DRAFT_STORAGE_KEY);
-    setPendingDraft(null);
+    acceptDraft();
   }
 
   async function submit(draft: boolean) {
@@ -303,7 +276,7 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
       };
 
       // Clear draft on success.
-      localStorage.removeItem(DRAFT_STORAGE_KEY);
+      clearDraft();
 
       router.push(
         `/rfcs/${created.owner}/${created.repo}/${created.number}/${created.slug}`,
@@ -413,11 +386,13 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
           )}
 
           {/* Title + Body – one unified card. Title is a large serif heading
-              input; tabs in the right of the title row swap the lower half
-              between the raw textarea and a rendered preview. */}
+              input rendered into the editor's header row; tabs to its right
+              swap the lower half between the raw textarea and a preview. */}
           <div>
-            <div className="border border-gray-20 rounded-md bg-surface overflow-hidden focus-within:border-gray-30 transition-colors">
-              <div className="flex items-center gap-3 px-5 sm:px-6 pt-5 py-4 border-b border-gray-20">
+            <RFCBodyEditor
+              body={body}
+              onBodyChange={setBody}
+              headerSlot={
                 <input
                   id="rfc-title"
                   type="text"
@@ -427,54 +402,10 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
                   aria-label="Title"
                   // biome-ignore lint/a11y/noAutofocus: the page exists only to author an RFC; landing on the title is the expected first action
                   autoFocus
-                  className="flex-1 min-w-0 bg-transparent font-serif text-3xl sm:text-4xl leading-tight tracking-tight text-foreground placeholder-gray-40 focus:outline-none"
+                  className="w-full bg-transparent font-serif text-3xl sm:text-4xl leading-tight tracking-tight text-foreground placeholder-gray-40 focus:outline-none"
                 />
-                <div className="flex border border-gray-20 rounded-sm overflow-hidden text-xs shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab("write")}
-                    className={`px-3 py-1 cursor-pointer transition-colors ${
-                      activeTab === "write"
-                        ? "bg-foreground text-surface"
-                        : "bg-surface text-gray-70 hover:bg-gray-5"
-                    }`}
-                  >
-                    Write
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab("preview")}
-                    className={`px-3 py-1 cursor-pointer transition-colors border-l border-gray-20 ${
-                      activeTab === "preview"
-                        ? "bg-foreground text-surface"
-                        : "bg-surface text-gray-70 hover:bg-gray-5"
-                    }`}
-                  >
-                    Preview
-                  </button>
-                </div>
-              </div>
-              {activeTab === "write" ? (
-                <textarea
-                  value={body}
-                  onChange={(e) => setBody(e.target.value)}
-                  rows={24}
-                  spellCheck
-                  placeholder="Write your RFC in Markdown…"
-                  className="block w-full bg-transparent px-5 sm:px-6 py-4 text-sm text-foreground placeholder-gray-50 focus:outline-none font-mono resize-y"
-                />
-              ) : (
-                <div className="px-5 sm:px-6 py-4 min-h-[24rem]">
-                  {body.trim() ? (
-                    <MarkdownRenderer content={body} />
-                  ) : (
-                    <p className="text-sm text-gray-50">
-                      Nothing to preview yet.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
+              }
+            />
             {previewPath && (
               <p className="mt-2 text-xs text-gray-50">
                 <code className="bg-gray-5 border border-gray-20 rounded-sm px-1 font-mono text-[11px]">

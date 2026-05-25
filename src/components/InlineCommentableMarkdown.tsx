@@ -1,3 +1,5 @@
+// biome-ignore-all lint/a11y/useKeyWithClickEvents: every block is a comment anchor; keyboard path is the sidebar
+// biome-ignore-all lint/a11y/noStaticElementInteractions: same — body text, no button role fits
 "use client";
 
 import {
@@ -169,8 +171,8 @@ function LineHoverController({
   activeLineIndex,
   commentsByLine,
   commentBoxRefs,
-  commentPositions,
-  resolvedCollapsedLines,
+  commentPositions: _commentPositions,
+  resolvedCollapsedLines: _resolvedCollapsedLines,
   markdownRef,
   containerRef,
   markdownColumn,
@@ -223,7 +225,7 @@ function LineHoverController({
       applyHover();
     };
     applyHover();
-  }, [applyHover]);
+  }, [applyHover, dispatchRef]);
 
   const recalcArrows = useCallback(() => {
     const container = containerRef.current;
@@ -385,7 +387,7 @@ function LineHoverController({
       window.removeEventListener("scroll", onScroll, true);
       clearTimeout(timer);
     };
-  }, [recalcArrows, commentPositions, resolvedCollapsedLines]);
+  }, [recalcArrows, containerRef.current]);
 
   return (
     <>
@@ -399,12 +401,14 @@ function LineHoverController({
       </div>
       {containerSize.width > 0 && arrowPaths.length > 0 && (
         <svg
+          aria-hidden
           className="pointer-events-none absolute left-0 top-0 z-10 hidden lg:block"
           width={containerSize.width}
           height={containerSize.height}
           viewBox={`0 0 ${containerSize.width} ${containerSize.height}`}
           preserveAspectRatio="none"
         >
+          <title>Comment threads</title>
           <defs>
             <marker
               id="arrowhead-magenta"
@@ -475,10 +479,13 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
   );
 });
 
-// react-markdown passes a `node` prop (HAST element) to every component renderer.
-// Excluding it from spreads prevents `node="[object Object]"` on DOM elements.
+// `node` is react-markdown's HAST element; data-line-* come from rehypeLineMarkers.
 type MDProps<T extends React.ElementType> =
-  React.ComponentPropsWithoutRef<T> & { node?: unknown };
+  React.ComponentPropsWithoutRef<T> & {
+    node?: unknown;
+    "data-line-element"?: number;
+    "data-line-end"?: number;
+  };
 
 interface LineNumbersColumnProps {
   lines: string[];
@@ -505,7 +512,7 @@ function LineNumbersColumn({
 }: LineNumbersColumnProps) {
   return (
     <div className="shrink-0 select-none relative w-[40px]">
-      {lines.map((line, index) => {
+      {lines.map((_line, index) => {
         const lineNumber = index + 1;
 
         // Only show line numbers for lines that have rendered content (DOM marker) or comments.
@@ -600,7 +607,7 @@ interface InlineCommentableMarkdownProps {
 
 export function InlineCommentableMarkdown({
   content,
-  prNumber,
+  prNumber: _prNumber,
   owner,
   repo,
   markdownFilePath,
@@ -972,7 +979,7 @@ export function InlineCommentableMarkdown({
     // removing it prevents a re-trigger when ELC boxes mount and shift layout.
     const raf = requestAnimationFrame(() => recalcPositions());
     return () => cancelAnimationFrame(raf);
-  }, [commentsByLine, activeLineIndex, replyTarget, resolvedCollapsedLines]);
+  }, [commentsByLine, activeLineIndex, resolvedCollapsedLines]);
 
   // Helper to get the position for a specific line
   const getCommentPosition = (lineNumber: number): number => {
@@ -1118,8 +1125,8 @@ export function InlineCommentableMarkdown({
 
   const markdownComponents = useMemo(
     () => ({
-      h1: ({ children, ...props }: React.ComponentPropsWithoutRef<"h1">) => {
-        const lineNumber = (props as any)["data-line-element"];
+      h1: ({ children, node: _node, ...props }: MDProps<"h1">) => {
+        const lineNumber = props["data-line-element"];
         return (
           <h1
             className={`relative mb-3 mt-4 py-2 border-b border-gray-20 text-4xl font-serif! font-normal! tracking-tight leading-tight text-foreground ${lineNumber ? "cursor-pointer" : ""} ${lineNumber && commentsByLine.has(lineNumber) ? "pr-8" : ""}`}
@@ -1135,8 +1142,8 @@ export function InlineCommentableMarkdown({
           </h1>
         );
       },
-      h2: ({ children, ...props }: React.ComponentPropsWithoutRef<"h2">) => {
-        const lineNumber = (props as any)["data-line-element"];
+      h2: ({ children, node: _node, ...props }: MDProps<"h2">) => {
+        const lineNumber = props["data-line-element"];
         return (
           <h2
             className={`relative mb-3 mt-3 py-2 border-b border-gray-20 text-3xl font-serif! font-normal! tracking-tight leading-tight text-foreground ${lineNumber ? "cursor-pointer" : ""} ${lineNumber && commentsByLine.has(lineNumber) ? "pr-8" : ""}`}
@@ -1153,7 +1160,7 @@ export function InlineCommentableMarkdown({
         );
       },
       h3: ({ children, node: _node, ...props }: MDProps<"h3">) => {
-        const lineNumber = (props as any)["data-line-element"];
+        const lineNumber = props["data-line-element"];
         return (
           <h3
             className={`relative mb-2 mt-4 text-xl font-sans! font-semibold! leading-snug text-foreground ${lineNumber ? "cursor-pointer" : ""} ${lineNumber && commentsByLine.has(lineNumber) ? "pr-8" : ""}`}
@@ -1170,7 +1177,7 @@ export function InlineCommentableMarkdown({
         );
       },
       p: ({ children, node: _node, ...props }: MDProps<"p">) => {
-        const lineNumber = (props as any)["data-line-element"];
+        const lineNumber = props["data-line-element"];
         return (
           <p
             className={`relative my-2 ${lineNumber ? "cursor-pointer" : ""} ${lineNumber && commentsByLine.has(lineNumber) ? "pr-8" : ""}`}
@@ -1205,7 +1212,7 @@ export function InlineCommentableMarkdown({
         <hr className="my-6 border-0 border-t-2 border-gray-20" {...props} />
       ),
       ul: ({ children, node: _node, ...props }: MDProps<"ul">) => {
-        const { "data-line-element": _stripped, ...rest } = props as any;
+        const { "data-line-element": _stripped, ...rest } = props;
         return (
           <ul
             className="my-2 ml-6 list-disc space-y-0.5 text-gray-90"
@@ -1216,7 +1223,7 @@ export function InlineCommentableMarkdown({
         );
       },
       ol: ({ children, node: _node, ...props }: MDProps<"ol">) => {
-        const { "data-line-element": _stripped, ...rest } = props as any;
+        const { "data-line-element": _stripped, ...rest } = props;
         return (
           <ol
             className="my-2 ml-6 list-decimal space-y-0.5 text-gray-90"
@@ -1227,7 +1234,7 @@ export function InlineCommentableMarkdown({
         );
       },
       li: ({ children, node: _node, ...props }: MDProps<"li">) => {
-        const lineNumber = (props as any)["data-line-element"];
+        const lineNumber = props["data-line-element"];
         return (
           <li
             className={`relative text-gray-90 ${lineNumber ? "cursor-pointer" : ""} ${lineNumber && commentsByLine.has(lineNumber) ? "pr-8" : ""}`}
@@ -1267,8 +1274,11 @@ export function InlineCommentableMarkdown({
         );
       },
       pre: ({ children, node: _node, ...props }: MDProps<"pre">) => {
-        const lineNumber = (props as any)["data-line-element"];
-        const childProps = (children as any)?.props;
+        const lineNumber = props["data-line-element"];
+        const codeChild = children as
+          | React.ReactElement<{ className?: string; children?: unknown }>
+          | undefined;
+        const childProps = codeChild?.props;
         const isMermaid = childProps?.className?.includes("language-mermaid");
         if (isMermaid) {
           const chart = String(childProps?.children ?? "").trim();
@@ -1308,7 +1318,7 @@ export function InlineCommentableMarkdown({
         node: _node,
         ...props
       }: MDProps<"blockquote">) => {
-        const lineNumber = (props as any)["data-line-element"];
+        const lineNumber = props["data-line-element"];
         return (
           <blockquote
             className={`relative my-4 border-l-2 border-l-magenta bg-gray-5 py-2 pl-4 pr-4 italic text-gray-70 ${lineNumber ? "cursor-pointer" : ""}`}
@@ -1325,7 +1335,7 @@ export function InlineCommentableMarkdown({
         );
       },
       table: ({ children, node: _node, ...props }: MDProps<"table">) => {
-        const { "data-line-element": _stripped, ...rest } = props as any;
+        const { "data-line-element": _stripped, ...rest } = props;
         return (
           <div className="my-4 overflow-x-auto">
             <table
@@ -1348,7 +1358,7 @@ export function InlineCommentableMarkdown({
         </tbody>
       ),
       tr: ({ children, node: _node, ...props }: MDProps<"tr">) => {
-        const lineNumber = (props as any)["data-line-element"];
+        const lineNumber = props["data-line-element"];
         return (
           <tr
             className={`border-gray-20 ${lineNumber ? "cursor-pointer" : ""}`}
@@ -1439,7 +1449,7 @@ export function InlineCommentableMarkdown({
       />
       <div
         ref={markdownRef}
-        className="prose prose-zinc max-w-none flex-1 min-w-0 overflow-x-auto relative"
+        className="prose prose-zinc max-w-none flex-1 min-w-0 overflow-x-auto relative [&>*:first-child]:mt-0 [&>*:first-child]:pt-0 [&>*:last-child]:mb-0 [&>*:last-child]:pb-0"
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleTextSelection}

@@ -6,6 +6,7 @@ import { DiscussWithAgentButton } from "@/components/DiscussWithAgentButton";
 import type { ReviewerItem } from "@/components/EditableReviewers";
 import { GeneralCommentsSection } from "@/components/GeneralCommentsSection";
 import { InlineCommentableMarkdown } from "@/components/InlineCommentableMarkdown";
+import { PencilIcon } from "@/components/icons/PencilIcon";
 import { MarkdownRawView } from "@/components/MarkdownRawView";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import { RelativeTime } from "@/components/RelativeTime";
@@ -347,6 +348,15 @@ export default function RFCDetailClient({
     acceptBodyDraft();
   }
 
+  function handleDiscardEdit() {
+    if (editingBody == null || !rfc) return;
+    const dirty = editingBody !== rfc.markdownContent;
+    if (dirty && !window.confirm("Discard your unsaved edits to this RFC?")) {
+      return;
+    }
+    exitBodyEdit({ clearDraft: true });
+  }
+
   async function resetAndRefresh() {
     clearBodyDraft();
     setEditingBody(null);
@@ -590,6 +600,17 @@ export default function RFCDetailClient({
                 onClick={enterBodyEdit}
                 className="inline-flex items-center gap-1.5 rounded-md border border-gray-30 bg-surface px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-gray-5 cursor-pointer"
               >
+                <PencilIcon className="h-3.5 w-3.5" />
+                Edit
+              </button>
+            )}
+            {editingBody != null && (
+              <button
+                type="button"
+                onClick={handleDiscardEdit}
+                disabled={savingBody}
+                className="inline-flex items-center gap-1.5 rounded-md border border-gray-30 bg-surface px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-gray-5 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+              >
                 <svg
                   className="h-3.5 w-3.5"
                   fill="none"
@@ -597,15 +618,15 @@ export default function RFCDetailClient({
                   viewBox="0 0 24 24"
                   aria-hidden
                 >
-                  <title>Pencil</title>
+                  <title>Cross</title>
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth={2}
-                    d="M15.232 5.232l3.536 3.536M16.732 3.732a2.5 2.5 0 113.536 3.536L7.5 20.036H4v-3.536L16.732 3.732z"
+                    d="M6 6l12 12M6 18L18 6"
                   />
                 </svg>
-                Edit
+                Discard changes
               </button>
             )}
           </div>
@@ -657,16 +678,6 @@ export default function RFCDetailClient({
             onCommitMessageChange={setCommitMessage}
             saving={savingBody}
             onSave={handleSaveBody}
-            onCancel={() => {
-              const dirty = editingBody !== rfc.markdownContent;
-              if (
-                dirty &&
-                !window.confirm("Discard your unsaved edits to this RFC?")
-              ) {
-                return;
-              }
-              exitBodyEdit({ clearDraft: true });
-            }}
             disabled={editingBody === rfc.markdownContent}
             conflict={bodyConflict}
             onResetAndRefresh={resetAndRefresh}
@@ -717,7 +728,6 @@ interface BodyEditModeProps {
   onCommitMessageChange: (next: string) => void;
   saving: boolean;
   onSave: () => void;
-  onCancel: () => void;
   /** True when there's nothing to save (body matches what's on GitHub). */
   disabled: boolean;
   /** Last save attempt hit a SHA mismatch (someone else pushed first). */
@@ -736,7 +746,6 @@ function BodyEditMode({
   onCommitMessageChange,
   saving,
   onSave,
-  onCancel,
   disabled,
   conflict,
   onResetAndRefresh,
@@ -813,27 +822,17 @@ function BodyEditMode({
             type="text"
             value={commitMessage}
             onChange={(e) => onCommitMessageChange(e.target.value)}
-            placeholder="Update RFC"
+            placeholder="What's changed?"
             className="w-full rounded-sm border border-gray-30 bg-surface px-3 py-2 text-sm text-foreground hover:border-gray-40 focus:outline-none focus:ring-2 focus:ring-cyan focus:border-transparent transition-colors"
           />
         </label>
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={saving}
-            className="rounded-md border border-gray-20 bg-surface px-4 py-2 text-sm font-medium text-foreground transition-all hover:bg-gray-5 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
-          >
-            Discard changes
-          </button>
-          <SaveButton
-            disabled={disabled}
-            saving={saving}
-            conflict={conflict}
-            commitMessage={commitMessage}
-            onSave={onSave}
-          />
-        </div>
+        <SaveButton
+          disabled={disabled}
+          saving={saving}
+          conflict={conflict}
+          commitMessage={commitMessage}
+          onSave={onSave}
+        />
       </div>
     </div>
   );
@@ -872,8 +871,23 @@ function SaveButton({
       type="button"
       onClick={onSave}
       disabled={isDisabled}
-      className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-surface transition-all hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-30 cursor-pointer"
+      className="inline-flex items-center gap-1.5 rounded-md bg-foreground px-4 py-2 text-sm font-medium text-surface transition-all hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-30 cursor-pointer"
     >
+      <svg
+        className="h-3.5 w-3.5"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        aria-hidden
+      >
+        <title>Check</title>
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M5 13l4 4L19 7"
+        />
+      </svg>
       {saving ? "Saving…" : "Save"}
     </button>
   );
@@ -957,7 +971,7 @@ function DiffView({ entries }: DiffViewProps) {
   if (entries.every((e) => e.kind === "context")) {
     return (
       <p className="text-sm text-gray-50">
-        No changes — your edit matches the saved revision.
+        No changes. Your version matches the saved revision.
       </p>
     );
   }
@@ -989,10 +1003,10 @@ function DiffView({ entries }: DiffViewProps) {
           <div
             // biome-ignore lint/suspicious/noArrayIndexKey: diff blocks have no stable identity; the list re-renders on every edit
             key={idx}
-            className={`relative rounded-sm border-l-2 pl-3 pr-2 py-1 ${
+            className={`relative rounded-sm pl-3 pr-2 py-1 before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-0.5 ${
               isAdded
-                ? "border-l-green-400 bg-green-50"
-                : "border-l-red-400 bg-red-50 line-through decoration-red-400/70 [&_*]:decoration-red-400/70"
+                ? "bg-green-50 before:bg-green-400"
+                : "bg-red-50 line-through decoration-red-400/70 [&_*]:decoration-red-400/70 before:bg-red-400"
             }`}
           >
             <span

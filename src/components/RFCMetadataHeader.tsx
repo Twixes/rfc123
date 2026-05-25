@@ -5,6 +5,7 @@ import {
   EditableReviewers,
   type ReviewerItem,
 } from "@/components/EditableReviewers";
+import { PencilIcon } from "@/components/icons/PencilIcon";
 import { ProfilePictures } from "@/components/ProfilePictures";
 import { RelativeTime } from "@/components/RelativeTime";
 import { RFCStatusPill, type RfcStateAction } from "@/components/RFCStatusPill";
@@ -61,18 +62,12 @@ export function RFCMetadataHeader({
 
   return (
     <section className="mb-6">
-      {/* Eyebrow row: small caps status + RFC number, right-aligned outbound link */}
+      {/* Eyebrow row: RFC number, right-aligned outbound link */}
       <div className="mb-6 flex items-center gap-3">
         <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-gray-50">
           RFC #{rfc.number}
         </span>
         <span className="h-px flex-1 bg-gray-20" />
-        <RFCStatusPill
-          rfc={rfc}
-          isAuthor={isAuthor}
-          busy={!!authorControls && authorControls.busyStateAction !== null}
-          onAction={(action) => authorControls?.onStateAction(action)}
-        />
         {rfc.reviewRequested && (
           <span className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.18em] text-magenta">
             <span
@@ -134,6 +129,20 @@ export function RFCMetadataHeader({
               className="h-5 w-5 rounded-full border border-gray-20"
             />
             <span className="font-medium text-foreground">{rfc.author}</span>
+          </dd>
+        </div>
+
+        <span className="h-3 w-px bg-gray-20" aria-hidden />
+
+        <div className="flex items-center gap-2">
+          <dt className="text-gray-50">Status</dt>
+          <dd>
+            <RFCStatusPill
+              rfc={rfc}
+              isAuthor={isAuthor}
+              busy={!!authorControls && authorControls.busyStateAction !== null}
+              onAction={(action) => authorControls?.onStateAction(action)}
+            />
           </dd>
         </div>
 
@@ -250,12 +259,7 @@ function EditableRfcTitle({ value, onSave }: EditableRfcTitleProps) {
         className="group max-w-3xl text-left text-balance text-3xl sm:text-5xl font-serif font-normal leading-[1.05] tracking-tight text-foreground transition-colors hover:text-foreground/80 cursor-pointer"
       >
         {value}
-        <span
-          aria-hidden
-          className="ml-2 align-middle text-xs uppercase tracking-[0.18em] text-gray-50 opacity-0 transition-opacity group-hover:opacity-100"
-        >
-          Edit
-        </span>
+        <PencilIcon className="ml-2 inline-block h-4 w-4 align-middle text-gray-50 opacity-0 transition-opacity group-hover:opacity-100" />
       </button>
     );
   }

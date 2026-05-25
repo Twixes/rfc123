@@ -67,9 +67,9 @@ export function RFCStatusPill({
 
   if (!interactive) {
     return (
-      <span className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.18em] text-gray-70">
+      <span className="inline-flex items-center gap-1.5 text-sm text-foreground">
         <span
-          className={`inline-block h-1.5 w-1.5 rounded-full ${state.dot}`}
+          className={`inline-block h-2 w-2 rounded-full ${state.dot}`}
           aria-hidden
         />
         {state.label}
@@ -81,15 +81,15 @@ export function RFCStatusPill({
     <Menu as="div" className="relative flex">
       <MenuButton
         disabled={busy}
-        className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.18em] text-gray-70 hover:text-foreground transition-colors cursor-pointer disabled:cursor-wait disabled:opacity-60"
+        className="inline-flex items-center gap-1.5 rounded-sm border border-gray-20 bg-surface px-2 py-0.5 text-sm text-foreground transition-colors hover:bg-gray-5 hover:border-gray-30 cursor-pointer disabled:cursor-wait disabled:opacity-60"
       >
         <span
-          className={`inline-block h-1.5 w-1.5 rounded-full ${state.dot}`}
+          className={`inline-block h-2 w-2 rounded-full ${state.dot}`}
           aria-hidden
         />
         {busy ? "Updating…" : state.label}
         <svg
-          className="h-2.5 w-2.5 -mr-0.5 text-gray-50"
+          className="h-3 w-3 -mr-0.5 text-gray-50"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"

@@ -7,7 +7,10 @@ import { RelativeTime } from "@/components/RelativeTime";
 import RepoSelector from "@/components/RepoSelector";
 import RFCListSkeleton from "@/components/RFCListSkeleton";
 import RFCsTopBar from "@/components/RFCsTopBar";
-import RFCsTopBarActions, { newRfcHref } from "@/components/RFCsTopBarActions";
+import RFCsTopBarActions, {
+  NewRfcPlusIcon,
+  newRfcHref,
+} from "@/components/RFCsTopBarActions";
 import type { RepoOption, RFC } from "@/lib/github";
 import {
   ALL_STATUSES,
@@ -64,18 +67,38 @@ export default function RFCsPageClient({
   // One pass over `rfcs` derives every grouping the layout needs:
   // filter-respecting buckets for rendering and unfiltered totals for
   // empty-state copy ("N hidden by filters" vs first-time nudge).
-  const { mineRfcs, othersRfcs, totalMine, hasAnyOthers } = useMemo(() => {
+  const {
+    mineRfcs,
+    reviewRequestedRfcs,
+    othersUpForReviewRfcs,
+    totalMine,
+    hasAnyReviewRequested,
+    hasAnyOthersUpForReview,
+  } = useMemo(() => {
     const mineRfcs: RFC[] = [];
-    const othersRfcs: RFC[] = [];
+    const reviewRequestedRfcs: RFC[] = [];
+    const othersUpForReviewRfcs: RFC[] = [];
     let totalMine = 0;
-    let hasAnyOthers = false;
+    let hasAnyReviewRequested = false;
+    let hasAnyOthersUpForReview = false;
     for (const rfc of rfcs ?? []) {
       const isMine = !!viewerLogin && rfc.author === viewerLogin;
-      if (isMine) totalMine++;
-      else hasAnyOthers = true;
+      if (isMine) {
+        totalMine++;
+      } else if (rfc.reviewRequested) {
+        hasAnyReviewRequested = true;
+      } else {
+        hasAnyOthersUpForReview = true;
+      }
       if (!selectedStatuses.has(rfc.status)) continue;
       if (selectedAuthor && rfc.author !== selectedAuthor) continue;
-      (isMine ? mineRfcs : othersRfcs).push(rfc);
+      if (isMine) {
+        mineRfcs.push(rfc);
+      } else if (rfc.reviewRequested) {
+        reviewRequestedRfcs.push(rfc);
+      } else {
+        othersUpForReviewRfcs.push(rfc);
+      }
     }
     // Author-centric ordering for "My proposals": surface RFCs that need
     // attention first, then in-progress drafts, then terminal states. Tie-
@@ -87,10 +110,26 @@ export default function RFCsPageClient({
       if (ra !== rb) return ra - rb;
       return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
     });
-    return { mineRfcs, othersRfcs, totalMine, hasAnyOthers };
+    const byRecentActivity = (a: RFC, b: RFC) =>
+      new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    reviewRequestedRfcs.sort(byRecentActivity);
+    othersUpForReviewRfcs.sort(byRecentActivity);
+    return {
+      mineRfcs,
+      reviewRequestedRfcs,
+      othersUpForReviewRfcs,
+      totalMine,
+      hasAnyReviewRequested,
+      hasAnyOthersUpForReview,
+    };
   }, [rfcs, viewerLogin, selectedStatuses, selectedAuthor]);
 
-  const filteredCount = mineRfcs.length + othersRfcs.length;
+  const filteredCount =
+    mineRfcs.length + reviewRequestedRfcs.length + othersUpForReviewRfcs.length;
+  const onlyOpenStatusFilter =
+    selectedStatuses.size === 1 &&
+    selectedStatuses.has("open") &&
+    !selectedAuthor;
 
   function clearFilters() {
     setSelectedStatuses(new Set(ALL_STATUSES));
@@ -452,15 +491,24 @@ export default function RFCsPageClient({
                 <MyProposalsEmpty
                   selectedRepo={selectedRepo}
                   hiddenByFilters={totalMine - mineRfcs.length}
+                  onlyOpenStatusFilter={onlyOpenStatusFilter}
                   onClearFilters={clearFilters}
                 />
               }
             />
           )}
-          {hasAnyOthers && (
+          {hasAnyReviewRequested && (
             <RFCSection
-              title="Up for review"
-              rfcs={othersRfcs}
+              title="My review requested"
+              rfcs={reviewRequestedRfcs}
+              variant="review-requested"
+              emptyState={<HiddenByFilters onClearFilters={clearFilters} />}
+            />
+          )}
+          {hasAnyOthersUpForReview && (
+            <RFCSection
+              title="All up for review"
+              rfcs={othersUpForReviewRfcs}
               variant="others"
               emptyState={<HiddenByFilters onClearFilters={clearFilters} />}
             />
@@ -487,8 +535,9 @@ function EmptyRFCsState({ selectedRepo }: { selectedRepo: RepoOption | null }) {
       <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
         <Link
           href={newRfcHref(selectedRepo)}
-          className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-surface transition-all hover:opacity-80 cursor-pointer"
+          className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-surface transition-all hover:opacity-80 cursor-pointer flex items-center gap-1.5"
         >
+          <NewRfcPlusIcon />
           Start an RFC
         </Link>
       </div>
@@ -499,14 +548,17 @@ function EmptyRFCsState({ selectedRepo }: { selectedRepo: RepoOption | null }) {
 function MyProposalsEmpty({
   selectedRepo,
   hiddenByFilters,
+  onlyOpenStatusFilter,
   onClearFilters,
 }: {
   selectedRepo: RepoOption | null;
   hiddenByFilters: number;
+  onlyOpenStatusFilter: boolean;
   onClearFilters: () => void;
 }) {
-  const headline =
-    hiddenByFilters > 0
+  const headline = onlyOpenStatusFilter
+    ? "You don't have any RFCs in progress right now."
+    : hiddenByFilters > 0
       ? "Nothing matches the current filters."
       : "You haven't started an RFC yet.";
   return (
@@ -515,11 +567,12 @@ function MyProposalsEmpty({
       <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
         <Link
           href={newRfcHref(selectedRepo)}
-          className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-surface transition-all hover:opacity-80 cursor-pointer"
+          className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-surface transition-all hover:opacity-80 cursor-pointer flex items-center gap-1.5"
         >
+          <NewRfcPlusIcon />
           Start an RFC
         </Link>
-        {hiddenByFilters > 0 && (
+        {hiddenByFilters > 0 && !onlyOpenStatusFilter && (
           <button
             type="button"
             onClick={onClearFilters}
@@ -559,7 +612,7 @@ function RFCSection({
 }: {
   title: string;
   rfcs: RFC[];
-  variant: "mine" | "others";
+  variant: "mine" | "review-requested" | "others";
   emptyState?: React.ReactNode;
 }) {
   return (
@@ -607,7 +660,7 @@ function RFCRow({
 }: {
   rfc: RFC;
   isFirst: boolean;
-  variant: "mine" | "others";
+  variant: "mine" | "review-requested" | "others";
 }) {
   const myState = variant === "mine" ? myProposalState(rfc) : null;
   return (
@@ -631,11 +684,6 @@ function RFCRow({
               <h2 className="text-3xl font-medium text-foreground break-words font-serif">
                 {rfc.title}
               </h2>
-              {rfc.reviewRequested && (
-                <span className="border border-magenta bg-magenta-light text-foreground rounded-sm px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium uppercase tracking-wider flex-shrink-0">
-                  My review requested
-                </span>
-              )}
               <span
                 className={`border rounded-sm px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium uppercase tracking-wider flex-shrink-0 text-foreground ${
                   myState?.classes ?? STATUS_PILL_CLASSES[rfc.status]

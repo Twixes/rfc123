@@ -1200,7 +1200,8 @@ async function assertAuthor(
     octokit.rest.pulls.get({ owner, repo, pull_number: prNumber }),
     getCurrentUserLogin(accessToken),
   ]);
-  if (pr.user?.login !== viewerLogin) throw new ForbiddenError();
+  if (pr.user?.login?.toLowerCase() !== viewerLogin.toLowerCase())
+    throw new ForbiddenError();
   return { octokit, pr };
 }
 

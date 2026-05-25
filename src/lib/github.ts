@@ -2484,7 +2484,7 @@ export type AdoptRfcRepoResult =
 const ADOPT_COMMIT_MESSAGE = "Add .rfc123.json";
 const ADOPT_PR_TITLE = "Add .rfc123.json";
 const ADOPT_PR_BODY =
-  "Adopting this repo on [RFC123](https://rfc123.com) – the file at the root tells RFC123 where new RFCs should land.\n\nMerge this PR and the repo will show up in RFC123 automatically.";
+  "Adopting this repo on [RFC123](https://rfc123.com). `.rfc123.json` is the marker, as well as the configuration file.\n\nMerge this PR and the repo will show up in RFC123 automatically.";
 const ADOPT_BRANCH_PREFIX = "rfc123/add-config";
 
 /**

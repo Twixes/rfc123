@@ -9,21 +9,12 @@ import RFCListSkeleton from "@/components/RFCListSkeleton";
 import RFCsTopBar from "@/components/RFCsTopBar";
 import RFCsTopBarActions, { newRfcHref } from "@/components/RFCsTopBarActions";
 import type { RepoOption, RFC } from "@/lib/github";
+import {
+  ALL_STATUSES,
+  STATUS_BORDER_CLASSES,
+  STATUS_PILL_CLASSES,
+} from "@/lib/rfc-status";
 import { slugify } from "@/lib/slugify";
-
-const ALL_STATUSES: ReadonlyArray<RFC["status"]> = ["open", "merged", "closed"];
-
-const STATUS_PILL_CLASSES: Record<RFC["status"], string> = {
-  open: "border-cyan bg-cyan-light",
-  merged: "border-magenta bg-magenta-light",
-  closed: "border-gray-30 bg-gray-5",
-};
-
-const STATUS_BORDER_CLASSES: Record<RFC["status"], string> = {
-  open: "border-cyan",
-  merged: "border-magenta",
-  closed: "border-gray-30",
-};
 
 interface RFCsPageClientProps {
   session: {
@@ -295,161 +286,153 @@ export default function RFCsPageClient({
         </div>
       )}
 
-      {!isLoading && rfcs && (
+      {(isLoading || (rfcs && rfcs.length > 0)) && (
         <div className="mb-6 flex flex-wrap items-center gap-3">
-          {rfcs.length > 0 && (
-            <>
-              <div className="flex items-center gap-1.5">
-                {ALL_STATUSES.map((status) => {
-                  const isSelected = selectedStatuses.has(status);
-                  const colorClasses = isSelected
-                    ? STATUS_PILL_CLASSES[status]
-                    : `bg-transparent opacity-40 hover:opacity-70 ${STATUS_BORDER_CLASSES[status]}`;
-                  return (
-                    <button
-                      key={status}
-                      type="button"
-                      onClick={() => toggleStatus(status)}
-                      className={`border rounded-sm px-2 py-1 text-xs font-medium uppercase tracking-wider transition-all cursor-pointer text-foreground ${colorClasses}`}
-                    >
-                      {status}
-                    </button>
-                  );
-                })}
-              </div>
+          <div className="flex items-center gap-1.5">
+            {ALL_STATUSES.map((status) => {
+              const isSelected = selectedStatuses.has(status);
+              const colorClasses = isSelected
+                ? STATUS_PILL_CLASSES[status]
+                : `bg-transparent opacity-40 hover:opacity-70 ${STATUS_BORDER_CLASSES[status]}`;
+              return (
+                <button
+                  key={status}
+                  type="button"
+                  onClick={() => toggleStatus(status)}
+                  className={`border rounded-sm px-2 py-1 text-xs font-medium uppercase tracking-wider transition-all cursor-pointer text-foreground ${colorClasses}`}
+                >
+                  {status}
+                </button>
+              );
+            })}
+          </div>
 
-              <div className="h-5 w-px bg-gray-20" />
-            </>
-          )}
+          <div className="h-5 w-px bg-gray-20" />
 
           {repoSelectorElement}
 
-          {rfcs.length > 0 && (
-            <>
-              <div className="relative" ref={authorDropdownRef}>
-                <button
-                  type="button"
-                  onClick={() => setAuthorDropdownOpen(!authorDropdownOpen)}
-                  className="text-sm text-gray-50 hover:text-foreground transition-colors flex items-center gap-2"
-                >
-                  {selectedAuthor ? (
-                    <span className="flex items-center gap-1.5">
-                      <img
-                        src={
-                          authors.find((a) => a.login === selectedAuthor)
-                            ?.avatar
-                        }
-                        alt={selectedAuthor}
-                        className="h-4 w-4 rounded-full border border-gray-20"
-                      />
-                      {selectedAuthor}
-                    </span>
-                  ) : (
-                    "All authors"
-                  )}
-                  <svg
-                    aria-hidden
-                    className={`w-4 h-4 transition-transform ${authorDropdownOpen ? "rotate-180" : ""}`}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <title>Toggle</title>
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M19 9l-7 7-7-7"
-                    />
-                  </svg>
-                </button>
+          <div className="relative" ref={authorDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setAuthorDropdownOpen(!authorDropdownOpen)}
+              disabled={isLoading}
+              className="text-sm text-gray-50 hover:text-foreground transition-colors flex items-center gap-2 disabled:opacity-50 disabled:hover:text-gray-50 disabled:cursor-default"
+            >
+              {selectedAuthor ? (
+                <span className="flex items-center gap-1.5">
+                  <img
+                    src={
+                      authors.find((a) => a.login === selectedAuthor)?.avatar
+                    }
+                    alt={selectedAuthor}
+                    className="h-4 w-4 rounded-full border border-gray-20"
+                  />
+                  {selectedAuthor}
+                </span>
+              ) : (
+                "All authors"
+              )}
+              <svg
+                aria-hidden
+                className={`w-4 h-4 transition-transform ${authorDropdownOpen ? "rotate-180" : ""}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <title>Toggle</title>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
+              </svg>
+            </button>
 
-                <AnimatePresence>
-                  {authorDropdownOpen && (
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.95 }}
-                      transition={{ duration: 0.15 }}
-                      className="absolute top-full left-0 mt-2 w-64 bg-surface border border-gray-20 rounded-md z-50"
+            <AnimatePresence>
+              {authorDropdownOpen && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute top-full left-0 mt-2 w-64 bg-surface border border-gray-20 rounded-md z-50"
+                >
+                  {authors.length > 5 && (
+                    <div className="p-3 border-b border-gray-20">
+                      <input
+                        ref={authorInputRef}
+                        type="text"
+                        placeholder="Search authors..."
+                        value={authorSearchQuery}
+                        onChange={(e) => setAuthorSearchQuery(e.target.value)}
+                        className="w-full border border-gray-30 rounded-sm px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan focus:border-transparent"
+                      />
+                    </div>
+                  )}
+                  <div className="max-h-64 overflow-y-auto">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedAuthor(null);
+                        setAuthorDropdownOpen(false);
+                        setAuthorSearchQuery("");
+                      }}
+                      className={`w-full text-left px-4 py-2.5 text-sm border-b border-gray-20 hover:bg-yellow-light transition-colors ${
+                        !selectedAuthor ? "bg-gray-5 font-medium" : ""
+                      }`}
                     >
-                      {authors.length > 5 && (
-                        <div className="p-3 border-b border-gray-20">
-                          <input
-                            ref={authorInputRef}
-                            type="text"
-                            placeholder="Search authors..."
-                            value={authorSearchQuery}
-                            onChange={(e) =>
-                              setAuthorSearchQuery(e.target.value)
-                            }
-                            className="w-full border border-gray-30 rounded-sm px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan focus:border-transparent"
-                          />
-                        </div>
-                      )}
-                      <div className="max-h-64 overflow-y-auto">
+                      All authors
+                    </button>
+                    {authors
+                      .filter((a) =>
+                        a.login
+                          .toLowerCase()
+                          .includes(authorSearchQuery.toLowerCase()),
+                      )
+                      .map((author) => (
                         <button
+                          key={author.login}
                           type="button"
                           onClick={() => {
-                            setSelectedAuthor(null);
+                            setSelectedAuthor(author.login);
                             setAuthorDropdownOpen(false);
                             setAuthorSearchQuery("");
                           }}
-                          className={`w-full text-left px-4 py-2.5 text-sm border-b border-gray-20 hover:bg-yellow-light transition-colors ${
-                            !selectedAuthor ? "bg-gray-5 font-medium" : ""
+                          className={`w-full text-left px-4 py-2.5 text-sm border-b border-gray-20 last:border-b-0 hover:bg-yellow-light transition-colors flex items-center gap-2 ${
+                            selectedAuthor === author.login
+                              ? "bg-gray-5 font-medium"
+                              : ""
                           }`}
                         >
-                          All authors
+                          <img
+                            src={author.avatar}
+                            alt={author.login}
+                            className="h-5 w-5 rounded-full border border-gray-20"
+                          />
+                          {author.login}
                         </button>
-                        {authors
-                          .filter((a) =>
-                            a.login
-                              .toLowerCase()
-                              .includes(authorSearchQuery.toLowerCase()),
-                          )
-                          .map((author) => (
-                            <button
-                              key={author.login}
-                              type="button"
-                              onClick={() => {
-                                setSelectedAuthor(author.login);
-                                setAuthorDropdownOpen(false);
-                                setAuthorSearchQuery("");
-                              }}
-                              className={`w-full text-left px-4 py-2.5 text-sm border-b border-gray-20 last:border-b-0 hover:bg-yellow-light transition-colors flex items-center gap-2 ${
-                                selectedAuthor === author.login
-                                  ? "bg-gray-5 font-medium"
-                                  : ""
-                              }`}
-                            >
-                              <img
-                                src={author.avatar}
-                                alt={author.login}
-                                className="h-5 w-5 rounded-full border border-gray-20"
-                              />
-                              {author.login}
-                            </button>
-                          ))}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-
-              {selectedAuthor && (
-                <button
-                  type="button"
-                  onClick={() => setSelectedAuthor(null)}
-                  className="text-sm text-gray-50 hover:text-foreground transition-colors"
-                >
-                  (clear)
-                </button>
+                      ))}
+                  </div>
+                </motion.div>
               )}
+            </AnimatePresence>
+          </div>
 
-              <span className="text-xs text-gray-50 ml-auto tabular-nums">
-                {filteredCount} of {rfcs.length}
-              </span>
-            </>
+          {selectedAuthor && (
+            <button
+              type="button"
+              onClick={() => setSelectedAuthor(null)}
+              className="text-sm text-gray-50 hover:text-foreground transition-colors"
+            >
+              (clear)
+            </button>
+          )}
+
+          {!isLoading && rfcs && (
+            <span className="text-xs text-gray-50 ml-auto tabular-nums">
+              {filteredCount} of {rfcs.length}
+            </span>
           )}
         </div>
       )}

@@ -21,6 +21,7 @@ import Tooltip from "@/components/Tooltip";
 import type { RepoOption } from "@/lib/github";
 import {
   defaultRfcConfig,
+  RFC_CONFIG_PATH,
   type RfcConfig,
   rfcFilePath,
   todayYmd,
@@ -370,6 +371,20 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
               onSelect={setSelectedRepo}
               onRepoAdopted={setSelectedRepo}
             />
+            {selectedRepo && repoConfig?.layout === "multi-directory" && (
+              <p className="mt-1.5 text-xs text-gray-50">
+                This is a multi-directory repo per its{" "}
+                <a
+                  href={`https://github.com/${selectedRepo.owner}/${selectedRepo.name}/blob/HEAD/${RFC_CONFIG_PATH}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono text-[11px] underline decoration-gray-20 underline-offset-2 transition-colors hover:text-foreground"
+                >
+                  {RFC_CONFIG_PATH}
+                </a>
+                . Pick a directory below.
+              </p>
+            )}
           </div>
 
           {/* Directory (only for `layout: multi-directory` repos) */}
@@ -383,11 +398,6 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
                 onChange={setTeam}
                 options={repoConfig.teams}
               />
-              <p className="mt-1.5 text-xs text-gray-50">
-                This is a multi-directory repo per its{" "}
-                <code className="font-mono text-[11px]">.rfc123.json</code>.
-                Pick an existing directory or type a new name.
-              </p>
             </div>
           )}
 

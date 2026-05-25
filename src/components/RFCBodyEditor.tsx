@@ -94,10 +94,10 @@ export function RFCBodyEditor({
           rows={rows}
           spellCheck
           placeholder={placeholder}
-          className="block w-full bg-transparent px-5 sm:px-6 py-4 text-sm text-foreground placeholder-gray-50 focus:outline-none font-mono resize-y"
+          className="block w-full bg-transparent p-5 sm:p-6 text-sm text-foreground placeholder-gray-50 focus:outline-none font-mono resize-y"
         />
       ) : (
-        <div className="px-5 sm:px-6 py-4 min-h-[24rem]">
+        <div className="p-5 sm:p-6 min-h-[24rem]">
           {previewSlot ??
             (body.trim() ? (
               <MarkdownRenderer content={body} />

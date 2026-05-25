@@ -18,6 +18,7 @@ export const registerClient = mutation({
     grantTypes: v.array(v.string()),
     responseTypes: v.array(v.string()),
     scope: v.optional(v.string()),
+    verified: v.boolean(),
   },
   handler: async (ctx, args) => {
     requireSecret(args.secret);
@@ -31,6 +32,7 @@ export const registerClient = mutation({
       responseTypes: args.responseTypes,
       scope: args.scope,
       createdAt: Date.now(),
+      verified: args.verified,
     });
   },
 });

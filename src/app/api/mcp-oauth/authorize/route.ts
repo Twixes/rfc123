@@ -58,6 +58,8 @@ export async function GET(request: Request) {
       scope: validated.scope ?? DEFAULT_SCOPE,
       userName: sessionUser?.name ?? sessionUser?.email ?? "your account",
       userAvatar: sessionUser?.image,
+      verified: validated.verified,
+      clientCreatedAt: validated.clientCreatedAt,
       params: {
         response_type: "code",
         client_id: validated.clientId,
@@ -172,6 +174,8 @@ type ValidatedRequest = {
   state: string | null;
   scope: string | undefined;
   codeChallenge: string;
+  verified: boolean;
+  clientCreatedAt: number;
 };
 
 async function validateRequest(
@@ -247,6 +251,10 @@ async function validateRequest(
     state,
     scope,
     codeChallenge,
+    // `verified` is optional on the Convex row to keep legacy clients working;
+    // missing == unverified, which is the safe default.
+    verified: client.verified === true,
+    clientCreatedAt: client.createdAt,
   };
 }
 
@@ -510,6 +518,66 @@ const SHARED_STYLE = `<style>
     outline: 2px solid var(--cyan);
     outline-offset: 2px;
   }
+  /* Unverified-client warning — magenta-tinted callout pinned to the top of
+     the card. Designed to be impossible to miss without being obnoxious. */
+  .warning {
+    border: 1px solid color-mix(in srgb, var(--magenta) 50%, transparent);
+    background: var(--magenta-light);
+    border-radius: 6px;
+    padding: 0.875rem 1rem;
+    margin: 0 0 1.25rem;
+  }
+  .warning-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--magenta);
+    margin: 0 0 0.375rem;
+  }
+  .warning-body {
+    font-size: 0.8125rem;
+    color: var(--gray-70);
+    margin: 0;
+    line-height: 1.55;
+  }
+  .warning-body code {
+    word-break: break-all;
+  }
+  .verified-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--cyan);
+    margin-left: 0.5rem;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  .consent-check {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding: 0.625rem 0.875rem;
+    border: 1px solid var(--gray-20);
+    border-radius: 6px;
+    background: var(--gray-5);
+    font-size: 0.8125rem;
+    color: var(--gray-70);
+    margin: 0 0 1rem;
+    cursor: pointer;
+  }
+  .consent-check input {
+    margin: 0.1875rem 0 0;
+    accent-color: var(--magenta);
+    flex-shrink: 0;
+  }
+  .btn-primary:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
 </style>`;
 
 function consentHtml(input: {
@@ -518,6 +586,8 @@ function consentHtml(input: {
   scope: string;
   userName: string;
   userAvatar?: string;
+  verified: boolean;
+  clientCreatedAt: number;
   params: Record<string, string>;
 }): string {
   const hiddenFields = Object.entries(input.params)
@@ -535,6 +605,52 @@ function consentHtml(input: {
     }
   })();
 
+  // Unverified clients get the full redirect_uri (not just host) so the user
+  // can spot phishing destinations. Verified clients keep the cleaner host-only
+  // display.
+  const redirectDisplay = input.verified
+    ? escapeHtml(redirectHost)
+    : escapeHtml(input.redirectUri);
+
+  const warningBlock = input.verified
+    ? ""
+    : `<div class="warning" role="alert">
+        <p class="warning-title">
+          <span class="dot dot-magenta"></span>
+          Unverified client
+        </p>
+        <p class="warning-body">RFC123 has not reviewed this client. Anyone can register an MCP client and choose its name — there is no guarantee that <strong>${escapeHtml(input.clientName)}</strong> is who they claim to be. Before continuing, confirm that the redirect URL below is one you trust:</p>
+        <p class="warning-body" style="margin-top:0.5rem">↳ <code>${escapeHtml(input.redirectUri)}</code></p>
+        <p class="warning-body" style="margin-top:0.5rem">Registered ${escapeHtml(formatRelativeAge(input.clientCreatedAt))}.</p>
+      </div>`;
+
+  const verifiedBadge = input.verified
+    ? `<span class="verified-badge" title="Verified client">✓ Verified</span>`
+    : "";
+
+  // For unverified clients, require an explicit acknowledgement checkbox before
+  // the Authorize button is usable. Inline script just toggles the disabled
+  // attribute — the server still validates everything on POST.
+  const consentCheck = input.verified
+    ? ""
+    : `<label class="consent-check">
+        <input type="checkbox" id="trust-check">
+        <span>I have verified the redirect URL above and trust this client to act on RFC123 as me.</span>
+      </label>`;
+
+  const authorizeDisabled = input.verified ? "" : "disabled";
+
+  const trustScript = input.verified
+    ? ""
+    : `<script>
+        (function(){
+          var cb = document.getElementById('trust-check');
+          var btn = document.getElementById('authorize-btn');
+          if (!cb || !btn) return;
+          cb.addEventListener('change', function(){ btn.disabled = !cb.checked; });
+        })();
+      </script>`;
+
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -551,8 +667,10 @@ ${SHARED_STYLE}
         <span class="dot dot-cyan"></span>
         Authorize MCP client
       </div>
-      <h1>Let <span class="client">${escapeHtml(input.clientName)}</span> act on RFC123 as you?</h1>
+      <h1>Let <span class="client">${escapeHtml(input.clientName)}</span>${verifiedBadge} act on RFC123 as you?</h1>
       <p class="lede">An agent is asking for permission to use RFC123 on your behalf.</p>
+
+      ${warningBlock}
 
       <div class="who">
         ${input.userAvatar ? `<img src="${escapeHtml(input.userAvatar)}" alt="">` : ""}
@@ -562,25 +680,25 @@ ${SHARED_STYLE}
       <p class="perms-label">What it can do</p>
       <ul class="perms">
         <li>List and read RFCs in repositories you have access to</li>
-        <li>Post comments, replies, and reviews on RFCs</li>
-        <li>Create new RFCs (branches and pull requests)</li>
-        <li>Approve, request changes, merge, close, or reopen RFCs</li>
+        <li>Request or remove reviewers on RFCs</li>
+        <li>Merge an RFC once its preflight checks pass (or with force)</li>
       </ul>
 
-      <p class="footnote">Every comment or RFC body posted via MCP gets a <code>– via ${escapeHtml(input.clientName)} on RFC123</code> footer.</p>
+      <p class="footnote">The MCP server only exposes read and structural actions. Comments and RFC bodies stay human-written — agents cannot post prose on your behalf.</p>
 
       <form method="POST" action="/api/mcp-oauth/authorize">
         ${hiddenFields}
+        ${consentCheck}
         <div class="actions">
           <button type="submit" name="decision" value="deny" class="btn">Decline</button>
-          <button type="submit" name="decision" value="allow" class="btn btn-primary">Authorize</button>
+          <button type="submit" name="decision" value="allow" class="btn btn-primary" id="authorize-btn" ${authorizeDisabled}>Authorize</button>
         </div>
       </form>
 
       <div class="meta">
         <div class="meta-row">
           <span class="meta-label">Redirect to</span>
-          <span class="meta-value">${escapeHtml(redirectHost)}</span>
+          <span class="meta-value">${redirectDisplay}</span>
         </div>
         <div class="meta-row">
           <span class="meta-label">Scope</span>
@@ -589,8 +707,23 @@ ${SHARED_STYLE}
       </div>
     </div>
   </main>
+  ${trustScript}
 </body>
 </html>`;
+}
+
+/** "5 minutes ago", "3 hours ago", "2 days ago", or a plain date for older. */
+function formatRelativeAge(ms: number): string {
+  const diff = Date.now() - ms;
+  if (diff < 0) return "just now";
+  const minutes = Math.floor(diff / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days} day${days === 1 ? "" : "s"} ago`;
+  return new Date(ms).toISOString().slice(0, 10);
 }
 
 function escapeHtml(s: string): string {

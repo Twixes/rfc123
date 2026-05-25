@@ -64,6 +64,12 @@ export default defineSchema({
     responseTypes: v.array(v.string()),
     scope: v.optional(v.string()),
     createdAt: v.number(),
+    // True when every redirect_uri matches a hostname on the Next.js side's
+    // trusted-clients allowlist (`src/lib/mcp-trusted-clients.ts`). Drives the
+    // "unverified client" warning on the consent screen. Optional so legacy
+    // rows registered before this field existed default to unverified
+    // (handled by `getClient` returning `verified ?? false`).
+    verified: v.optional(v.boolean()),
   }).index("by_client_id", ["clientId"]),
 
   // Short-lived authorization codes minted by /authorize and consumed once at

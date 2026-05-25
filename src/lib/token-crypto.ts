@@ -9,7 +9,7 @@ import { CompactEncrypt, compactDecrypt } from "jose";
  *
  * Format: a JWE Compact Serialization with `alg=dir`, `enc=A256GCM`, and a
  * `kid` header set to the active key id. The `kid` slot is what makes key
- * rotation cheap later — register a second key under a new id, start
+ * rotation cheap later – register a second key under a new id, start
  * encrypting with the new one, keep decrypting with both while you sweep old
  * rows. `jose`'s `compactDecrypt` looks up the key via the resolver below.
  *

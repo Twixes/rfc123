@@ -11,7 +11,7 @@ import { defaultSchema, type Schema } from "hast-util-sanitize";
  *  2. **Allow `<input type="checkbox">`** so GFM task list items still render.
  *
  * Everything dangerous (`<script>`, `<iframe>`, `<style>`, `on*` handlers,
- * `javascript:` / `data:` URLs in href/src) is rejected by the default schema —
+ * `javascript:` / `data:` URLs in href/src) is rejected by the default schema –
  * we intentionally do not relax that.
  *
  * Order in the rehype pipeline matters: `rehype-raw` must run first (so the

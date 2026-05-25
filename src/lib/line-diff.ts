@@ -2,7 +2,7 @@
  * Minimal line-level LCS diff. Returns a sequence of context / removed / added
  * lines in document order, suitable for unified-diff style rendering.
  *
- * The classic O(n*m) dynamic-programming variant — good enough for RFC-sized
+ * The classic O(n*m) dynamic-programming variant – good enough for RFC-sized
  * markdown (a few thousand lines at most). For larger inputs swap in Myers,
  * but the current use case (editor preview against the saved revision) is
  * always small.

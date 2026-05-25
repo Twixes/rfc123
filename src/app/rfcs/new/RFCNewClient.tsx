@@ -112,7 +112,7 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
     });
 
   // Pick the initial selected repo from URL params only. The saved-draft repo
-  // is restored alongside the rest of the draft from the banner — auto-picking
+  // is restored alongside the rest of the draft from the banner – auto-picking
   // it here would partially restore the draft before the user opted in.
   useEffect(() => {
     if (selectedRepo) return;

@@ -1422,7 +1422,7 @@ export class ContentConflictError extends Error {
 /**
  * Author-only: commit a new revision of the RFC's markdown file to the PR's
  * head branch. `baseFileSha` is the file SHA the client was viewing when it
- * started editing — if GitHub's current SHA differs, the write is refused with
+ * started editing – if GitHub's current SHA differs, the write is refused with
  * {@link ContentConflictError} instead of clobbering newer work.
  *
  * Returns the new file SHA + the head-branch commit SHA so the client can

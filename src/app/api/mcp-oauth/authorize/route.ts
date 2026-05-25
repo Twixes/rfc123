@@ -518,7 +518,7 @@ const SHARED_STYLE = `<style>
     outline: 2px solid var(--cyan);
     outline-offset: 2px;
   }
-  /* Unverified-client warning — magenta-tinted callout pinned to the top of
+  /* Unverified-client warning – magenta-tinted callout pinned to the top of
      the card. Designed to be impossible to miss without being obnoxious. */
   .warning {
     border: 1px solid color-mix(in srgb, var(--magenta) 50%, transparent);
@@ -619,7 +619,7 @@ function consentHtml(input: {
           <span class="dot dot-magenta"></span>
           Unverified client
         </p>
-        <p class="warning-body">RFC123 has not reviewed this client. Anyone can register an MCP client and choose its name — there is no guarantee that <strong>${escapeHtml(input.clientName)}</strong> is who they claim to be. Before continuing, confirm that the redirect URL below is one you trust:</p>
+        <p class="warning-body">RFC123 has not reviewed this client. Anyone can register an MCP client and choose its name – there is no guarantee that <strong>${escapeHtml(input.clientName)}</strong> is who they claim to be. Before continuing, confirm that the redirect URL below is one you trust:</p>
         <p class="warning-body" style="margin-top:0.5rem">↳ <code>${escapeHtml(input.redirectUri)}</code></p>
         <p class="warning-body" style="margin-top:0.5rem">Registered ${escapeHtml(formatRelativeAge(input.clientCreatedAt))}.</p>
       </div>`;
@@ -630,7 +630,7 @@ function consentHtml(input: {
 
   // For unverified clients, require an explicit acknowledgement checkbox before
   // the Authorize button is usable. Inline script just toggles the disabled
-  // attribute — the server still validates everything on POST.
+  // attribute – the server still validates everything on POST.
   const consentCheck = input.verified
     ? ""
     : `<label class="consent-check">
@@ -684,7 +684,7 @@ ${SHARED_STYLE}
         <li>Merge an RFC once its preflight checks pass (or with force)</li>
       </ul>
 
-      <p class="footnote">The MCP server only exposes read and structural actions. Comments and RFC bodies stay human-written — agents cannot post prose on your behalf.</p>
+      <p class="footnote">The MCP server only exposes read and structural actions. Comments and RFC bodies stay human-written – agents cannot post prose on your behalf.</p>
 
       <form method="POST" action="/api/mcp-oauth/authorize">
         ${hiddenFields}

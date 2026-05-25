@@ -1,5 +1,5 @@
 // biome-ignore-all lint/a11y/useKeyWithClickEvents: every block is a comment anchor; keyboard path is the sidebar
-// biome-ignore-all lint/a11y/noStaticElementInteractions: same — body text, no button role fits
+// biome-ignore-all lint/a11y/noStaticElementInteractions: same – body text, no button role fits
 "use client";
 
 import {

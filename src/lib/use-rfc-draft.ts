@@ -9,7 +9,7 @@ interface UseRfcDraftOptions<T> {
    *  restore banner. Skips no-op snapshots (empty title, untouched template). */
   hasRestorableContent: (draft: T) => boolean;
   /** Current snapshot. Pass `null` to indicate "there is nothing worth saving
-   *  right now" — the hook clears the storage key. */
+   *  right now" – the hook clears the storage key. */
   current: T | null;
   /** Debounce window for writes (default 200ms). */
   debounceMs?: number;

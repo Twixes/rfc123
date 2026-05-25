@@ -72,7 +72,7 @@ export default function RFCDetailClient({
     teamNoAccess?: { team: string; org: string; repo: string };
   } | null>(null);
   /** Non-null when the author is editing the body. The string is the working
-   *  copy of the markdown — `rfc.markdownContent` stays the canonical version
+   *  copy of the markdown – `rfc.markdownContent` stays the canonical version
    *  until a successful save. */
   const [editingBody, setEditingBody] = useState<string | null>(null);
   const [commitMessage, setCommitMessage] = useState("");
@@ -368,7 +368,7 @@ export default function RFCDetailClient({
   async function handleSaveBody() {
     if (editingBody == null || !rfc?.markdownFileSha) return;
     if (editingBody === rfc.markdownContent) {
-      // Nothing changed — just exit. Save shouldn't be reachable here, but
+      // Nothing changed – just exit. Save shouldn't be reachable here, but
       // belt + suspenders.
       exitBodyEdit({ clearDraft: true });
       return;
@@ -574,7 +574,7 @@ export default function RFCDetailClient({
                 onReviewersChange: handleReviewersChange,
                 reviewersSaving,
                 // Title editing only available when the RFC is open and the
-                // body isn't already being edited — the two modes are
+                // body isn't already being edited – the two modes are
                 // mutually exclusive per spec.
                 onTitleSave:
                   rfc.status === "open" && editingBody == null
@@ -716,11 +716,11 @@ export default function RFCDetailClient({
 
 interface BodyEditModeProps {
   body: string;
-  /** The unedited version of the body — used as the "before" side of the diff
+  /** The unedited version of the body – used as the "before" side of the diff
    *  view when the user toggles Preview → Diff. */
   originalBody: string;
   onBodyChange: (next: string) => void;
-  /** Page-level Write/Preview toggle drives the editor — RFCBodyEditor hides
+  /** Page-level Write/Preview toggle drives the editor – RFCBodyEditor hides
    *  its internal tabs when controlled. */
   mode: "write" | "preview";
   onModeChange: (next: "write" | "preview") => void;
@@ -839,7 +839,7 @@ function BodyEditMode({
 }
 
 interface SaveButtonProps {
-  /** True when the body matches what's on GitHub — nothing to save. */
+  /** True when the body matches what's on GitHub – nothing to save. */
   disabled: boolean;
   saving: boolean;
   conflict: boolean;
@@ -860,7 +860,7 @@ function SaveButton({
   const disabledReason: string | null = conflict
     ? "Resolve the conflict before saving."
     : disabled
-      ? "Nothing to save — the body hasn't changed."
+      ? "Nothing to save – the body hasn't changed."
       : commitMessageEmpty
         ? "Write a commit message to save."
         : null;
@@ -905,7 +905,7 @@ function SaveButton({
 interface BodyDraftRestoreBannerProps {
   draft: PersistedBodyDraft;
   /** True when the draft was started against a different file SHA than what
-   *  GitHub currently has — restoring would risk overwriting newer commits. */
+   *  GitHub currently has – restoring would risk overwriting newer commits. */
   stale: boolean;
   onResume: () => void;
   onDiscard: () => void;
@@ -931,7 +931,7 @@ function BodyDraftRestoreBanner({
           <RelativeTime date={draft.lastEditedAt} />.
         </span>{" "}
         {stale
-          ? "The RFC has new commits since then — resuming would overwrite them. Discard recommended."
+          ? "The RFC has new commits since then – resuming would overwrite them. Discard recommended."
           : "Want to resume editing?"}
       </div>
       <div className="flex items-center gap-2 shrink-0">
@@ -963,7 +963,7 @@ interface DiffViewProps {
  *  diff reads as the regular preview, just with red + strikethrough for
  *  removed blocks and a green hairline for added blocks. Some markdown
  *  structure (e.g. a half-removed list) inevitably breaks across block
- *  boundaries — that's acceptable for a preview affordance. */
+ *  boundaries – that's acceptable for a preview affordance. */
 function DiffView({ entries }: DiffViewProps) {
   if (entries.length === 0) {
     return <p className="text-sm text-gray-50">No diff to show yet.</p>;

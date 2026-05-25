@@ -6,7 +6,7 @@ const ALLOWED_HOSTS = new Set([
 ]);
 
 // Hosts GitHub's user-attachment endpoints legitimately redirect to. The first
-// hop carries the user's OAuth token; redirects beyond it MUST NOT — undici's
+// hop carries the user's OAuth token; redirects beyond it MUST NOT – undici's
 // `fetch` does not strip `Authorization` on cross-origin redirects, so we follow
 // manually and re-issue without credentials.
 const REDIRECT_FOLLOW_HOSTS = new Set([
@@ -70,7 +70,7 @@ export async function GET(request: Request) {
   try {
     // First hop: GitHub. Sends the user's token because the attachment URL
     // is access-controlled by GitHub. This MUST NOT follow redirects with the
-    // Authorization header attached — undici does not strip credentials on
+    // Authorization header attached – undici does not strip credentials on
     // cross-origin redirects, and GitHub will 302 to S3 / Azure Blob storage.
     const first = await fetch(targetUrl, {
       headers: { Authorization: `token ${accessToken}` },
@@ -120,7 +120,7 @@ export async function GET(request: Request) {
       "Cache-Control": "private, max-age=3600",
       "X-Content-Type-Options": "nosniff",
     };
-    // Force download for anything browsers would execute when opened in a tab —
+    // Force download for anything browsers would execute when opened in a tab –
     // prevents same-origin XSS via attacker-controlled SVG uploads to GitHub.
     if (isExecutableMime(upstreamType)) {
       headers["Content-Disposition"] = 'attachment; filename="asset"';

@@ -4,7 +4,7 @@
  * outside this list is `verified: false` and gets a prominent warning on the
  * OAuth consent screen.
  *
- * This is intentionally conservative — the cost of falsely treating an
+ * This is intentionally conservative – the cost of falsely treating an
  * attacker-controlled client as verified is one-click account takeover, while
  * the cost of falsely treating a legitimate new client as unverified is one
  * checkbox of user friction. Add entries deliberately, after verifying the

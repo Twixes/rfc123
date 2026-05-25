@@ -3,9 +3,11 @@
 import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import rehypeRaw from "rehype-raw";
+import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
-import { remarkMentions } from "@/lib/remark-mentions";
 import { ClickableImage } from "@/components/ClickableImage";
+import { markdownSanitizeSchema } from "@/lib/markdown-sanitize-schema";
+import { remarkMentions } from "@/lib/remark-mentions";
 
 interface MarkdownRendererProps {
   content: string;
@@ -13,10 +15,14 @@ interface MarkdownRendererProps {
 
 export function MarkdownRenderer({ content }: MarkdownRendererProps) {
   return (
-    <div className="prose prose-zinc max-w-none">
+    <div className="prose prose-zinc max-w-none [&>*:first-child]:mt-0 [&>*:first-child]:pt-0 [&>*:last-child]:mb-0 [&>*:last-child]:pb-0">
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMentions]}
-        rehypePlugins={[rehypeRaw, rehypeHighlight]}
+        rehypePlugins={[
+          rehypeRaw,
+          [rehypeSanitize, markdownSanitizeSchema],
+          rehypeHighlight,
+        ]}
         components={{
           img: ({ src, alt, ...props }) => {
             let proxiedSrc = src;

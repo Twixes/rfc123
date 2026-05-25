@@ -4,9 +4,11 @@ import { memo } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import rehypeRaw from "rehype-raw";
+import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
-import { remarkMentions } from "@/lib/remark-mentions";
 import { ClickableImage } from "@/components/ClickableImage";
+import { markdownSanitizeSchema } from "@/lib/markdown-sanitize-schema";
+import { remarkMentions } from "@/lib/remark-mentions";
 
 interface CommentMarkdownProps {
   content: string;
@@ -19,7 +21,11 @@ export const CommentMarkdown = memo(function CommentMarkdown({
     <div className="text-sm text-gray-90">
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMentions]}
-        rehypePlugins={[rehypeRaw, rehypeHighlight]}
+        rehypePlugins={[
+          rehypeRaw,
+          [rehypeSanitize, markdownSanitizeSchema],
+          rehypeHighlight,
+        ]}
         components={{
           img: ({ src, alt, ...props }) => {
             let proxiedSrc = src;

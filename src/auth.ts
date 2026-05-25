@@ -42,11 +42,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             const { api, convexClient, secretKey } = await import(
               "@/lib/convex"
             );
+            const { encryptToken } = await import("@/lib/token-crypto");
             await convexClient().mutation(api.users.upsertFromGithub, {
               secret: secretKey(),
               githubUserId: ghProfile.id,
               githubLogin: ghProfile.login,
-              githubAccessToken: account.access_token,
+              // Convex only ever sees ciphertext. A Convex breach yields
+              // unusable bytes without the separately-held TOKEN_ENCRYPTION_KEY.
+              githubAccessToken: await encryptToken(account.access_token),
             });
           } catch (e) {
             console.error("[auth] Convex upsert failed:", e);

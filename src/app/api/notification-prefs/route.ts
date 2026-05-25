@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { api, convexClient, secretKey } from "@/lib/convex";
 import { getCurrentUser } from "@/lib/github";
+import { encryptToken } from "@/lib/token-crypto";
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -43,7 +44,7 @@ export async function POST(req: Request) {
     secret: secretKey(),
     githubUserId: ghUser.id,
     githubLogin: ghUser.login,
-    githubAccessToken: accessToken,
+    githubAccessToken: await encryptToken(accessToken),
   });
 
   await convexClient().mutation(api.users.saveNotificationPrefs, {

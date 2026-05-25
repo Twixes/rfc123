@@ -3,6 +3,7 @@ import { createMcpHandler, withMcpAuth } from "mcp-handler";
 import { api, convexClient, secretKey } from "@/lib/convex";
 import { sha256Hex } from "@/lib/mcp-oauth";
 import { type AuthExtra, registerMcpCapabilities } from "@/lib/mcp-server";
+import { decryptToken } from "@/lib/token-crypto";
 
 /**
  * Streamable HTTP MCP endpoint at /mcp. SSE is disabled – we only support the
@@ -74,7 +75,9 @@ const verifyToken = async (
       userId: row.user.userId,
       githubUserId: row.user.githubUserId,
       githubLogin: row.user.githubLogin,
-      githubAccessToken: row.user.githubAccessToken,
+      // Stored as ciphertext in Convex; decrypt here so tool handlers receive
+      // a usable GitHub token. See src/lib/token-crypto.ts.
+      githubAccessToken: await decryptToken(row.user.githubAccessToken),
     };
     return {
       token: bearerToken,

@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import RFCsTopBar from "@/components/RFCsTopBar";
 import { api, convexClient, secretKey } from "@/lib/convex";
 import { getCurrentUser } from "@/lib/github";
+import { encryptToken } from "@/lib/token-crypto";
 import SettingsClient from "./SettingsClient";
 
 export const metadata: Metadata = { title: "Settings" };
@@ -27,7 +28,7 @@ export default async function SettingsPage({
     secret: secretKey(),
     githubUserId: ghUser.id,
     githubLogin: ghUser.login,
-    githubAccessToken: accessToken,
+    githubAccessToken: await encryptToken(accessToken),
   });
 
   const [user, slackLinks] = await Promise.all([

@@ -13,6 +13,7 @@ import {
   listUserTeams,
 } from "@/lib/github";
 import { postMessage } from "@/lib/slack";
+import { decryptToken } from "@/lib/token-crypto";
 
 const TEAM_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -56,9 +57,18 @@ export async function POST(req: Request) {
 type EnabledUser = Awaited<ReturnType<typeof callListEnabledUsers>>[number];
 
 async function callListEnabledUsers() {
-  return await convexClient().query(api.users.listEnabledUsersWithActiveLink, {
-    secret: secretKey(),
-  });
+  const rows = await convexClient().query(
+    api.users.listEnabledUsersWithActiveLink,
+    { secret: secretKey() },
+  );
+  // Convex stores the GitHub OAuth token encrypted at rest; decrypt here so
+  // downstream code can keep treating `githubAccessToken` as a usable token.
+  return await Promise.all(
+    rows.map(async (row) => ({
+      ...row,
+      githubAccessToken: await decryptToken(row.githubAccessToken),
+    })),
+  );
 }
 
 async function processUser(

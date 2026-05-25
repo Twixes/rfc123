@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { auth, getAccessToken } from "@/auth";
-import { api, convexClient, loadViewerUserRow, secretKey } from "@/lib/convex";
+import {
+  api,
+  convexClient,
+  loadOrCreateViewerUserRow,
+  secretKey,
+} from "@/lib/convex";
 import { finalizeAdoptedRepo, getAdoptionPrStatus } from "@/lib/github";
 import { VALID_GITHUB_REPO_NAME } from "@/lib/rfc-config";
 
@@ -21,10 +26,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const userRow = await loadViewerUserRow(accessToken);
-    if (!userRow) {
-      return NextResponse.json({ status: "missing" });
-    }
+    const userRow = await loadOrCreateViewerUserRow(accessToken);
 
     const repoRow = await convexClient().query(api.repos.getForUserRepo, {
       secret: secretKey(),
@@ -33,6 +35,10 @@ export async function GET(request: Request) {
       name,
     });
     if (!repoRow?.pendingAdoption) {
+      // The adopt route always writes the pending row before returning, so
+      // reaching this branch means the row was cleared between writes –
+      // either by `clearAdoption` after the PR merged or by the user
+      // finishing the flow on another device. Either way: treat as adopted.
       return NextResponse.json({ status: "missing" });
     }
 

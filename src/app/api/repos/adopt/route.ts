@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { auth, getAccessToken } from "@/auth";
-import { api, convexClient, loadViewerUserRow, secretKey } from "@/lib/convex";
+import {
+  api,
+  convexClient,
+  loadOrCreateViewerUserRow,
+  secretKey,
+} from "@/lib/convex";
 import { adoptRfcRepo, type RfcLayout } from "@/lib/github";
 import { VALID_GITHUB_REPO_NAME } from "@/lib/rfc-config";
 
@@ -32,35 +37,27 @@ export async function POST(request: Request) {
   try {
     // Adoption and the viewer-row lookup are independent – run them together
     // so the Convex round-trip doesn't extend the request beyond GitHub's
-    // latency floor. Both branches need the row, and `loadViewerUserRow`
-    // never throws on a missing row.
+    // latency floor. Errors from either propagate to the 500 branch below –
+    // surfacing a real failure beats showing the user a phantom pending UI
+    // that the picker can't track.
     const [result, userRow] = await Promise.all([
       adoptRfcRepo({ accessToken, owner, name, layout }),
-      loadViewerUserRow(accessToken).catch((e) => {
-        console.error("Failed to load viewer user row:", e);
-        return null;
-      }),
+      loadOrCreateViewerUserRow(accessToken),
     ]);
 
     if (result.status === "pending") {
-      if (userRow) {
-        try {
-          await convexClient().mutation(api.repos.upsertPendingAdoption, {
-            secret: secretKey(),
-            userId: userRow._id,
-            owner: result.owner,
-            name: result.name,
-            fullName: result.fullName,
-            layout,
-            prNumber: result.pr.number,
-            prUrl: result.pr.url,
-            branchName: result.pr.branchName,
-            defaultBranch: result.pr.defaultBranch,
-          });
-        } catch (e) {
-          console.error("Failed to persist pending adoption:", e);
-        }
-      }
+      await convexClient().mutation(api.repos.upsertPendingAdoption, {
+        secret: secretKey(),
+        userId: userRow._id,
+        owner: result.owner,
+        name: result.name,
+        fullName: result.fullName,
+        layout,
+        prNumber: result.pr.number,
+        prUrl: result.pr.url,
+        branchName: result.pr.branchName,
+        defaultBranch: result.pr.defaultBranch,
+      });
       return NextResponse.json({
         status: "pending",
         owner: result.owner,
@@ -72,17 +69,13 @@ export async function POST(request: Request) {
 
     // `alreadyAdopted` means the file was already on the default branch when
     // we tried – no prior pending row to clear, so skip the Convex hit.
-    if (userRow && !result.alreadyAdopted) {
-      try {
-        await convexClient().mutation(api.repos.clearAdoption, {
-          secret: secretKey(),
-          userId: userRow._id,
-          owner: result.owner,
-          name: result.name,
-        });
-      } catch (e) {
-        console.error("Failed to clear pending adoption:", e);
-      }
+    if (!result.alreadyAdopted) {
+      await convexClient().mutation(api.repos.clearAdoption, {
+        secret: secretKey(),
+        userId: userRow._id,
+        owner: result.owner,
+        name: result.name,
+      });
     }
 
     return NextResponse.json({

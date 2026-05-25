@@ -459,7 +459,7 @@ export default function RFCsPageClient({
           )}
           {hasAnyOthers && (
             <RFCSection
-              title="Up for my review"
+              title="Up for review"
               rfcs={othersRfcs}
               variant="others"
               emptyState={<HiddenByFilters onClearFilters={clearFilters} />}
@@ -623,7 +623,7 @@ function RFCRow({
         href={`/rfcs/${rfc.owner}/${rfc.repo}/${rfc.number}/${slugify(rfc.title)}`}
         className={`group block border-b border-gray-20 px-4 sm:px-6 py-4 sm:py-5 transition-all hover:bg-gray-5 ${
           isFirst ? "border-t border-gray-20" : ""
-        } ${rfc.reviewRequested ? "bg-yellow-light" : ""}`}
+        }`}
       >
         <div className="flex items-start justify-between gap-4 sm:gap-6">
           <div className="flex-1 min-w-0">
@@ -633,7 +633,7 @@ function RFCRow({
               </h2>
               {rfc.reviewRequested && (
                 <span className="border border-magenta bg-magenta-light text-foreground rounded-sm px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium uppercase tracking-wider flex-shrink-0">
-                  Review Requested
+                  My review requested
                 </span>
               )}
               <span

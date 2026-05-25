@@ -1,11 +1,12 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AddExistingRepoModal, {
   type PendingAdoptionInfo,
 } from "@/components/AddExistingRepoModal";
 import type { RepoOption } from "@/lib/github";
+import { useAdoptionStatusPoll } from "@/lib/use-adoption-status-poll";
 
 interface RepoSelectorProps {
   /** The repo to display in the trigger. Pass `null` to show `label`. */
@@ -143,6 +144,36 @@ export default function RepoSelector({
     // dropdown without waiting for a remount.
     refreshRepos();
   }, [refreshRepos]);
+
+  // Watch every pending-adoption row exposed by /api/repos so the dropdown +
+  // RFC list converge automatically once the PR lands – the user doesn't have
+  // to reopen the modal for the status check to fire. /api/repos/adopt/status
+  // invalidates the viewer-repos cache via finalizeAdoptedRepo on merge, so
+  // the refresh below sees the freshly-adopted repo.
+  const pendingRepos = useMemo(
+    () =>
+      (availableRepos ?? [])
+        .filter((r) => r.pendingAdoption)
+        .map((r) => ({
+          owner: r.owner,
+          name: r.name,
+          fullName: r.fullName,
+        })),
+    [availableRepos],
+  );
+  useAdoptionStatusPoll({
+    pending: pendingRepos,
+    onResolved: ({ owner, name, fullName, status }) => {
+      // Drop the pending row immediately so the next tick stops polling it.
+      setAvailableRepos(
+        (prev) => prev?.filter((r) => r.fullName !== fullName) ?? prev,
+      );
+      refreshRepos();
+      if (status === "adopted" || status === "missing") {
+        handleAdopted({ owner, name, fullName });
+      }
+    },
+  });
 
   const triggerLabel = currentRepo
     ? `${currentRepo.owner}/${currentRepo.name}`

@@ -6,13 +6,13 @@ import {
   DialogPanel,
   DialogTitle,
 } from "@headlessui/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { RelativeTime } from "@/components/RelativeTime";
 import type { RfcLayout, WritableRepo } from "@/lib/github";
+import { useAdoptionStatusPoll } from "@/lib/use-adoption-status-poll";
 
 const SEARCH_LIMIT = 20;
 const SEARCH_DEBOUNCE_MS = 200;
-const POLL_INTERVAL_MS = 4000;
 
 export interface PendingAdoptionInfo {
   owner: string;
@@ -131,73 +131,37 @@ export default function AddExistingRepoModal({
     };
   }, [open, search, pending]);
 
-  useEffect(() => {
-    if (!open || !pending) return;
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-
-    const tick = async () => {
-      try {
-        const params = new URLSearchParams({
-          owner: pending.owner,
-          name: pending.name,
-        });
-        const res = await fetch(`/api/repos/adopt/status?${params.toString()}`);
-        if (cancelled) return;
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = (await res.json()) as
-          | { status: "pending" }
-          | { status: "missing" }
-          | {
-              status: "adopted";
-              owner: string;
-              name: string;
-              fullName: string;
-            }
-          | { status: "closed" };
-        if (data.status === "adopted") {
-          onAdopted({
-            owner: data.owner,
-            name: data.name,
-            fullName: data.fullName,
-          });
-          onClose();
-          return;
-        }
-        if (data.status === "closed") {
-          setPending(null);
-          setStatus("error");
-          setErrorMessage(
-            "The adoption PR was closed without merging. Pick a repo to try again.",
-          );
-          return;
-        }
-        if (data.status === "missing") {
-          // Row resolved on another device – treat as adopted.
-          onAdopted({
-            owner: pending.owner,
-            name: pending.name,
-            fullName: pending.fullName,
-          });
-          onClose();
-          return;
-        }
-      } catch (e) {
-        if (cancelled) return;
-        console.error("Failed to poll adoption status", e);
-      } finally {
-        if (!cancelled) timer = setTimeout(tick, POLL_INTERVAL_MS);
+  const pollList = useMemo(
+    () =>
+      pending
+        ? [
+            {
+              owner: pending.owner,
+              name: pending.name,
+              fullName: pending.fullName,
+            },
+          ]
+        : [],
+    [pending],
+  );
+  useAdoptionStatusPoll({
+    pending: pollList,
+    enabled: open,
+    onResolved: ({ owner, name, fullName, status: outcome }) => {
+      if (outcome === "closed") {
+        setPending(null);
+        setStatus("error");
+        setErrorMessage(
+          "The adoption PR was closed without merging. Pick a repo to try again.",
+        );
+        return;
       }
-    };
-
-    // Fire immediately so resumed-from-other-device modals don't sit idle for
-    // a full poll interval before the first status update.
-    tick();
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-    };
-  }, [open, pending, onAdopted, onClose]);
+      // adopted | missing → treat as adopted (missing means another device
+      // already finalized the row).
+      onAdopted({ owner, name, fullName });
+      onClose();
+    },
+  });
 
   async function handleSubmit() {
     if (!selected || status === "submitting") return;
@@ -280,8 +244,8 @@ export default function AddExistingRepoModal({
             {pending ? (
               <p className="mt-1 text-sm text-gray-70">
                 This repo requires changes to land through a pull request, so we
-                opened one for you. The repo will show up in RFC123 as soon as
-                the PR is merged.
+                opened one for you. We'll keep checking, and the repo will pop
+                into RFC123 shortly after the PR is merged.
               </p>
             ) : (
               <p className="mt-1 text-sm text-gray-70">

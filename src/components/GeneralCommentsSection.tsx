@@ -30,7 +30,7 @@ export function GeneralCommentsSection({
     <section className="mt-16">
       <div className="mb-6 flex items-baseline gap-4">
         <h2 className="text-2xl sm:text-3xl font-serif font-normal tracking-tight text-foreground">
-          Conversation
+          General comments
         </h2>
         <span className="h-px flex-1 bg-gray-20" />
         <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-gray-50">
@@ -71,50 +71,50 @@ export function GeneralCommentsSection({
             </motion.li>
           ))}
         </motion.ul>
-      ) : comments.length === 0 ? (
-        <p className="mb-8 text-sm text-gray-50">Be the first to weigh in.</p>
       ) : (
-        <motion.ul
-          className="mb-10 divide-y divide-gray-20"
-          initial="hidden"
-          animate="visible"
-          variants={{
-            visible: { transition: { staggerChildren: 0.04 } },
-            hidden: {},
-          }}
-        >
-          {comments.map((comment) => (
-            <motion.li
-              key={comment.id}
-              id={`comment-${comment.id}`}
-              className={`py-6 transition-colors duration-700 ${
-                highlightedCommentId === comment.id ? "bg-cyan/10" : ""
-              }`}
-              variants={{
-                visible: { opacity: 1, y: 0 },
-                hidden: { opacity: 0, y: 8 },
-              }}
-              transition={{ type: "spring", stiffness: 400, damping: 35 }}
-            >
-              <div className="mb-3 flex items-center gap-2">
-                <img
-                  src={comment.userAvatar}
-                  alt={comment.user}
-                  className="h-6 w-6 rounded-full border border-gray-20"
-                />
-                <span className="text-sm font-medium text-foreground">
-                  {comment.user}
-                </span>
-                <span className="text-gray-30">·</span>
-                <span className="text-xs text-gray-50">
-                  <RelativeTime date={comment.createdAt} />
-                </span>
-                <CommentPermalink commentId={comment.id} />
-              </div>
-              <CommentMarkdown content={comment.body} />
-            </motion.li>
-          ))}
-        </motion.ul>
+        comments.length > 0 && (
+          <motion.ul
+            className="mb-10 divide-y divide-gray-20"
+            initial="hidden"
+            animate="visible"
+            variants={{
+              visible: { transition: { staggerChildren: 0.04 } },
+              hidden: {},
+            }}
+          >
+            {comments.map((comment) => (
+              <motion.li
+                key={comment.id}
+                id={`comment-${comment.id}`}
+                className={`py-6 transition-colors duration-700 ${
+                  highlightedCommentId === comment.id ? "bg-cyan/10" : ""
+                }`}
+                variants={{
+                  visible: { opacity: 1, y: 0 },
+                  hidden: { opacity: 0, y: 8 },
+                }}
+                transition={{ type: "spring", stiffness: 400, damping: 35 }}
+              >
+                <div className="mb-3 flex items-center gap-2">
+                  <img
+                    src={comment.userAvatar}
+                    alt={comment.user}
+                    className="h-6 w-6 rounded-full border border-gray-20"
+                  />
+                  <span className="text-sm font-medium text-foreground">
+                    {comment.user}
+                  </span>
+                  <span className="text-gray-30">·</span>
+                  <span className="text-xs text-gray-50">
+                    <RelativeTime date={comment.createdAt} />
+                  </span>
+                  <CommentPermalink commentId={comment.id} />
+                </div>
+                <CommentMarkdown content={comment.body} />
+              </motion.li>
+            ))}
+          </motion.ul>
+        )
       )}
 
       <CommentBox

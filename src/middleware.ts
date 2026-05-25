@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import NextAuth from "next-auth";
+import authConfig from "@/auth.config";
+
+// Edge-safe auth wrapper. Must NOT import from `@/auth` – that pulls in the
+// full `jwt` callback (Convex + token encryption), which drags `node:crypto`
+// into the Edge bundle and breaks deployment.
+const { auth } = NextAuth(authConfig);
 
 export default auth((req) => {
   const { nextUrl } = req;

@@ -23,6 +23,7 @@
     "@auth/core": "^0.41.0",
     "@headlessui/react": "^2.2.10",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@octokit/plugin-throttling": "^11.0.3",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@upstash/redis": "^1.35.6",
     "@vvo/tzdb": "^6.198.0",

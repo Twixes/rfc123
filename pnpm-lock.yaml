@@ -20,6 +20,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@3.25.76)
+      '@octokit/plugin-throttling':
+        specifier: ^11.0.3
+        version: 11.0.3(@octokit/core@7.0.5)
       '@radix-ui/react-tooltip':
         specifier: ^1.2.8
         version: 1.2.8(@types/react-dom@19.2.2(@types/react@19.2.2))(@types/react@19.2.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
@@ -771,6 +774,9 @@ packages:
   '@octokit/openapi-types@26.0.0':
     resolution: {integrity: sha512-7AtcfKtpo77j7Ts73b4OWhOZHTKo/gGY8bB3bNBQz4H+GRSWqx2yvj8TXRsbdTE0eRmYmXOEY66jM7mJ7LzfsA==}
 
+  '@octokit/openapi-types@27.0.0':
+    resolution: {integrity: sha512-whrdktVs1h6gtR+09+QsNk2+FO+49j6ga1c55YZudfEG+oKJVvJLQi3zkOm5JjiUXAagWK2tI2kTGKJ2Ys7MGA==}
+
   '@octokit/openapi-webhooks-types@12.0.3':
     resolution: {integrity: sha512-90MF5LVHjBedwoHyJsgmaFhEN1uzXyBDRLEBe7jlTYx/fEhPAk3P3DAJsfZwC54m8hAIryosJOL+UuZHB3K3yA==}
 
@@ -798,8 +804,8 @@ packages:
     peerDependencies:
       '@octokit/core': '>=7'
 
-  '@octokit/plugin-throttling@11.0.2':
-    resolution: {integrity: sha512-ntNIig4zZhQVOZF4fG9Wt8QCoz9ehb+xnlUwp74Ic2ANChCk8oKmRwV9zDDCtrvU1aERIOvtng8wsalEX7Jk5Q==}
+  '@octokit/plugin-throttling@11.0.3':
+    resolution: {integrity: sha512-34eE0RkFCKycLl2D2kq7W+LovheM/ex3AwZCYN8udpi6bxsyjZidb2McXs69hZhLmJlDqTSP8cH+jSRpiaijBg==}
     engines: {node: '>= 20'}
     peerDependencies:
       '@octokit/core': ^7.0.0
@@ -814,6 +820,9 @@ packages:
 
   '@octokit/types@15.0.1':
     resolution: {integrity: sha512-sdiirM93IYJ9ODDCBgmRPIboLbSkpLa5i+WLuXH8b8Atg+YMLAyLvDDhNWLV4OYd08tlvYfVm/dw88cqHWtw1Q==}
+
+  '@octokit/types@16.0.0':
+    resolution: {integrity: sha512-sKq+9r1Mm4efXW1FCk7hFSeJo4QKreL/tTbR0rz/qx/r1Oa2VV83LTA/H/MuCOX7uCIJmQVRKBcbmWoySjAnSg==}
 
   '@octokit/webhooks-methods@6.0.0':
     resolution: {integrity: sha512-MFlzzoDJVw/GcbfzVC1RLR36QqkTLUf79vLVO3D+xn7r0QgxnFoLZgtrzxiQErAjFUOdH6fas2KeQJ1yr/qaXQ==}
@@ -3766,6 +3775,8 @@ snapshots:
 
   '@octokit/openapi-types@26.0.0': {}
 
+  '@octokit/openapi-types@27.0.0': {}
+
   '@octokit/openapi-webhooks-types@12.0.3': {}
 
   '@octokit/plugin-paginate-graphql@6.0.0(@octokit/core@7.0.5)':
@@ -3789,10 +3800,10 @@ snapshots:
       '@octokit/types': 15.0.1
       bottleneck: 2.19.5
 
-  '@octokit/plugin-throttling@11.0.2(@octokit/core@7.0.5)':
+  '@octokit/plugin-throttling@11.0.3(@octokit/core@7.0.5)':
     dependencies:
       '@octokit/core': 7.0.5
-      '@octokit/types': 15.0.1
+      '@octokit/types': 16.0.0
       bottleneck: 2.19.5
 
   '@octokit/request-error@7.0.1':
@@ -3810,6 +3821,10 @@ snapshots:
   '@octokit/types@15.0.1':
     dependencies:
       '@octokit/openapi-types': 26.0.0
+
+  '@octokit/types@16.0.0':
+    dependencies:
+      '@octokit/openapi-types': 27.0.0
 
   '@octokit/webhooks-methods@6.0.0': {}
 
@@ -5787,7 +5802,7 @@ snapshots:
       '@octokit/plugin-paginate-rest': 13.2.1(@octokit/core@7.0.5)
       '@octokit/plugin-rest-endpoint-methods': 16.1.1(@octokit/core@7.0.5)
       '@octokit/plugin-retry': 8.0.2(@octokit/core@7.0.5)
-      '@octokit/plugin-throttling': 11.0.2(@octokit/core@7.0.5)
+      '@octokit/plugin-throttling': 11.0.3(@octokit/core@7.0.5)
       '@octokit/request-error': 7.0.1
       '@octokit/types': 15.0.1
       '@octokit/webhooks': 14.1.3

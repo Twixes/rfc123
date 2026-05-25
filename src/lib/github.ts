@@ -1,4 +1,14 @@
-import { Octokit } from "octokit";
+import { throttling } from "@octokit/plugin-throttling";
+import { Octokit as BaseOctokit } from "octokit";
+
+// Augment the bundled Octokit with throttling so GraphQL bursts (e.g. the
+// per-org repo sweep in `listViewerRepos`) back off cleanly on secondary
+// rate limits instead of cascading into hard failures.
+const Octokit = BaseOctokit.plugin(throttling);
+// Re-export the augmented class as a type under the same name so existing
+// `octokit: Octokit` annotations keep working after the plugin call.
+type Octokit = InstanceType<typeof Octokit>;
+
 import {
   deleteCachedData,
   getCachedJsonData,
@@ -204,7 +214,23 @@ export type { CommentThread } from "./comment-threads";
 export { groupIntoThreads } from "./comment-threads";
 
 export async function getOctokit(accessToken: string) {
-  return new Octokit({ auth: accessToken });
+  return new Octokit({
+    auth: accessToken,
+    throttle: {
+      onRateLimit: (retryAfter, options, _octokit, retryCount) => {
+        console.warn(
+          `[octokit] primary rate limit hit on ${options.method} ${options.url}; retrying in ${retryAfter}s (attempt ${retryCount + 1})`,
+        );
+        return retryCount < 2;
+      },
+      onSecondaryRateLimit: (retryAfter, options, _octokit, retryCount) => {
+        console.warn(
+          `[octokit] secondary rate limit on ${options.method} ${options.url}; retrying in ${retryAfter}s (attempt ${retryCount + 1})`,
+        );
+        return retryCount < 2;
+      },
+    },
+  });
 }
 
 /**
@@ -296,7 +322,6 @@ interface RepoNode {
   pushedAt: string | null;
   owner: { login: string; __typename: string };
   defaultBranchRef: { name: string } | null;
-  rfcConfig: { __typename: string } | null;
 }
 
 const REPO_NODE_FIELDS = `
@@ -306,7 +331,6 @@ const REPO_NODE_FIELDS = `
   pushedAt
   owner { login __typename }
   defaultBranchRef { name }
-  rfcConfig: object(expression: "${RFC_CONFIG_HEAD_EXPR}") { __typename }
 `;
 
 function repoNodeToViewerRepo(node: RepoNode): ViewerRepo {
@@ -317,22 +341,67 @@ function repoNodeToViewerRepo(node: RepoNode): ViewerRepo {
     canPush: WRITE_PERMISSIONS.has(node.viewerPermission ?? ""),
     isOrg: node.owner.__typename === "Organization",
     defaultBranch: node.defaultBranchRef?.name ?? null,
-    hasRfcConfig: !!node.rfcConfig,
+    // Populated by the code-search pass in `listViewerRepos`, not here.
+    hasRfcConfig: false,
     pushedAt: node.pushedAt,
   };
 }
 
 /**
+ * Use GitHub code search to find every accessible repo with `.rfc123.json`
+ * at the root of its default branch. Replaces a per-repo `object(expression:
+ * "HEAD:.rfc123.json")` GraphQL probe across every page of every org sweep
+ * with one search round-trip — for a viewer in a 600-repo org this turns
+ * ~7 expensive page fetches into 1 cheap one.
+ *
+ * Code search only indexes the default branch, which is exactly what we want.
+ * There's a short (seconds-to-minutes) indexing lag for fresh commits; the
+ * pending-adoption flow handles that gap independently via Convex.
+ */
+async function findRfcBearingRepos(
+  octokit: Awaited<ReturnType<typeof getOctokit>>,
+): Promise<Set<string>> {
+  const found = new Set<string>();
+  try {
+    // `filename:` matches by basename; we further restrict to root via
+    // `path === RFC_CONFIG_PATH` below. Capped at 1000 results × 100/page = 10
+    // pages, far above any realistic per-viewer footprint.
+    for (let page = 1; page <= 10; page++) {
+      const { data } = await octokit.rest.search.code({
+        q: `filename:${RFC_CONFIG_PATH}`,
+        per_page: 100,
+        page,
+      });
+      for (const item of data.items) {
+        if (item.path === RFC_CONFIG_PATH) {
+          found.add(item.repository.full_name);
+        }
+      }
+      if (data.items.length < 100) break;
+    }
+  } catch (e) {
+    // Code-search outages shouldn't take the picker down – degrade to "no
+    // repos look RFC-bearing" rather than failing the whole sweep. The next
+    // refresh will retry.
+    console.error("[findRfcBearingRepos] code search failed:", e);
+  }
+  return found;
+}
+
+/**
  * Sweeps GitHub for every repo the viewer can see, annotated with push
- * permission and `.rfc123.json` presence. Two passes, merged by `fullName`:
+ * permission and `.rfc123.json` presence. Three passes, merged by `fullName`:
  *
  * 1. `viewer.repositories(affiliations: OWNER|ORGANIZATION_MEMBER|COLLABORATOR)` —
  *    catches personal repos and outside-collaborator repos.
  * 2. `organization(login).repositories` for every org the viewer belongs to —
  *    necessary because the affiliations-based viewer sweep silently omits some
  *    org repos even when the viewer has direct ADMIN/WRITE on them (a known
- *    GitHub quirk). Org sweeps run in parallel; pages within an org are
- *    sequential (cursor-based).
+ *    GitHub quirk). Capped concurrency to keep us under GitHub's secondary
+ *    rate limit; pages within an org are sequential (cursor-based).
+ * 3. Code search for `.rfc123.json` — one cheap request that annotates which
+ *    of the swept repos have the file, instead of paying a per-repo GraphQL
+ *    `object(expression:)` probe on every page.
  */
 async function listViewerRepos(accessToken: string): Promise<ViewerRepo[]> {
   const cached = await getCachedJsonData<ViewerRepo[]>(
@@ -342,20 +411,29 @@ async function listViewerRepos(accessToken: string): Promise<ViewerRepo[]> {
 
   const octokit = await getOctokit(accessToken);
 
-  const [viewerRepos, orgLogins] = await Promise.all([
+  const [viewerRepos, orgLogins, rfcRepoSet] = await Promise.all([
     sweepViewerRepositories(octokit),
     listViewerOrganizations(octokit),
+    findRfcBearingRepos(octokit),
   ]);
-  const orgSweeps = await Promise.all(
-    orgLogins.map((login) => sweepOrgRepositories(octokit, login)),
+  const orgSweeps = await mapWithConcurrency(
+    orgLogins,
+    ORG_SWEEP_CONCURRENCY,
+    (login) => sweepOrgRepositories(octokit, login),
   );
 
   // Merge by `fullName`, preferring entries with push permission so a stale
   // read-only hit from one sweep can't shadow a push-capable hit from another.
   const byKey = new Map<string, ViewerRepo>();
   for (const r of [...viewerRepos, ...orgSweeps.flat()]) {
-    const existing = byKey.get(r.fullName);
-    if (!existing || (r.canPush && !existing.canPush)) byKey.set(r.fullName, r);
+    const annotated: ViewerRepo = {
+      ...r,
+      hasRfcConfig: rfcRepoSet.has(r.fullName),
+    };
+    const existing = byKey.get(annotated.fullName);
+    if (!existing || (annotated.canPush && !existing.canPush)) {
+      byKey.set(annotated.fullName, annotated);
+    }
   }
   const merged = Array.from(byKey.values());
 
@@ -448,6 +526,32 @@ async function listViewerOrganizations(
 /** Safety cap: refuse to walk an org past this many pages so a misbehaving
  *  giant org can't pin the request. 50 pages × 100 repos = 5,000 repos. */
 const MAX_ORG_PAGES = 50;
+
+/** How many org sweeps to run in parallel. GitHub's GraphQL secondary rate
+ *  limit fires on bursty `object(expression:…)` queries, so we cap the
+ *  parallelism rather than rely on the throttle plugin's retry alone. */
+const ORG_SWEEP_CONCURRENCY = 3;
+
+async function mapWithConcurrency<T, U>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<U>,
+): Promise<U[]> {
+  const results = new Array<U>(items.length);
+  let next = 0;
+  const workers = Array.from(
+    { length: Math.min(concurrency, items.length) },
+    async () => {
+      while (true) {
+        const i = next++;
+        if (i >= items.length) return;
+        results[i] = await fn(items[i]);
+      }
+    },
+  );
+  await Promise.all(workers);
+  return results;
+}
 
 async function sweepOrgRepositories(
   octokit: Awaited<ReturnType<typeof getOctokit>>,

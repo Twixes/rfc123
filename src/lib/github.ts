@@ -289,14 +289,50 @@ const WRITE_PERMISSIONS = new Set(["WRITE", "MAINTAIN", "ADMIN"]);
  *  from the default branch's root. */
 const RFC_CONFIG_HEAD_EXPR = `HEAD:${RFC_CONFIG_PATH}`;
 
+interface RepoNode {
+  name: string;
+  nameWithOwner: string;
+  viewerPermission: string | null;
+  pushedAt: string | null;
+  owner: { login: string; __typename: string };
+  defaultBranchRef: { name: string } | null;
+  rfcConfig: { __typename: string } | null;
+}
+
+const REPO_NODE_FIELDS = `
+  name
+  nameWithOwner
+  viewerPermission
+  pushedAt
+  owner { login __typename }
+  defaultBranchRef { name }
+  rfcConfig: object(expression: "${RFC_CONFIG_HEAD_EXPR}") { __typename }
+`;
+
+function repoNodeToViewerRepo(node: RepoNode): ViewerRepo {
+  return {
+    owner: node.owner.login,
+    name: node.name,
+    fullName: node.nameWithOwner,
+    canPush: WRITE_PERMISSIONS.has(node.viewerPermission ?? ""),
+    isOrg: node.owner.__typename === "Organization",
+    defaultBranch: node.defaultBranchRef?.name ?? null,
+    hasRfcConfig: !!node.rfcConfig,
+    pushedAt: node.pushedAt,
+  };
+}
+
 /**
- * One-shot GraphQL sweep of every repo the viewer can see, annotated with
- * push permission and `.rfc123.json` presence. Replaces N×3 REST probes with
- * `ceil(N/100)` GraphQL requests – the difference is night and day for users
- * sitting in orgs with hundreds of repos.
+ * Sweeps GitHub for every repo the viewer can see, annotated with push
+ * permission and `.rfc123.json` presence. Two passes, merged by `fullName`:
  *
- * Pages are walked sequentially because each cursor depends on the previous
- * response; for typical accounts that's 1–3 round-trips total.
+ * 1. `viewer.repositories(affiliations: OWNER|ORGANIZATION_MEMBER|COLLABORATOR)` —
+ *    catches personal repos and outside-collaborator repos.
+ * 2. `organization(login).repositories` for every org the viewer belongs to —
+ *    necessary because the affiliations-based viewer sweep silently omits some
+ *    org repos even when the viewer has direct ADMIN/WRITE on them (a known
+ *    GitHub quirk). Org sweeps run in parallel; pages within an org are
+ *    sequential (cursor-based).
  */
 async function listViewerRepos(accessToken: string): Promise<ViewerRepo[]> {
   const cached = await getCachedJsonData<ViewerRepo[]>(
@@ -305,6 +341,36 @@ async function listViewerRepos(accessToken: string): Promise<ViewerRepo[]> {
   if (cached) return cached;
 
   const octokit = await getOctokit(accessToken);
+
+  const [viewerRepos, orgLogins] = await Promise.all([
+    sweepViewerRepositories(octokit),
+    listViewerOrganizations(octokit),
+  ]);
+  const orgSweeps = await Promise.all(
+    orgLogins.map((login) => sweepOrgRepositories(octokit, login)),
+  );
+
+  // Merge by `fullName`, preferring entries with push permission so a stale
+  // read-only hit from one sweep can't shadow a push-capable hit from another.
+  const byKey = new Map<string, ViewerRepo>();
+  for (const r of [...viewerRepos, ...orgSweeps.flat()]) {
+    const existing = byKey.get(r.fullName);
+    if (!existing || (r.canPush && !existing.canPush)) byKey.set(r.fullName, r);
+  }
+  const merged = Array.from(byKey.values());
+
+  await setCachedJsonData(
+    viewerReposCacheKey(accessToken),
+    merged,
+    VIEWER_REPOS_CACHE_TTL_SECONDS,
+    { name: "listViewerRepos:viewer_repos" },
+  );
+  return merged;
+}
+
+async function sweepViewerRepositories(
+  octokit: Awaited<ReturnType<typeof getOctokit>>,
+): Promise<ViewerRepo[]> {
   const query = `
     query($cursor: String) {
       viewer {
@@ -315,68 +381,119 @@ async function listViewerRepos(accessToken: string): Promise<ViewerRepo[]> {
           orderBy: {field: UPDATED_AT, direction: DESC}
         ) {
           pageInfo { hasNextPage endCursor }
-          nodes {
-            name
-            nameWithOwner
-            viewerPermission
-            pushedAt
-            owner { login __typename }
-            defaultBranchRef { name }
-            rfcConfig: object(expression: "${RFC_CONFIG_HEAD_EXPR}") { __typename }
-          }
+          nodes { ${REPO_NODE_FIELDS} }
         }
       }
     }
   `;
-
-  interface PageNode {
-    name: string;
-    nameWithOwner: string;
-    viewerPermission: string | null;
-    pushedAt: string | null;
-    owner: { login: string; __typename: string };
-    defaultBranchRef: { name: string } | null;
-    rfcConfig: { __typename: string } | null;
-  }
   interface PageResponse {
     viewer: {
       repositories: {
         pageInfo: { hasNextPage: boolean; endCursor: string | null };
-        nodes: PageNode[];
+        nodes: RepoNode[];
       };
     };
   }
-
-  const repos: ViewerRepo[] = [];
+  const out: ViewerRepo[] = [];
   let cursor: string | null = null;
   while (true) {
     const page: PageResponse = await octokit.graphql<PageResponse>(query, {
       cursor,
     });
     for (const node of page.viewer.repositories.nodes) {
-      repos.push({
-        owner: node.owner.login,
-        name: node.name,
-        fullName: node.nameWithOwner,
-        canPush: WRITE_PERMISSIONS.has(node.viewerPermission ?? ""),
-        isOrg: node.owner.__typename === "Organization",
-        defaultBranch: node.defaultBranchRef?.name ?? null,
-        hasRfcConfig: !!node.rfcConfig,
-        pushedAt: node.pushedAt,
-      });
+      out.push(repoNodeToViewerRepo(node));
     }
     if (!page.viewer.repositories.pageInfo.hasNextPage) break;
     cursor = page.viewer.repositories.pageInfo.endCursor;
     if (!cursor) break;
   }
+  return out;
+}
 
-  await setCachedJsonData(
-    viewerReposCacheKey(accessToken),
-    repos,
-    VIEWER_REPOS_CACHE_TTL_SECONDS,
-    { name: "listViewerRepos:viewer_repos" },
-  );
-  return repos;
+async function listViewerOrganizations(
+  octokit: Awaited<ReturnType<typeof getOctokit>>,
+): Promise<string[]> {
+  const query = `
+    query($cursor: String) {
+      viewer {
+        organizations(first: 100, after: $cursor) {
+          pageInfo { hasNextPage endCursor }
+          nodes { login }
+        }
+      }
+    }
+  `;
+  interface PageResponse {
+    viewer: {
+      organizations: {
+        pageInfo: { hasNextPage: boolean; endCursor: string | null };
+        nodes: Array<{ login: string }>;
+      };
+    };
+  }
+  const out: string[] = [];
+  let cursor: string | null = null;
+  while (true) {
+    const page: PageResponse = await octokit.graphql<PageResponse>(query, {
+      cursor,
+    });
+    for (const node of page.viewer.organizations.nodes) out.push(node.login);
+    if (!page.viewer.organizations.pageInfo.hasNextPage) break;
+    cursor = page.viewer.organizations.pageInfo.endCursor;
+    if (!cursor) break;
+  }
+  return out;
+}
+
+/** Safety cap: refuse to walk an org past this many pages so a misbehaving
+ *  giant org can't pin the request. 50 pages × 100 repos = 5,000 repos. */
+const MAX_ORG_PAGES = 50;
+
+async function sweepOrgRepositories(
+  octokit: Awaited<ReturnType<typeof getOctokit>>,
+  login: string,
+): Promise<ViewerRepo[]> {
+  const query = `
+    query($login: String!, $cursor: String) {
+      organization(login: $login) {
+        repositories(
+          first: 100,
+          after: $cursor,
+          orderBy: {field: UPDATED_AT, direction: DESC}
+        ) {
+          pageInfo { hasNextPage endCursor }
+          nodes { ${REPO_NODE_FIELDS} }
+        }
+      }
+    }
+  `;
+  interface PageResponse {
+    organization: {
+      repositories: {
+        pageInfo: { hasNextPage: boolean; endCursor: string | null };
+        nodes: RepoNode[];
+      };
+    } | null;
+  }
+  const out: ViewerRepo[] = [];
+  let cursor: string | null = null;
+  for (let page = 0; page < MAX_ORG_PAGES; page++) {
+    const r: PageResponse = await octokit.graphql<PageResponse>(query, {
+      login,
+      cursor,
+    });
+    if (!r.organization) break;
+    for (const node of r.organization.repositories.nodes) {
+      // viewerPermission is null when the viewer has no access (the org-scoped
+      // query returns *all* org repos in some cases). Skip those.
+      if (!node.viewerPermission) continue;
+      out.push(repoNodeToViewerRepo(node));
+    }
+    if (!r.organization.repositories.pageInfo.hasNextPage) break;
+    cursor = r.organization.repositories.pageInfo.endCursor;
+    if (!cursor) break;
+  }
+  return out;
 }
 
 /**

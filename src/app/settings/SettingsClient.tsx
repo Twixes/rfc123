@@ -288,7 +288,7 @@ export default function SettingsClient({
             className="mb-4"
           />
 
-          <div className="flex flex-wrap gap-3 items-end">
+          <div className="flex flex-wrap gap-2 items-end">
             <div className="w-32 shrink-0">
               <div className="text-xs text-gray-70 mb-1">Hour</div>
               <HourSelect value={hour} onChange={setHour} />
@@ -299,9 +299,7 @@ export default function SettingsClient({
             </div>
           </div>
 
-          <SaveIndicator status={saveStatus} />
-
-          <div className="mt-4 flex items-center gap-2">
+          <div className="mt-2 flex items-center gap-2">
             <button
               type="button"
               onClick={handleSendBriefingNow}
@@ -318,7 +316,8 @@ export default function SettingsClient({
             <BriefingSendIndicator
               status={briefingSendStatus}
               hasActiveSlack={hasActiveSlack}
-            />
+            />{" "}
+            <SaveIndicator status={saveStatus} />
           </div>
         </section>
       </div>
@@ -334,7 +333,7 @@ function SaveIndicator({
   // Fixed-height row so the form doesn't jump when status appears.
   if (status === "idle") return null;
   return (
-    <div className="mt-3 h-4 text-xs">
+    <div className="flex-1 text-right h-4 text-xs">
       {status === "saving" && <span className="text-gray-50">Saving…</span>}
       {status === "saved" && <span className="text-cyan">Saved</span>}
       {typeof status === "object" && "error" in status && (

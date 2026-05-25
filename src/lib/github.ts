@@ -302,8 +302,13 @@ interface ViewerRepo {
 }
 
 // Cache key includes a version segment so a payload-shape change can
-// invalidate prior entries by bumping it.
-const VIEWER_REPOS_CACHE_TTL_SECONDS = 300;
+// invalidate prior entries by bumping it. TTL is generous (1h) because
+// the cold sweep is expensive enough to trip GitHub's GraphQL secondary
+// rate limit on viewers in giant orgs; every RFC123-driven write
+// (adoption, RFC creation) already calls `invalidateViewerRepos`, so
+// the only staleness window is for out-of-band repo / `.rfc123.json`
+// changes made directly on GitHub.
+const VIEWER_REPOS_CACHE_TTL_SECONDS = 3600;
 function viewerReposCacheKey(accessToken: string): string {
   return `viewer_repos:v2:${tokenKey(accessToken)}`;
 }
@@ -527,9 +532,10 @@ async function listViewerOrganizations(
  *  giant org can't pin the request. 50 pages × 100 repos = 5,000 repos. */
 const MAX_ORG_PAGES = 50;
 
-/** How many org sweeps to run in parallel. GitHub's GraphQL secondary rate
- *  limit fires on bursty `object(expression:…)` queries, so we cap the
- *  parallelism rather than rely on the throttle plugin's retry alone. */
+/** How many org sweeps to run in parallel. The throttle plugin retries any
+ *  GraphQL request that trips GitHub's secondary rate limit, so we keep
+ *  parallelism modest rather than serial — the 1h cache means most loads
+ *  hit Redis anyway, and on the rare cold fill the parallel walk pays off. */
 const ORG_SWEEP_CONCURRENCY = 3;
 
 async function mapWithConcurrency<T, U>(
@@ -601,14 +607,19 @@ async function sweepOrgRepositories(
 }
 
 /**
- * Drop the cached viewer-repo sweep for `accessToken`. Call after any action
- * that changes the set of RFC-bearing repos (creating one, adopting an
- * existing one) so the next list call rebuilds with the latest state.
+ * Drop both viewer-repo caches for `accessToken`. Call after any action that
+ * changes the set of RFC-bearing repos (creating one, adopting an existing
+ * one) so the next list call rebuilds with the latest state and the
+ * fast-path `/rfcs` onboarding check doesn't bounce a freshly-adopted user
+ * back to onboarding.
  */
 export async function invalidateViewerRepos(
   accessToken: string,
 ): Promise<void> {
-  await deleteCachedData(viewerReposCacheKey(accessToken));
+  await Promise.all([
+    deleteCachedData(viewerReposCacheKey(accessToken)),
+    deleteCachedData(hasAnyRfcBearingRepoCacheKey(accessToken)),
+  ]);
 }
 
 export async function listReposWithRFCs(
@@ -630,6 +641,56 @@ export async function listReposWithRFCs(
       context: "fetching_repos_with_rfcs",
     });
     throw error;
+  }
+}
+
+function hasAnyRfcBearingRepoCacheKey(accessToken: string): string {
+  return `has_rfc_repos:v1:${tokenKey(accessToken)}`;
+}
+
+/**
+ * Server-render fast path for `/rfcs/page.tsx`: returns true iff the viewer
+ * has *any* repo with `.rfc123.json` at root. One code-search request instead
+ * of the full per-org sweep that `listReposWithRFCs` triggers, so the page
+ * shell ships in <1s even for viewers sitting in 600+ repo orgs.
+ *
+ * Code search has indexing lag (seconds to minutes), so a brand-new repo
+ * might briefly flip the answer to false. Acceptable for the onboarding
+ * redirect: a refresh resolves it and the cache TTL is short enough that
+ * a freshly-adopted user lands on `/rfcs` properly within the hour.
+ */
+export async function hasAnyRfcBearingRepo(
+  accessToken: string,
+): Promise<boolean> {
+  // If the full sweep is already cached, derive from it rather than spending
+  // another code-search call. Invalidations clear both keys together so this
+  // stays consistent with the "real" picker view.
+  const cachedRepos = await getCachedJsonData<ViewerRepo[]>(
+    viewerReposCacheKey(accessToken),
+  );
+  if (cachedRepos) return cachedRepos.some((r) => r.hasRfcConfig);
+
+  const cacheKey = hasAnyRfcBearingRepoCacheKey(accessToken);
+  const cached = await getCachedJsonData<boolean>(cacheKey);
+  if (typeof cached === "boolean") return cached;
+
+  try {
+    const octokit = await getOctokit(accessToken);
+    const { data } = await octokit.rest.search.code({
+      q: `filename:${RFC_CONFIG_PATH}`,
+      per_page: 10,
+    });
+    const result = data.items.some((i) => i.path === RFC_CONFIG_PATH);
+    await setCachedJsonData(cacheKey, result, VIEWER_REPOS_CACHE_TTL_SECONDS, {
+      name: "hasAnyRfcBearingRepo:code_search",
+    });
+    return result;
+  } catch (e) {
+    // Treat outages as "yes" so we don't bounce an established user to
+    // onboarding because GitHub had a hiccup. The client-side `/api/repos`
+    // call will still surface the real list (or its absence).
+    console.error("[hasAnyRfcBearingRepo] code search failed:", e);
+    return true;
   }
 }
 

@@ -39,6 +39,16 @@ export interface RepoOption {
   /** True if the viewer can push (WRITE / MAINTAIN / ADMIN). The "Start an
    *  RFC" flow uses this to disable repos the user can't commit to. */
   canPush: boolean;
+  /**
+   * Present when an adoption PR is in flight (the direct commit was rejected
+   * by branch protection, so we opened a PR instead). The picker uses this to
+   * render a pending row and the modal uses it to resume into pending state.
+   */
+  pendingAdoption?: {
+    prNumber: number;
+    prUrl: string;
+    layout: RfcLayout;
+  };
 }
 
 export interface RFC {
@@ -2415,6 +2425,30 @@ function isFileExists422(err: {
   return /sha.*supplied/i.test(message) || /already exists/i.test(message);
 }
 
+/**
+ * The two flavors of "branch protection wouldn't let me push" GitHub returns:
+ *   - 409 + "Repository rule violations" (the newer rulesets surface this way,
+ *     including the "Changes must be made through a pull request" rule).
+ *   - 422 + "protected branch" / "required status checks" / similar (legacy
+ *     branch protections).
+ * Both are recoverable by opening a PR instead, so we treat them the same.
+ */
+function isBranchProtectionError(err: {
+  status?: number;
+  message?: string;
+  response?: { data?: { message?: string } };
+}): boolean {
+  const status = err.status ?? 0;
+  if (status !== 409 && status !== 422) return false;
+  const message = err.message ?? err.response?.data?.message ?? "";
+  return (
+    /rule violations/i.test(message) ||
+    /protected branch/i.test(message) ||
+    /through a pull request/i.test(message) ||
+    /required status check/i.test(message)
+  );
+}
+
 export interface AdoptRfcRepoInput {
   accessToken: string;
   owner: string;
@@ -2422,21 +2456,43 @@ export interface AdoptRfcRepoInput {
   layout: RfcLayout;
 }
 
-export interface AdoptRfcRepoResult {
-  owner: string;
-  name: string;
-  fullName: string;
-  alreadyAdopted: boolean;
-  config: RfcConfig;
+export interface AdoptRfcRepoPendingPR {
+  number: number;
+  url: string;
+  branchName: string;
+  defaultBranch: string;
 }
 
+export type AdoptRfcRepoResult =
+  | {
+      status: "adopted";
+      owner: string;
+      name: string;
+      fullName: string;
+      alreadyAdopted: boolean;
+      config: RfcConfig;
+    }
+  | {
+      status: "pending";
+      owner: string;
+      name: string;
+      fullName: string;
+      config: RfcConfig;
+      pr: AdoptRfcRepoPendingPR;
+    };
+
+const ADOPT_COMMIT_MESSAGE = "Add .rfc123.json";
+const ADOPT_PR_TITLE = "Add .rfc123.json";
+const ADOPT_PR_BODY =
+  "Adopting this repo on [RFC123](https://rfc123.com) – the file at the root tells RFC123 where new RFCs should land.\n\nMerge this PR and the repo will show up in RFC123 automatically.";
+const ADOPT_BRANCH_PREFIX = "rfc123/add-config";
+
 /**
- * Adopt an existing repo as an RFCs repo by committing `.rfc123.json` to its
- * default branch. The list/picker keys off that file, so writing it is the
- * one and only step needed to bring a legacy repo back onto the user's list.
- *
- * Idempotent: if the file already exists we return `alreadyAdopted: true`
- * without an extra commit (the user reaches the list through normal discovery).
+ * Adopt an existing repo by committing `.rfc123.json` to its default branch
+ * (the only file `listReposWithRFCs` keys off). When branch protection /
+ * rulesets reject the direct commit ("Changes must be made through a pull
+ * request"), the caller gets back `status: "pending"` and the PR pointer
+ * instead – the modal then polls until the PR merges.
  *
  * Throws a typed error with `code = "no_write_access"` when the viewer lacks
  * push permission, so the API route can surface a friendly 403.
@@ -2460,29 +2516,44 @@ export async function adoptRfcRepo(
   }
   const defaultBranch = repoInfo.default_branch;
   const config = defaultRfcConfig({ layout });
+  const encodedConfig = Buffer.from(
+    serializeRfcConfig(config),
+    "utf-8",
+  ).toString("base64");
 
-  // Attempt the commit directly. GitHub returns 422 for several reasons –
-  // file-exists-without-sha is the "already adopted" case we want to short
-  // circuit; branch protection, push protection, signed-commit requirements,
-  // and archived repos also return 422 and MUST surface as real errors
-  // (otherwise we'd seed the cache and tell the user "added!" while the
-  // file was never actually written).
   let alreadyAdopted = false;
   try {
     await octokit.rest.repos.createOrUpdateFileContents({
       owner,
       repo: name,
       path: RFC_CONFIG_PATH,
-      message: "Add .rfc123.json",
-      content: Buffer.from(serializeRfcConfig(config), "utf-8").toString(
-        "base64",
-      ),
+      message: ADOPT_COMMIT_MESSAGE,
+      content: encodedConfig,
       branch: defaultBranch,
     });
   } catch (e) {
     const err = e as { status?: number; message?: string };
-    if (err?.status !== 422 || !isFileExists422(err)) throw e;
-    alreadyAdopted = true;
+    if (err?.status === 422 && isFileExists422(err)) {
+      alreadyAdopted = true;
+    } else if (isBranchProtectionError(err)) {
+      const pr = await openAdoptionPullRequest({
+        octokit,
+        owner,
+        name,
+        defaultBranch,
+        encodedConfig,
+      });
+      return {
+        status: "pending",
+        owner,
+        name,
+        fullName: repoInfo.full_name,
+        config,
+        pr,
+      };
+    } else {
+      throw e;
+    }
   }
 
   await Promise.all([
@@ -2493,12 +2564,165 @@ export async function adoptRfcRepo(
   ]);
 
   return {
+    status: "adopted",
     owner,
     name,
     fullName: repoInfo.full_name,
     alreadyAdopted,
     config,
   };
+}
+
+/**
+ * Best-effort idempotent: if a previous adoption attempt already opened a PR
+ * (e.g. the same user kicked one off from another device), we reuse it
+ * instead of stacking duplicates.
+ */
+async function openAdoptionPullRequest(args: {
+  octokit: Octokit;
+  owner: string;
+  name: string;
+  defaultBranch: string;
+  encodedConfig: string;
+}): Promise<AdoptRfcRepoPendingPR> {
+  const { octokit, owner, name, defaultBranch, encodedConfig } = args;
+
+  // List open PRs and resolve the base ref in parallel – we always need the
+  // ref SHA to create a branch; reusing an existing PR is the happy-path
+  // bypass that just discards the ref lookup.
+  const [openPrsResult, baseRefResult] = await Promise.allSettled([
+    octokit.rest.pulls.list({
+      owner,
+      repo: name,
+      state: "open",
+      per_page: 100,
+    }),
+    octokit.rest.git.getRef({
+      owner,
+      repo: name,
+      ref: `heads/${defaultBranch}`,
+    }),
+  ]);
+
+  if (openPrsResult.status === "fulfilled") {
+    const existing = openPrsResult.value.data.find(
+      (pr) =>
+        pr.head.ref.startsWith(ADOPT_BRANCH_PREFIX) &&
+        pr.base.ref === defaultBranch,
+    );
+    if (existing) {
+      return {
+        number: existing.number,
+        url: existing.html_url,
+        branchName: existing.head.ref,
+        defaultBranch,
+      };
+    }
+  }
+
+  if (baseRefResult.status === "rejected") throw baseRefResult.reason;
+  const baseSha = baseRefResult.value.data.object.sha;
+
+  let branchName = ADOPT_BRANCH_PREFIX;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      await octokit.rest.git.createRef({
+        owner,
+        repo: name,
+        ref: `refs/heads/${branchName}`,
+        sha: baseSha,
+      });
+      break;
+    } catch (e) {
+      const err = e as { status?: number; message?: string };
+      if (
+        err.status === 422 &&
+        /already exists/i.test(err.message ?? "") &&
+        attempt < 4
+      ) {
+        branchName = `${ADOPT_BRANCH_PREFIX}-${randomSuffix()}`;
+        continue;
+      }
+      throw e;
+    }
+  }
+
+  await octokit.rest.repos.createOrUpdateFileContents({
+    owner,
+    repo: name,
+    path: RFC_CONFIG_PATH,
+    message: ADOPT_COMMIT_MESSAGE,
+    content: encodedConfig,
+    branch: branchName,
+  });
+
+  const { data: pr } = await octokit.rest.pulls.create({
+    owner,
+    repo: name,
+    title: ADOPT_PR_TITLE,
+    head: branchName,
+    base: defaultBranch,
+    body: ADOPT_PR_BODY,
+  });
+
+  return {
+    number: pr.number,
+    url: pr.html_url,
+    branchName,
+    defaultBranch,
+  };
+}
+
+export interface AdoptionPrStatus {
+  state: "open" | "merged" | "closed";
+  number: number;
+  url: string;
+  mergedAt: string | null;
+}
+
+export async function getAdoptionPrStatus(
+  accessToken: string,
+  owner: string,
+  repo: string,
+  prNumber: number,
+): Promise<AdoptionPrStatus> {
+  const octokit = await getOctokit(accessToken);
+  const { data: pr } = await octokit.rest.pulls.get({
+    owner,
+    repo,
+    pull_number: prNumber,
+  });
+  const state: AdoptionPrStatus["state"] = pr.merged_at
+    ? "merged"
+    : pr.state === "closed"
+      ? "closed"
+      : "open";
+  return {
+    state,
+    number: pr.number,
+    url: pr.html_url,
+    mergedAt: pr.merged_at ?? null,
+  };
+}
+
+/**
+ * Seeds the config cache + invalidates the viewer-repo sweep so the next
+ * `/api/repos` call picks the freshly-merged repo up immediately rather than
+ * waiting on the 5-minute TTL.
+ */
+export async function finalizeAdoptedRepo(
+  accessToken: string,
+  owner: string,
+  name: string,
+  layout: RfcLayout,
+): Promise<void> {
+  const config = defaultRfcConfig({ layout });
+  await Promise.all([
+    setCachedJsonData(rfcConfigCacheKey(owner, name), config, 3600, {
+      name: "finalizeAdoptedRepo:seed_config",
+    }),
+    invalidateViewerRepos(accessToken),
+  ]);
 }
 
 function renderRfcRepoReadme({

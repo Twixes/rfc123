@@ -1,8 +1,10 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useRef, useState } from "react";
-import AddExistingRepoModal from "@/components/AddExistingRepoModal";
+import { useCallback, useEffect, useRef, useState } from "react";
+import AddExistingRepoModal, {
+  type PendingAdoptionInfo,
+} from "@/components/AddExistingRepoModal";
 import type { RepoOption } from "@/lib/github";
 
 interface RepoSelectorProps {
@@ -53,6 +55,8 @@ export default function RepoSelector({
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [addRepoOpen, setAddRepoOpen] = useState(false);
+  const [resumePending, setResumePending] =
+    useState<PendingAdoptionInfo | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   // Tracks optimistic inserts (just-adopted repos) so a /api/repos response
@@ -61,32 +65,29 @@ export default function RepoSelector({
   // the new commit yet by the time the request returns).
   const optimisticReposRef = useRef<RepoOption[]>([]);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch("/api/repos");
-        if (!res.ok) return;
-        const data: RepoOption[] = await res.json();
-        if (cancelled) return;
-        const optimistic = optimisticReposRef.current;
-        if (optimistic.length === 0) {
-          setAvailableRepos(data);
-          return;
-        }
-        const present = new Set(data.map((r) => r.fullName));
-        setAvailableRepos([
-          ...data,
-          ...optimistic.filter((r) => !present.has(r.fullName)),
-        ]);
-      } catch (e) {
-        console.error("Failed to load RFC repos", e);
+  const refreshRepos = useCallback(async () => {
+    try {
+      const res = await fetch("/api/repos");
+      if (!res.ok) return;
+      const data: RepoOption[] = await res.json();
+      const optimistic = optimisticReposRef.current;
+      if (optimistic.length === 0) {
+        setAvailableRepos(data);
+        return;
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
+      const present = new Set(data.map((r) => r.fullName));
+      setAvailableRepos([
+        ...data,
+        ...optimistic.filter((r) => !present.has(r.fullName)),
+      ]);
+    } catch (e) {
+      console.error("Failed to load RFC repos", e);
+    }
   }, []);
+
+  useEffect(() => {
+    refreshRepos();
+  }, [refreshRepos]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -111,28 +112,37 @@ export default function RepoSelector({
     repo.fullName.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
-  function handleAdopted(repo: {
-    owner: string;
-    name: string;
-    fullName: string;
-  }) {
-    // Newly adopted repos are guaranteed writable (we just committed to them),
-    // so `canPush: true` is a safe assumption that avoids waiting on the next
-    // `/api/repos` fetch to learn it.
-    const enriched: RepoOption = { ...repo, canPush: true };
-    optimisticReposRef.current = [
-      ...optimisticReposRef.current.filter(
-        (r) => r.fullName !== enriched.fullName,
-      ),
-      enriched,
-    ];
-    setAvailableRepos((prev) => {
-      if (!prev) return [enriched];
-      if (prev.some((r) => r.fullName === enriched.fullName)) return prev;
-      return [...prev, enriched];
-    });
-    onRepoAdopted?.(enriched);
-  }
+  // Stable identity so the modal's polling effect doesn't tear down on every
+  // parent re-render (the effect depends on this callback).
+  const handleAdopted = useCallback(
+    (repo: { owner: string; name: string; fullName: string }) => {
+      // Newly adopted repos are guaranteed writable (we just committed to
+      // them), so `canPush: true` is a safe assumption that avoids waiting on
+      // the next `/api/repos` fetch to learn it.
+      const enriched: RepoOption = { ...repo, canPush: true };
+      optimisticReposRef.current = [
+        ...optimisticReposRef.current.filter(
+          (r) => r.fullName !== enriched.fullName,
+        ),
+        enriched,
+      ];
+      setAvailableRepos((prev) => {
+        if (!prev) return [enriched];
+        if (prev.some((r) => r.fullName === enriched.fullName)) return prev;
+        return [...prev, enriched];
+      });
+      onRepoAdopted?.(enriched);
+    },
+    [onRepoAdopted],
+  );
+
+  const closeModal = useCallback(() => {
+    setAddRepoOpen(false);
+    setResumePending(null);
+    // Refresh after close so a freshly opened pending PR shows up in the
+    // dropdown without waiting for a remount.
+    refreshRepos();
+  }, [refreshRepos]);
 
   const triggerLabel = currentRepo
     ? `${currentRepo.owner}/${currentRepo.name}`
@@ -217,12 +227,28 @@ export default function RepoSelector({
                   const isCurrent =
                     currentRepo?.owner === repo.owner &&
                     currentRepo?.name === repo.name;
+                  const isPending = !!repo.pendingAdoption;
                   return (
                     <button
                       key={repo.fullName}
                       type="button"
-                      disabled={!repo.canPush && fullWidth}
                       onClick={() => {
+                        if (isPending && repo.pendingAdoption) {
+                          setResumePending({
+                            owner: repo.owner,
+                            name: repo.name,
+                            fullName: repo.fullName,
+                            layout: repo.pendingAdoption.layout,
+                            pr: {
+                              number: repo.pendingAdoption.prNumber,
+                              url: repo.pendingAdoption.prUrl,
+                            },
+                          });
+                          setIsOpen(false);
+                          setSearchQuery("");
+                          setAddRepoOpen(true);
+                          return;
+                        }
                         if (fullWidth && !repo.canPush) return;
                         onSelect(repo);
                         setIsOpen(false);
@@ -231,16 +257,29 @@ export default function RepoSelector({
                       className={`w-full text-left px-4 py-3 text-sm border-b border-gray-20 last:border-b-0 transition-colors flex items-center justify-between gap-2 ${
                         isCurrent ? "bg-gray-5 font-medium" : ""
                       } ${
-                        fullWidth && !repo.canPush
-                          ? "opacity-50 cursor-not-allowed"
-                          : "hover:bg-yellow-light cursor-pointer"
+                        isPending
+                          ? "text-gray-50 hover:bg-yellow-light cursor-pointer"
+                          : fullWidth && !repo.canPush
+                            ? "opacity-50 cursor-not-allowed"
+                            : "hover:bg-yellow-light cursor-pointer"
                       }`}
                     >
                       <span className="truncate">{repo.fullName}</span>
-                      {fullWidth && !repo.canPush && (
-                        <span className="shrink-0 text-[10px] uppercase tracking-wider text-gray-50">
-                          read only
+                      {isPending ? (
+                        <span className="shrink-0 inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-cyan">
+                          <span
+                            aria-hidden
+                            className="h-1.5 w-1.5 rounded-full bg-cyan animate-pulse"
+                          />
+                          pending <code>.rfc123.json</code>
                         </span>
+                      ) : (
+                        fullWidth &&
+                        !repo.canPush && (
+                          <span className="shrink-0 text-[10px] uppercase tracking-wider text-gray-50">
+                            read only
+                          </span>
+                        )
                       )}
                     </button>
                   );
@@ -269,8 +308,9 @@ export default function RepoSelector({
       {addRepoOpen && (
         <AddExistingRepoModal
           open={addRepoOpen}
-          onClose={() => setAddRepoOpen(false)}
+          onClose={closeModal}
           onAdopted={handleAdopted}
+          initialPending={resumePending}
         />
       )}
     </div>

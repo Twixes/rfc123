@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { auth, signIn } from "@/auth";
 import { redirect } from "next/navigation";
+import { auth, signIn } from "@/auth";
 
 interface InvitePageProps {
   searchParams: Promise<{ callbackUrl?: string }>;
@@ -26,7 +26,7 @@ export default async function InvitePage({ searchParams }: InvitePageProps) {
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4 sm:px-8 py-8 sm:py-0">
-      <div className="w-full max-w-4xl">
+      <div className="w-full max-w-216">
         <div className="border border-gray-20 rounded-md bg-surface p-4 sm:p-8">
           <h1 className="mb-6 font-serif font-normal text-4xl sm:text-6xl text-foreground">
             You&apos;ve been invited

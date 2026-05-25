@@ -1,23 +1,13 @@
-import Link from "next/link";
-import MarketingPage from "@/components/MarketingPage";
+import MarketingDocPage from "@/components/MarketingDocPage";
 
 export const metadata = { title: "vs Google Docs" };
 
 export default function GoogleDocsComparison() {
   return (
-    <MarketingPage>
-      <Link
-        href="/"
-        className="text-sm text-gray-50 hover:text-foreground transition-colors inline-block mb-4"
-      >
-        ← Back to RFC123
-      </Link>
-      <h1 className="font-serif font-normal text-4xl sm:text-5xl text-foreground mb-4">
-        RFC123 vs Google Docs
-      </h1>
+    <MarketingDocPage eyebrow="Compare" title="RFC123 vs Google Docs">
       <p className="text-lg text-gray-70">
         We&rsquo;re writing this. Check back soon.
       </p>
-    </MarketingPage>
+    </MarketingDocPage>
   );
 }

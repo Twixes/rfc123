@@ -9,27 +9,26 @@ const SECTIONS = [
     ],
   },
   {
-    title: "Project",
+    title: "Resources",
     links: [
-      { href: "/about", label: "About" },
-      { href: "https://github.com/Twixes/rfc123", label: "GitHub" },
-      { href: "mailto:michael@posthog.com", label: "Contact" },
+      { href: "https://github.com/Twixes/rfc123", label: "GitHub ↗" },
+      { href: "mailto:michael@matloka.com", label: "Contact ↗" },
     ],
   },
   {
     title: "Compare",
     links: [
-      { href: "/compare/google-docs", label: "vs Google Docs" },
-      { href: "/compare/notion", label: "vs Notion" },
-      { href: "/compare/markdown-prs", label: "vs plain markdown PRs" },
-      { href: "/compare/slack-canvases", label: "vs Slack Canvases" },
+      { href: "/compare/google-docs", label: "vs. Google Docs" },
+      { href: "/compare/notion", label: "vs. Notion" },
+      { href: "/compare/markdown-prs", label: "vs. plain markdown PRs" },
+      { href: "/compare/slack-canvases", label: "vs. Slack Canvases" },
     ],
   },
   {
     title: "Legal",
     links: [
-      { href: "/terms", label: "Terms of Service" },
-      { href: "/privacy", label: "Privacy Policy" },
+      { href: "/terms", label: "Terms of service" },
+      { href: "/privacy", label: "Privacy policy" },
     ],
   },
 ] as const;

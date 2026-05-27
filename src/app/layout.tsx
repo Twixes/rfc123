@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 import localFont from "next/font/local";
+import { Toaster } from "@/components/Toaster";
 import { PostHogProvider } from "@/providers/PostHogProvider";
 import "./globals.css";
 
@@ -49,7 +50,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${geist.variable} ${lSerif.variable} antialiased`}>
-        <PostHogProvider>{children}</PostHogProvider>
+        <PostHogProvider>
+          {children}
+          <Toaster />
+        </PostHogProvider>
       </body>
     </html>
   );

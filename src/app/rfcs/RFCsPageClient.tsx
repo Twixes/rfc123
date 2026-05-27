@@ -3,6 +3,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { RelativeTime } from "@/components/RelativeTime";
 import RepoSelector from "@/components/RepoSelector";
 import RFCListSkeleton from "@/components/RFCListSkeleton";
@@ -190,6 +191,20 @@ export default function RFCsPageClient({
           signal: controller.signal,
         },
       );
+      if (!response.ok) {
+        if (response.status !== 401) {
+          let message = "Failed to load RFCs";
+          try {
+            const body = (await response.json()) as { error?: string };
+            if (body.error) message = body.error;
+          } catch {
+            // ignore malformed error bodies
+          }
+          toast.error(message);
+        }
+        setRfcs([]);
+        return;
+      }
       const data: RFC[] = await response.json();
       if (controller.signal.aborted) return;
       const missingHeader = response.headers.get("X-RFC123-Missing-Scopes");
@@ -256,7 +271,8 @@ export default function RFCsPageClient({
       }
     } catch (error) {
       if ((error as Error).name === "AbortError") return;
-      console.error("Error loading RFCs:", error);
+      toast.error("Failed to load RFCs");
+      setRfcs([]);
     } finally {
       if (!controller.signal.aborted) {
         setIsLoading(false);

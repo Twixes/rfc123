@@ -2,10 +2,12 @@ import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import {
   ForbiddenError,
+  getCurrentUserLogin,
   RFC_STATE_ACTIONS,
   type RfcStateAction,
   setRfcState,
 } from "@/lib/github";
+import { getPostHogServer } from "@/lib/posthog-server";
 
 const VALID_ACTIONS = new Set<RfcStateAction>(RFC_STATE_ACTIONS);
 
@@ -33,13 +35,24 @@ export async function PATCH(
   }
 
   try {
+    const accessToken = (session as unknown as { accessToken: string })
+      .accessToken;
     const result = await setRfcState(
-      (session as unknown as { accessToken: string }).accessToken,
+      accessToken,
       owner,
       repo,
       prNumber,
       action as RfcStateAction,
     );
+    getCurrentUserLogin(accessToken)
+      .then((userLogin) => {
+        getPostHogServer()?.capture({
+          distinctId: userLogin,
+          event: "rfc_state_changed",
+          properties: { action, owner, repo, rfc_number: prNumber },
+        });
+      })
+      .catch(() => {});
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof ForbiddenError) {

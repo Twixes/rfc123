@@ -13,6 +13,32 @@ export async function register() {
     } else {
       console.warn("PostHog not initialized - missing NEXT_PUBLIC_POSTHOG_KEY");
     }
+
+    // Set up OpenTelemetry to capture Vercel AI SDK LLM calls as PostHog events
+    if (process.env.NEXT_PUBLIC_POSTHOG_KEY) {
+      try {
+        const { NodeSDK } = await import("@opentelemetry/sdk-node");
+        const { resourceFromAttributes } = await import(
+          "@opentelemetry/resources"
+        );
+        const { PostHogSpanProcessor } = await import("@posthog/ai/otel");
+
+        const sdk = new NodeSDK({
+          resource: resourceFromAttributes({ "service.name": "rfc123" }),
+          spanProcessors: [
+            new PostHogSpanProcessor({
+              apiKey: process.env.NEXT_PUBLIC_POSTHOG_KEY,
+              host:
+                process.env.NEXT_PUBLIC_POSTHOG_HOST ??
+                "https://eu.i.posthog.com",
+            }),
+          ],
+        });
+        sdk.start();
+      } catch {
+        // Packages not yet installed – LLM telemetry will be unavailable.
+      }
+    }
   }
 }
 

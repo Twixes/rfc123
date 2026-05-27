@@ -32,6 +32,7 @@ import { useRfcDraft } from "@/lib/use-rfc-draft";
  *  plus the team-directory list, which `.rfc123.json` doesn't store. */
 type RepoConfigResponse = RfcConfig & { teams: string[] };
 
+import posthog from "posthog-js";
 import { DEFAULT_RFC_TEMPLATE } from "@/lib/rfc-template";
 import { slugify } from "@/lib/slugify";
 
@@ -284,6 +285,13 @@ export default function RFCNewClient({ session }: RFCNewClientProps) {
 
       // Clear draft on success.
       clearDraft();
+
+      posthog.capture("rfc_created", {
+        draft,
+        owner: selectedRepo.owner,
+        repo: selectedRepo.name,
+        reviewer_count: reviewers.length,
+      });
 
       router.push(
         `/rfcs/${created.owner}/${created.repo}/${created.number}/${created.slug}`,

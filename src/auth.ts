@@ -24,6 +24,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const ghProfile = profile as
           | { id?: number; login?: string }
           | undefined;
+        if (ghProfile?.login) {
+          token.githubLogin = ghProfile.login;
+        }
         if (
           account.access_token &&
           ghProfile &&

@@ -26,6 +26,7 @@ export default {
   callbacks: {
     async session({ session, token }) {
       (session as { accessToken?: unknown }).accessToken = token.accessToken;
+      (session as { githubLogin?: unknown }).githubLogin = token.githubLogin;
       return session;
     },
     async redirect({ url, baseUrl }) {

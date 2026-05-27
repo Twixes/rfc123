@@ -15,6 +15,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const githubLogin =
+    (session as { githubLogin?: string } | null)?.githubLogin ?? undefined;
+
   const { title, rfcBody, rfcUrl } = (await request.json()) as {
     title?: string;
     rfcBody?: string;
@@ -40,6 +43,11 @@ export async function POST(request: Request) {
   try {
     const { text } = await generateText({
       model: openai("gpt-5.5-mini"),
+      experimental_telemetry: {
+        isEnabled: true,
+        functionId: "rfc-body-summary",
+        metadata: githubLogin ? { posthog_distinct_id: githubLogin } : {},
+      },
       system:
         "You summarize engineering RFCs (Requests for Comments) into terse, factual GitHub PR descriptions. Never invent details that aren't in the RFC. Keep bullets to one sentence each.",
       prompt: `Summarize the following RFC titled "${title}" into three sections, exactly in this format:

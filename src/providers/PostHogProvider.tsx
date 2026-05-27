@@ -3,19 +3,28 @@
 import posthog from "posthog-js";
 import { useEffect } from "react";
 
-export function PostHogProvider({ children }: { children: React.ReactNode }) {
+interface PostHogProviderProps {
+  children: React.ReactNode;
+  userLogin?: string | null;
+  userEmail?: string | null;
+  userName?: string | null;
+}
+
+export function PostHogProvider({
+  children,
+  userLogin,
+  userEmail,
+  userName,
+}: PostHogProviderProps) {
   useEffect(() => {
-    // Initialize PostHog if not already initialized
-    if (typeof window !== "undefined" && !posthog.__loaded) {
-      posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY!, {
-        api_host: "/ingest",
-        ui_host: "https://us.posthog.com",
-        person_profiles: "identified_only",
-        capture_pageview: true,
-        capture_pageleave: true,
+    if (userLogin) {
+      posthog.identify(userLogin, {
+        github_login: userLogin,
+        email: userEmail ?? undefined,
+        name: userName ?? undefined,
       });
     }
-  }, []);
+  }, [userLogin, userEmail, userName]);
 
   return <>{children}</>;
 }

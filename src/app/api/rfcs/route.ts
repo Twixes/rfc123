@@ -9,6 +9,7 @@ import {
   listRFCs,
   loadRfcConfig,
 } from "@/lib/github";
+import { getPostHogServer } from "@/lib/posthog-server";
 import { slugify } from "@/lib/slugify";
 
 export async function GET(request: Request) {
@@ -141,6 +142,19 @@ export async function POST(request: Request) {
       teamReviewers: teams.filter((r): r is string => typeof r === "string"),
       draft,
       team: teamTrimmed,
+    });
+
+    getPostHogServer()?.capture({
+      distinctId: user.login,
+      event: "rfc_created",
+      properties: {
+        draft,
+        owner,
+        repo,
+        reviewer_count: users.length,
+        team_reviewer_count: teams.length,
+        user_login: user.login,
+      },
     });
 
     return NextResponse.json({ ...result, slug });

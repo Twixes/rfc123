@@ -6,7 +6,12 @@ import {
   loadOrCreateViewerUserRow,
   secretKey,
 } from "@/lib/convex";
-import { adoptRfcRepo, type RfcLayout } from "@/lib/github";
+import {
+  adoptRfcRepo,
+  getCurrentUserLogin,
+  type RfcLayout,
+} from "@/lib/github";
+import { getPostHogServer } from "@/lib/posthog-server";
 import { VALID_GITHUB_REPO_NAME } from "@/lib/rfc-config";
 
 interface AdoptRepoBody {
@@ -40,9 +45,10 @@ export async function POST(request: Request) {
     // latency floor. Errors from either propagate to the 500 branch below –
     // surfacing a real failure beats showing the user a phantom pending UI
     // that the picker can't track.
-    const [result, userRow] = await Promise.all([
+    const [result, userRow, userLogin] = await Promise.all([
       adoptRfcRepo({ accessToken, owner, name, layout }),
       loadOrCreateViewerUserRow(accessToken),
+      getCurrentUserLogin(accessToken),
     ]);
 
     if (result.status === "pending") {
@@ -57,6 +63,11 @@ export async function POST(request: Request) {
         prUrl: result.pr.url,
         branchName: result.pr.branchName,
         defaultBranch: result.pr.defaultBranch,
+      });
+      getPostHogServer()?.capture({
+        distinctId: userLogin,
+        event: "repo_adopted",
+        properties: { layout, owner: result.owner, status: "pending" },
       });
       return NextResponse.json({
         status: "pending",
@@ -77,6 +88,16 @@ export async function POST(request: Request) {
         name: result.name,
       });
     }
+
+    getPostHogServer()?.capture({
+      distinctId: userLogin,
+      event: "repo_adopted",
+      properties: {
+        layout,
+        owner: result.owner,
+        status: result.alreadyAdopted ? "already_adopted" : "adopted",
+      },
+    });
 
     return NextResponse.json({
       status: "adopted",

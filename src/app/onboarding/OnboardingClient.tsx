@@ -3,6 +3,7 @@
 import confetti from "canvas-confetti";
 import { AnimatePresence, motion } from "motion/react";
 import { useRouter } from "next/navigation";
+import posthog from "posthog-js";
 import { useEffect, useRef, useState } from "react";
 import type { AvailableOwner } from "@/lib/github";
 import { VALID_GITHUB_REPO_NAME } from "@/lib/rfc-config";
@@ -192,6 +193,11 @@ export default function OnboardingClient() {
         owner: data.owner,
         name: data.name,
         htmlUrl: data.htmlUrl,
+      });
+      posthog.capture("onboarding_completed", {
+        layout,
+        visibility,
+        owner: selectedOwner?.login,
       });
       setStep("success");
       confettiCancelRef.current = fireConfetti();

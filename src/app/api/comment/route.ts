@@ -1,7 +1,8 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { postComment } from "@/lib/github";
+import { getCurrentUserLogin, postComment } from "@/lib/github";
+import { getPostHogServer } from "@/lib/posthog-server";
 
 export async function POST(request: NextRequest) {
   const session = await auth();
@@ -21,8 +22,10 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const accessToken = (session as unknown as { accessToken: string })
+      .accessToken;
     await postComment(
-      (session as unknown as { accessToken: string }).accessToken,
+      accessToken,
       owner,
       repo,
       prNumber,
@@ -31,6 +34,21 @@ export async function POST(request: NextRequest) {
       line,
       replyToCommentId,
     );
+    getCurrentUserLogin(accessToken)
+      .then((userLogin) => {
+        getPostHogServer()?.capture({
+          distinctId: userLogin,
+          event: "comment_posted",
+          properties: {
+            is_inline: !!line,
+            is_reply: replyToCommentId != null,
+            owner,
+            repo,
+            rfc_number: prNumber,
+          },
+        });
+      })
+      .catch(() => {});
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error posting comment:", error);

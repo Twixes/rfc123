@@ -123,6 +123,8 @@ RFC123 ships an MCP surface paired with portable agent skills – the "agent-nat
 
 `instrumentation.ts` boots `posthog-node` on the Node runtime and wires Next.js's `onRequestError` hook for server-side error tracking; `instrumentation-client.ts` initializes `posthog-js` in the browser. The server singleton lives in `src/lib/posthog-server.ts`. Both require `NEXT_PUBLIC_POSTHOG_KEY`; missing keys disable capture rather than crash.
 
+Source maps for Error Tracking are uploaded during the Vercel build via `@posthog/nextjs-config` (`withPostHogConfig` in `next.config.ts`). The wrapper is only applied when `POSTHOG_PERSONAL_API_KEY` is set, so local `pnpm build` is a no-op. On Vercel set `POSTHOG_PERSONAL_API_KEY` (personal API key with `error tracking: write`) and `POSTHOG_PROJECT_ID`; `deleteAfterUpload: true` strips `.map` files from the final bundle.
+
 ### Styling
 
 - Uses Tailwind CSS 4 with custom CSS variables defined in src/app/globals.css

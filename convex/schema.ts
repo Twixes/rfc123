@@ -86,6 +86,34 @@ export default defineSchema({
     consumed: v.boolean(),
   }).index("by_code", ["code"]),
 
+  // Per-user view of an RFC123 repo. The long-term aim is for this to replace
+  // the Redis-backed `viewer_repos` / `.rfc123.json` sweep. Today rows only
+  // exist while a `.rfc123.json` adoption PR is in flight (the direct commit
+  // was rejected by branch protection): the row is deleted once the PR merges
+  // and the viewer-repo sweep takes over, or once it closes unmerged.
+  repos: defineTable({
+    userId: v.id("users"),
+    owner: v.string(),
+    name: v.string(),
+    fullName: v.string(),
+    layout: v.union(v.literal("flat"), v.literal("multi-directory")),
+    pendingAdoption: v.optional(
+      v.object({
+        prNumber: v.number(),
+        prUrl: v.string(),
+        branchName: v.string(),
+        defaultBranch: v.string(),
+        createdAt: v.number(),
+        resolvedAt: v.optional(v.number()),
+        resolution: v.optional(
+          v.union(v.literal("merged"), v.literal("closed")),
+        ),
+      }),
+    ),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_repo", ["userId", "owner", "name"]),
+
   // Opaque MCP access tokens. The MCP server hands these to clients; we look
   // them up on every /mcp request to resolve the acting user. The user row
   // still holds the user's GitHub access token used to drive GitHub API calls.

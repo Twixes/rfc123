@@ -7,23 +7,17 @@ import { RelativeTime } from "@/components/RelativeTime";
 import RepoSelector from "@/components/RepoSelector";
 import RFCListSkeleton from "@/components/RFCListSkeleton";
 import RFCsTopBar from "@/components/RFCsTopBar";
-import RFCsTopBarActions, { newRfcHref } from "@/components/RFCsTopBarActions";
+import RFCsTopBarActions, {
+  NewRfcPlusIcon,
+  newRfcHref,
+} from "@/components/RFCsTopBarActions";
 import type { RepoOption, RFC } from "@/lib/github";
+import {
+  ALL_STATUSES,
+  STATUS_BORDER_CLASSES,
+  STATUS_PILL_CLASSES,
+} from "@/lib/rfc-status";
 import { slugify } from "@/lib/slugify";
-
-const ALL_STATUSES: ReadonlyArray<RFC["status"]> = ["open", "merged", "closed"];
-
-const STATUS_PILL_CLASSES: Record<RFC["status"], string> = {
-  open: "border-cyan bg-cyan-light",
-  merged: "border-magenta bg-magenta-light",
-  closed: "border-gray-30 bg-gray-5",
-};
-
-const STATUS_BORDER_CLASSES: Record<RFC["status"], string> = {
-  open: "border-cyan",
-  merged: "border-magenta",
-  closed: "border-gray-30",
-};
 
 interface RFCsPageClientProps {
   session: {
@@ -73,18 +67,38 @@ export default function RFCsPageClient({
   // One pass over `rfcs` derives every grouping the layout needs:
   // filter-respecting buckets for rendering and unfiltered totals for
   // empty-state copy ("N hidden by filters" vs first-time nudge).
-  const { mineRfcs, othersRfcs, totalMine, hasAnyOthers } = useMemo(() => {
+  const {
+    mineRfcs,
+    reviewRequestedRfcs,
+    othersUpForReviewRfcs,
+    totalMine,
+    hasAnyReviewRequested,
+    hasAnyOthersUpForReview,
+  } = useMemo(() => {
     const mineRfcs: RFC[] = [];
-    const othersRfcs: RFC[] = [];
+    const reviewRequestedRfcs: RFC[] = [];
+    const othersUpForReviewRfcs: RFC[] = [];
     let totalMine = 0;
-    let hasAnyOthers = false;
+    let hasAnyReviewRequested = false;
+    let hasAnyOthersUpForReview = false;
     for (const rfc of rfcs ?? []) {
       const isMine = !!viewerLogin && rfc.author === viewerLogin;
-      if (isMine) totalMine++;
-      else hasAnyOthers = true;
+      if (isMine) {
+        totalMine++;
+      } else if (rfc.reviewRequested) {
+        hasAnyReviewRequested = true;
+      } else {
+        hasAnyOthersUpForReview = true;
+      }
       if (!selectedStatuses.has(rfc.status)) continue;
       if (selectedAuthor && rfc.author !== selectedAuthor) continue;
-      (isMine ? mineRfcs : othersRfcs).push(rfc);
+      if (isMine) {
+        mineRfcs.push(rfc);
+      } else if (rfc.reviewRequested) {
+        reviewRequestedRfcs.push(rfc);
+      } else {
+        othersUpForReviewRfcs.push(rfc);
+      }
     }
     // Author-centric ordering for "My proposals": surface RFCs that need
     // attention first, then in-progress drafts, then terminal states. Tie-
@@ -96,10 +110,26 @@ export default function RFCsPageClient({
       if (ra !== rb) return ra - rb;
       return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
     });
-    return { mineRfcs, othersRfcs, totalMine, hasAnyOthers };
+    const byRecentActivity = (a: RFC, b: RFC) =>
+      new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    reviewRequestedRfcs.sort(byRecentActivity);
+    othersUpForReviewRfcs.sort(byRecentActivity);
+    return {
+      mineRfcs,
+      reviewRequestedRfcs,
+      othersUpForReviewRfcs,
+      totalMine,
+      hasAnyReviewRequested,
+      hasAnyOthersUpForReview,
+    };
   }, [rfcs, viewerLogin, selectedStatuses, selectedAuthor]);
 
-  const filteredCount = mineRfcs.length + othersRfcs.length;
+  const filteredCount =
+    mineRfcs.length + reviewRequestedRfcs.length + othersUpForReviewRfcs.length;
+  const onlyOpenStatusFilter =
+    selectedStatuses.size === 1 &&
+    selectedStatuses.has("open") &&
+    !selectedAuthor;
 
   function clearFilters() {
     setSelectedStatuses(new Set(ALL_STATUSES));
@@ -295,161 +325,153 @@ export default function RFCsPageClient({
         </div>
       )}
 
-      {!isLoading && rfcs && (
+      {(isLoading || (rfcs && rfcs.length > 0)) && (
         <div className="mb-6 flex flex-wrap items-center gap-3">
-          {rfcs.length > 0 && (
-            <>
-              <div className="flex items-center gap-1.5">
-                {ALL_STATUSES.map((status) => {
-                  const isSelected = selectedStatuses.has(status);
-                  const colorClasses = isSelected
-                    ? STATUS_PILL_CLASSES[status]
-                    : `bg-transparent opacity-40 hover:opacity-70 ${STATUS_BORDER_CLASSES[status]}`;
-                  return (
-                    <button
-                      key={status}
-                      type="button"
-                      onClick={() => toggleStatus(status)}
-                      className={`border rounded-sm px-2 py-1 text-xs font-medium uppercase tracking-wider transition-all cursor-pointer text-foreground ${colorClasses}`}
-                    >
-                      {status}
-                    </button>
-                  );
-                })}
-              </div>
+          <div className="flex items-center gap-1.5">
+            {ALL_STATUSES.map((status) => {
+              const isSelected = selectedStatuses.has(status);
+              const colorClasses = isSelected
+                ? STATUS_PILL_CLASSES[status]
+                : `bg-transparent opacity-40 hover:opacity-70 ${STATUS_BORDER_CLASSES[status]}`;
+              return (
+                <button
+                  key={status}
+                  type="button"
+                  onClick={() => toggleStatus(status)}
+                  className={`border rounded-sm px-2 py-1 text-xs font-medium uppercase tracking-wider transition-all cursor-pointer text-foreground ${colorClasses}`}
+                >
+                  {status}
+                </button>
+              );
+            })}
+          </div>
 
-              <div className="h-5 w-px bg-gray-20" />
-            </>
-          )}
+          <div className="h-5 w-px bg-gray-20" />
 
           {repoSelectorElement}
 
-          {rfcs.length > 0 && (
-            <>
-              <div className="relative" ref={authorDropdownRef}>
-                <button
-                  type="button"
-                  onClick={() => setAuthorDropdownOpen(!authorDropdownOpen)}
-                  className="text-sm text-gray-50 hover:text-foreground transition-colors flex items-center gap-2"
-                >
-                  {selectedAuthor ? (
-                    <span className="flex items-center gap-1.5">
-                      <img
-                        src={
-                          authors.find((a) => a.login === selectedAuthor)
-                            ?.avatar
-                        }
-                        alt={selectedAuthor}
-                        className="h-4 w-4 rounded-full border border-gray-20"
-                      />
-                      {selectedAuthor}
-                    </span>
-                  ) : (
-                    "All authors"
-                  )}
-                  <svg
-                    aria-hidden
-                    className={`w-4 h-4 transition-transform ${authorDropdownOpen ? "rotate-180" : ""}`}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <title>Toggle</title>
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M19 9l-7 7-7-7"
-                    />
-                  </svg>
-                </button>
+          <div className="relative" ref={authorDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setAuthorDropdownOpen(!authorDropdownOpen)}
+              disabled={isLoading}
+              className="text-sm text-gray-50 hover:text-foreground transition-colors flex items-center gap-2 disabled:opacity-50 disabled:hover:text-gray-50 disabled:cursor-default"
+            >
+              {selectedAuthor ? (
+                <span className="flex items-center gap-1.5">
+                  <img
+                    src={
+                      authors.find((a) => a.login === selectedAuthor)?.avatar
+                    }
+                    alt={selectedAuthor}
+                    className="h-4 w-4 rounded-full border border-gray-20"
+                  />
+                  {selectedAuthor}
+                </span>
+              ) : (
+                "All authors"
+              )}
+              <svg
+                aria-hidden
+                className={`w-4 h-4 transition-transform ${authorDropdownOpen ? "rotate-180" : ""}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <title>Toggle</title>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
+              </svg>
+            </button>
 
-                <AnimatePresence>
-                  {authorDropdownOpen && (
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.95 }}
-                      transition={{ duration: 0.15 }}
-                      className="absolute top-full left-0 mt-2 w-64 bg-surface border border-gray-20 rounded-md z-50"
+            <AnimatePresence>
+              {authorDropdownOpen && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute top-full left-0 mt-2 w-64 bg-surface border border-gray-20 rounded-md z-50"
+                >
+                  {authors.length > 5 && (
+                    <div className="p-3 border-b border-gray-20">
+                      <input
+                        ref={authorInputRef}
+                        type="text"
+                        placeholder="Search authors..."
+                        value={authorSearchQuery}
+                        onChange={(e) => setAuthorSearchQuery(e.target.value)}
+                        className="w-full border border-gray-30 rounded-sm px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan focus:border-transparent"
+                      />
+                    </div>
+                  )}
+                  <div className="max-h-64 overflow-y-auto">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedAuthor(null);
+                        setAuthorDropdownOpen(false);
+                        setAuthorSearchQuery("");
+                      }}
+                      className={`w-full text-left px-4 py-2.5 text-sm border-b border-gray-20 hover:bg-yellow-light transition-colors ${
+                        !selectedAuthor ? "bg-gray-5 font-medium" : ""
+                      }`}
                     >
-                      {authors.length > 5 && (
-                        <div className="p-3 border-b border-gray-20">
-                          <input
-                            ref={authorInputRef}
-                            type="text"
-                            placeholder="Search authors..."
-                            value={authorSearchQuery}
-                            onChange={(e) =>
-                              setAuthorSearchQuery(e.target.value)
-                            }
-                            className="w-full border border-gray-30 rounded-sm px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan focus:border-transparent"
-                          />
-                        </div>
-                      )}
-                      <div className="max-h-64 overflow-y-auto">
+                      All authors
+                    </button>
+                    {authors
+                      .filter((a) =>
+                        a.login
+                          .toLowerCase()
+                          .includes(authorSearchQuery.toLowerCase()),
+                      )
+                      .map((author) => (
                         <button
+                          key={author.login}
                           type="button"
                           onClick={() => {
-                            setSelectedAuthor(null);
+                            setSelectedAuthor(author.login);
                             setAuthorDropdownOpen(false);
                             setAuthorSearchQuery("");
                           }}
-                          className={`w-full text-left px-4 py-2.5 text-sm border-b border-gray-20 hover:bg-yellow-light transition-colors ${
-                            !selectedAuthor ? "bg-gray-5 font-medium" : ""
+                          className={`w-full text-left px-4 py-2.5 text-sm border-b border-gray-20 last:border-b-0 hover:bg-yellow-light transition-colors flex items-center gap-2 ${
+                            selectedAuthor === author.login
+                              ? "bg-gray-5 font-medium"
+                              : ""
                           }`}
                         >
-                          All authors
+                          <img
+                            src={author.avatar}
+                            alt={author.login}
+                            className="h-5 w-5 rounded-full border border-gray-20"
+                          />
+                          {author.login}
                         </button>
-                        {authors
-                          .filter((a) =>
-                            a.login
-                              .toLowerCase()
-                              .includes(authorSearchQuery.toLowerCase()),
-                          )
-                          .map((author) => (
-                            <button
-                              key={author.login}
-                              type="button"
-                              onClick={() => {
-                                setSelectedAuthor(author.login);
-                                setAuthorDropdownOpen(false);
-                                setAuthorSearchQuery("");
-                              }}
-                              className={`w-full text-left px-4 py-2.5 text-sm border-b border-gray-20 last:border-b-0 hover:bg-yellow-light transition-colors flex items-center gap-2 ${
-                                selectedAuthor === author.login
-                                  ? "bg-gray-5 font-medium"
-                                  : ""
-                              }`}
-                            >
-                              <img
-                                src={author.avatar}
-                                alt={author.login}
-                                className="h-5 w-5 rounded-full border border-gray-20"
-                              />
-                              {author.login}
-                            </button>
-                          ))}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-
-              {selectedAuthor && (
-                <button
-                  type="button"
-                  onClick={() => setSelectedAuthor(null)}
-                  className="text-sm text-gray-50 hover:text-foreground transition-colors"
-                >
-                  (clear)
-                </button>
+                      ))}
+                  </div>
+                </motion.div>
               )}
+            </AnimatePresence>
+          </div>
 
-              <span className="text-xs text-gray-50 ml-auto tabular-nums">
-                {filteredCount} of {rfcs.length}
-              </span>
-            </>
+          {selectedAuthor && (
+            <button
+              type="button"
+              onClick={() => setSelectedAuthor(null)}
+              className="text-sm text-gray-50 hover:text-foreground transition-colors"
+            >
+              (clear)
+            </button>
+          )}
+
+          {!isLoading && rfcs && (
+            <span className="text-xs text-gray-50 ml-auto tabular-nums">
+              {filteredCount} of {rfcs.length}
+            </span>
           )}
         </div>
       )}
@@ -469,15 +491,24 @@ export default function RFCsPageClient({
                 <MyProposalsEmpty
                   selectedRepo={selectedRepo}
                   hiddenByFilters={totalMine - mineRfcs.length}
+                  onlyOpenStatusFilter={onlyOpenStatusFilter}
                   onClearFilters={clearFilters}
                 />
               }
             />
           )}
-          {hasAnyOthers && (
+          {hasAnyReviewRequested && (
             <RFCSection
-              title="Up for my review"
-              rfcs={othersRfcs}
+              title="My review requested"
+              rfcs={reviewRequestedRfcs}
+              variant="review-requested"
+              emptyState={<HiddenByFilters onClearFilters={clearFilters} />}
+            />
+          )}
+          {hasAnyOthersUpForReview && (
+            <RFCSection
+              title="All up for review"
+              rfcs={othersUpForReviewRfcs}
               variant="others"
               emptyState={<HiddenByFilters onClearFilters={clearFilters} />}
             />
@@ -504,8 +535,9 @@ function EmptyRFCsState({ selectedRepo }: { selectedRepo: RepoOption | null }) {
       <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
         <Link
           href={newRfcHref(selectedRepo)}
-          className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-surface transition-all hover:opacity-80 cursor-pointer"
+          className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-surface transition-all hover:opacity-80 cursor-pointer flex items-center gap-1.5"
         >
+          <NewRfcPlusIcon />
           Start an RFC
         </Link>
       </div>
@@ -516,14 +548,17 @@ function EmptyRFCsState({ selectedRepo }: { selectedRepo: RepoOption | null }) {
 function MyProposalsEmpty({
   selectedRepo,
   hiddenByFilters,
+  onlyOpenStatusFilter,
   onClearFilters,
 }: {
   selectedRepo: RepoOption | null;
   hiddenByFilters: number;
+  onlyOpenStatusFilter: boolean;
   onClearFilters: () => void;
 }) {
-  const headline =
-    hiddenByFilters > 0
+  const headline = onlyOpenStatusFilter
+    ? "You don't have any RFCs in progress right now."
+    : hiddenByFilters > 0
       ? "Nothing matches the current filters."
       : "You haven't started an RFC yet.";
   return (
@@ -532,11 +567,12 @@ function MyProposalsEmpty({
       <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
         <Link
           href={newRfcHref(selectedRepo)}
-          className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-surface transition-all hover:opacity-80 cursor-pointer"
+          className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-surface transition-all hover:opacity-80 cursor-pointer flex items-center gap-1.5"
         >
+          <NewRfcPlusIcon />
           Start an RFC
         </Link>
-        {hiddenByFilters > 0 && (
+        {hiddenByFilters > 0 && !onlyOpenStatusFilter && (
           <button
             type="button"
             onClick={onClearFilters}
@@ -576,7 +612,7 @@ function RFCSection({
 }: {
   title: string;
   rfcs: RFC[];
-  variant: "mine" | "others";
+  variant: "mine" | "review-requested" | "others";
   emptyState?: React.ReactNode;
 }) {
   return (
@@ -624,7 +660,7 @@ function RFCRow({
 }: {
   rfc: RFC;
   isFirst: boolean;
-  variant: "mine" | "others";
+  variant: "mine" | "review-requested" | "others";
 }) {
   const myState = variant === "mine" ? myProposalState(rfc) : null;
   return (
@@ -640,7 +676,7 @@ function RFCRow({
         href={`/rfcs/${rfc.owner}/${rfc.repo}/${rfc.number}/${slugify(rfc.title)}`}
         className={`group block border-b border-gray-20 px-4 sm:px-6 py-4 sm:py-5 transition-all hover:bg-gray-5 ${
           isFirst ? "border-t border-gray-20" : ""
-        } ${rfc.reviewRequested ? "bg-yellow-light" : ""}`}
+        }`}
       >
         <div className="flex items-start justify-between gap-4 sm:gap-6">
           <div className="flex-1 min-w-0">
@@ -648,11 +684,6 @@ function RFCRow({
               <h2 className="text-3xl font-medium text-foreground break-words font-serif">
                 {rfc.title}
               </h2>
-              {rfc.reviewRequested && (
-                <span className="border border-magenta bg-magenta-light text-foreground rounded-sm px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium uppercase tracking-wider flex-shrink-0">
-                  Review Requested
-                </span>
-              )}
               <span
                 className={`border rounded-sm px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium uppercase tracking-wider flex-shrink-0 text-foreground ${
                   myState?.classes ?? STATUS_PILL_CLASSES[rfc.status]

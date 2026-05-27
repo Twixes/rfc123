@@ -1,5 +1,6 @@
 "use client";
 
+import posthog from "posthog-js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Checkbox from "@/components/Checkbox";
 import { DiscussWithAgentButton } from "@/components/DiscussWithAgentButton";
@@ -15,6 +16,7 @@ import RFCDetailLoadingSkeleton from "@/components/RFCDetailLoadingSkeleton";
 import { RFCMetadataHeader } from "@/components/RFCMetadataHeader";
 import RFCsTopBar from "@/components/RFCsTopBar";
 import RFCsTopBarActions from "@/components/RFCsTopBarActions";
+import { RfcMarkdownMissing } from "@/components/RfcMarkdownMissing";
 import Tooltip from "@/components/Tooltip";
 import type { Comment, RFCDetail, RfcStateAction } from "@/lib/github";
 import { type LineDiffEntry, lineDiff } from "@/lib/line-diff";
@@ -243,6 +245,14 @@ export default function RFCDetailClient({
         throw new Error("Failed to post comment");
       }
 
+      posthog.capture("comment_posted", {
+        comment_type: "inline",
+        is_reply: replyToCommentId != null,
+        owner,
+        repo,
+        rfc_number: rfc.number,
+      });
+
       // Comment posted successfully - reload only comments in background
       await loadComments();
     } catch (error) {
@@ -268,6 +278,14 @@ export default function RFCDetailClient({
     // Add optimistic comment immediately
     setOptimisticComments((prev) => [...prev, optimisticComment]);
 
+    posthog.capture("comment_posted", {
+      comment_type: "general",
+      is_reply: false,
+      owner,
+      repo,
+      rfc_number: prNumber,
+    });
+
     // The actual API call is handled by CommentBox
     // After successful post, reload only comments
     await loadComments();
@@ -290,6 +308,12 @@ export default function RFCDetailClient({
         const body = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(body.error ?? "Failed to update RFC state");
       }
+      posthog.capture("rfc_state_changed", {
+        action,
+        owner,
+        repo,
+        rfc_number: prNumber,
+      });
       await loadRFC({ silent: true });
     } catch (e) {
       setMutationError({ message: (e as Error).message });
@@ -417,6 +441,11 @@ export default function RFCDetailClient({
             }
           : prev,
       );
+      posthog.capture("rfc_body_saved", {
+        owner,
+        repo,
+        rfc_number: prNumber,
+      });
       exitBodyEdit({ clearDraft: true });
       // Pick up the new commit's other side effects (e.g. outdated inline
       // comments) without blanking the page.
@@ -489,6 +518,12 @@ export default function RFCDetailClient({
         setRfc(previous);
         return;
       }
+      posthog.capture("reviewers_updated", {
+        reviewer_count: next.length,
+        owner,
+        repo,
+        rfc_number: prNumber,
+      });
       // Refetch authoritative reviewer state (avatars for newly-added users,
       // reviewers GitHub silently dropped, etc.).
       await loadRFC({ silent: true });
@@ -632,7 +667,7 @@ export default function RFCDetailClient({
           </div>
         }
         bylineActions={
-          editingBody == null ? (
+          editingBody == null && rfc.markdownFilePath ? (
             <ViewModeToggle
               value={viewMode}
               onChange={setViewMode}
@@ -641,7 +676,7 @@ export default function RFCDetailClient({
                 { value: "raw", label: "Raw" },
               ]}
             />
-          ) : (
+          ) : editingBody != null ? (
             <ViewModeToggle
               value={editTab}
               onChange={setEditTab}
@@ -650,7 +685,7 @@ export default function RFCDetailClient({
                 { value: "preview", label: "Preview" },
               ]}
             />
-          )
+          ) : null
         }
       />
 
@@ -683,6 +718,15 @@ export default function RFCDetailClient({
             onResetAndRefresh={resetAndRefresh}
             saveError={bodySaveError}
           />
+        ) : !rfc.markdownFilePath ? (
+          <RfcMarkdownMissing
+            attempts={
+              rfc.markdownMissingAttempts ?? [
+                "Listed changed files on this pull request and looked for a path ending in `.md`.",
+              ]
+            }
+            githubUrl={rfc.url}
+          />
         ) : viewMode === "pretty" ? (
           <InlineCommentableMarkdown
             content={rfc.markdownContent}
@@ -690,7 +734,7 @@ export default function RFCDetailClient({
             owner={owner}
             repo={repo}
             markdownFilePath={rfc.markdownFilePath}
-            headRef={rfc.headRef}
+            headRef={rfc.headSha}
             comments={lineComments}
             commentsLoading={commentsLoading}
             highlightedCommentId={highlightedCommentId}

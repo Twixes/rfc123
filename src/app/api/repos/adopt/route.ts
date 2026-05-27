@@ -1,6 +1,17 @@
 import { NextResponse } from "next/server";
 import { auth, getAccessToken } from "@/auth";
-import { adoptRfcRepo, type RfcLayout } from "@/lib/github";
+import {
+  api,
+  convexClient,
+  loadOrCreateViewerUserRow,
+  secretKey,
+} from "@/lib/convex";
+import {
+  adoptRfcRepo,
+  getCurrentUserLogin,
+  type RfcLayout,
+} from "@/lib/github";
+import { getPostHogServer } from "@/lib/posthog-server";
 import { VALID_GITHUB_REPO_NAME } from "@/lib/rfc-config";
 
 interface AdoptRepoBody {
@@ -29,8 +40,72 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid_name" }, { status: 400 });
   }
   try {
-    const result = await adoptRfcRepo({ accessToken, owner, name, layout });
-    return NextResponse.json(result);
+    // Adoption and the viewer-row lookup are independent – run them together
+    // so the Convex round-trip doesn't extend the request beyond GitHub's
+    // latency floor. Errors from either propagate to the 500 branch below –
+    // surfacing a real failure beats showing the user a phantom pending UI
+    // that the picker can't track.
+    const [result, userRow, userLogin] = await Promise.all([
+      adoptRfcRepo({ accessToken, owner, name, layout }),
+      loadOrCreateViewerUserRow(accessToken),
+      getCurrentUserLogin(accessToken),
+    ]);
+
+    if (result.status === "pending") {
+      await convexClient().mutation(api.repos.upsertPendingAdoption, {
+        secret: secretKey(),
+        userId: userRow._id,
+        owner: result.owner,
+        name: result.name,
+        fullName: result.fullName,
+        layout,
+        prNumber: result.pr.number,
+        prUrl: result.pr.url,
+        branchName: result.pr.branchName,
+        defaultBranch: result.pr.defaultBranch,
+      });
+      getPostHogServer()?.capture({
+        distinctId: userLogin,
+        event: "repo_adopted",
+        properties: { layout, owner: result.owner, status: "pending" },
+      });
+      return NextResponse.json({
+        status: "pending",
+        owner: result.owner,
+        name: result.name,
+        fullName: result.fullName,
+        pr: result.pr,
+      });
+    }
+
+    // `alreadyAdopted` means the file was already on the default branch when
+    // we tried – no prior pending row to clear, so skip the Convex hit.
+    if (!result.alreadyAdopted) {
+      await convexClient().mutation(api.repos.clearAdoption, {
+        secret: secretKey(),
+        userId: userRow._id,
+        owner: result.owner,
+        name: result.name,
+      });
+    }
+
+    getPostHogServer()?.capture({
+      distinctId: userLogin,
+      event: "repo_adopted",
+      properties: {
+        layout,
+        owner: result.owner,
+        status: result.alreadyAdopted ? "already_adopted" : "adopted",
+      },
+    });
+
+    return NextResponse.json({
+      status: "adopted",
+      owner: result.owner,
+      name: result.name,
+      fullName: result.fullName,
+      alreadyAdopted: result.alreadyAdopted,
+    });
   } catch (error) {
     const err = error as Error & { status?: number; code?: string };
     console.error("Error adopting RFC repo:", err);
@@ -49,8 +124,8 @@ export async function POST(request: Request) {
         { status: 404 },
       );
     }
-    // Generic message: err.message may include raw GitHub response excerpts
-    // (branch protection rule names, internal IDs, etc.). Server logs above
+    // err.message can include raw GitHub response excerpts (branch protection
+    // rule names, internal IDs) – return a generic message; server logs above
     // retain the detail.
     return NextResponse.json(
       { error: "Couldn't add this repo. Please try again." },

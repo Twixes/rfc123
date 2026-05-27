@@ -1,28 +1,20 @@
 import NextAuth from "next-auth";
-import GitHub from "next-auth/providers/github";
+import authConfig from "./auth.config";
 
 /** Pulls the GitHub OAuth token off the session if present. The token is
- *  grafted onto the session in the `session` callback below; NextAuth's stock
- *  Session type doesn't reflect that, hence the unchecked cast. Returns null
- *  when unauthenticated so route handlers can short-circuit cleanly. */
+ *  grafted onto the session in the `session` callback (see `auth.config.ts`);
+ *  NextAuth's stock Session type doesn't reflect that, hence the unchecked
+ *  cast. Returns null when unauthenticated so route handlers can short-circuit
+ *  cleanly. */
 export function getAccessToken(session: unknown): string | null {
   const token = (session as { accessToken?: unknown } | null)?.accessToken;
   return typeof token === "string" && token.length > 0 ? token : null;
 }
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
-  providers: [
-    GitHub({
-      clientId: process.env.GITHUB_CLIENT_ID!,
-      clientSecret: process.env.GITHUB_CLIENT_SECRET!,
-      authorization: {
-        params: {
-          scope: "read:user user:email repo read:org",
-        },
-      },
-    }),
-  ],
+  ...authConfig,
   callbacks: {
+    ...authConfig.callbacks,
     async jwt({ token, account, profile }) {
       if (account) {
         token.accessToken = account.access_token;
@@ -32,6 +24,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const ghProfile = profile as
           | { id?: number; login?: string }
           | undefined;
+        if (ghProfile?.login) {
+          token.githubLogin = ghProfile.login;
+        }
         if (
           account.access_token &&
           ghProfile &&
@@ -57,21 +52,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         }
       }
       return token;
-    },
-    async session({ session, token }) {
-      (session as any).accessToken = token.accessToken;
-      return session;
-    },
-    async redirect({ url, baseUrl }) {
-      // If url is provided and is a relative path or belongs to the same origin, use it
-      if (url.startsWith("/")) {
-        return `${baseUrl}${url}`;
-      }
-      if (url.startsWith(baseUrl)) {
-        return url;
-      }
-      // Default to /rfcs if no valid callback URL
-      return `${baseUrl}/rfcs`;
     },
   },
 });

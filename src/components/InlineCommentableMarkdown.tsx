@@ -5,6 +5,7 @@
 import {
   memo,
   useCallback,
+  useDeferredValue,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -375,19 +376,31 @@ function LineHoverController({
     markdownRef,
   ]);
 
+  const arrowsRafRef = useRef<number | null>(null);
+  const scheduleRecalcArrows = useCallback(() => {
+    if (arrowsRafRef.current != null) return;
+    arrowsRafRef.current = requestAnimationFrame(() => {
+      arrowsRafRef.current = null;
+      recalcArrows();
+    });
+  }, [recalcArrows]);
+
   useEffect(() => {
-    recalcArrows();
-    const ro = new ResizeObserver(() => recalcArrows());
+    scheduleRecalcArrows();
+    const ro = new ResizeObserver(() => scheduleRecalcArrows());
     if (containerRef.current) ro.observe(containerRef.current);
-    const onScroll = () => requestAnimationFrame(() => recalcArrows());
+    const onScroll = () => scheduleRecalcArrows();
     window.addEventListener("scroll", onScroll, true);
-    const timer = setTimeout(() => recalcArrows(), 350);
+    const timer = setTimeout(() => scheduleRecalcArrows(), 350);
     return () => {
       ro.disconnect();
       window.removeEventListener("scroll", onScroll, true);
       clearTimeout(timer);
+      if (arrowsRafRef.current != null) {
+        cancelAnimationFrame(arrowsRafRef.current);
+      }
     };
-  }, [recalcArrows, containerRef.current]);
+  }, [scheduleRecalcArrows, containerRef.current]);
 
   return (
     <>
@@ -664,13 +677,36 @@ export function InlineCommentableMarkdown({
     return map;
   }, [comments]);
 
+  /** Sidebar + layout work is deferred so comment load does not block the markdown column. */
+  const deferredComments = useDeferredValue(comments);
+  const layoutCommentsByLine = useMemo(() => {
+    const map = new Map<number, Comment[]>();
+    for (const comment of deferredComments) {
+      if (comment.line) {
+        const existing = map.get(comment.line) || [];
+        map.set(comment.line, [...existing, comment]);
+      }
+    }
+    return map;
+  }, [deferredComments]);
+
+  /** Latest comment map for markdown renderers without rebuilding `markdownComponents`. */
+  const commentsByLineRef = useRef(commentsByLine);
+  commentsByLineRef.current = commentsByLine;
+  const lineHasComments = useCallback(
+    (lineNumber: number) => commentsByLineRef.current.has(lineNumber),
+    [],
+  );
+
   const threadsByLine = useMemo(() => {
     const map = new Map<number, CommentThread[]>();
-    for (const [line, lineComments] of commentsByLine.entries()) {
+    for (const [line, lineComments] of layoutCommentsByLine.entries()) {
       map.set(line, groupIntoThreads(lineComments));
     }
     return map;
-  }, [commentsByLine]);
+  }, [layoutCommentsByLine]);
+  const threadsByLineRef = useRef(threadsByLine);
+  threadsByLineRef.current = threadsByLine;
 
   // Calculate line offsets after render using injected markers
   useEffect(() => {
@@ -681,16 +717,20 @@ export function InlineCommentableMarkdown({
     const markdownElement = markdownRef.current;
     const containerRect = markdownElement.getBoundingClientRect();
 
-    // Query all line markers and calculate their offsets
-    for (let i = 1; i <= lines.length; i++) {
-      const marker = document.getElementById(`line-marker-${i}`);
-      if (marker) {
-        withMarkers.add(i);
-        const markerRect = marker.getBoundingClientRect();
-        const offset =
-          markerRect.top - containerRect.top + markdownElement.scrollTop;
-        offsets.set(i, offset);
-      }
+    // One DOM query for all markers (avoid 250× getElementById per pass).
+    for (const marker of markdownElement.querySelectorAll(
+      '[id^="line-marker-"]',
+    )) {
+      const lineNum = Number.parseInt(
+        marker.id.slice("line-marker-".length),
+        10,
+      );
+      if (Number.isNaN(lineNum)) continue;
+      withMarkers.add(lineNum);
+      const markerRect = marker.getBoundingClientRect();
+      const offset =
+        markerRect.top - containerRect.top + markdownElement.scrollTop;
+      offsets.set(lineNum, offset);
     }
 
     // Interpolate offsets ONLY for blank lines that have comments (so comment boxes can be positioned).
@@ -702,7 +742,7 @@ export function InlineCommentableMarkdown({
     for (let i = 1; i <= lines.length; i++) {
       if (offsets.has(i)) continue;
       const isEmpty = lines[i - 1]?.trim() === "";
-      if (isEmpty && !commentsByLine.has(i)) continue;
+      if (isEmpty && !layoutCommentsByLine.has(i)) continue;
 
       let prevLine: number | undefined;
       let prevOffset: number | undefined;
@@ -760,7 +800,7 @@ export function InlineCommentableMarkdown({
     // in the markdown column. Including it caused every click to rebuild
     // lineRanges/lineOffsets/lineAlias, which destabilized handleLineClick and
     // forced a full ReactMarkdown re-parse via markdownComponents.
-  }, [lines, commentsByLine]);
+  }, [lines, layoutCommentsByLine]);
 
   // Stable hover callbacks – delegate to LineHoverController via ref so this component
   // does not re-render when hover state changes.
@@ -772,22 +812,19 @@ export function InlineCommentableMarkdown({
   }, []);
 
   // Render profile pictures for a line if it has comments
-  const renderProfilePictures = useCallback(
-    (lineNumber?: number) => {
-      if (!lineNumber) return null;
-      const lineComments = commentsByLine.get(lineNumber);
-      if (!lineComments?.length) return null;
-      return (
-        <ProfilePictures
-          users={lineComments.map((c) => ({
-            name: c.user,
-            avatar: c.userAvatar,
-          }))}
-        />
-      );
-    },
-    [commentsByLine],
-  );
+  const renderProfilePictures = useCallback((lineNumber?: number) => {
+    if (!lineNumber) return null;
+    const lineComments = commentsByLineRef.current.get(lineNumber);
+    if (!lineComments?.length) return null;
+    return (
+      <ProfilePictures
+        users={lineComments.map((c) => ({
+          name: c.user,
+          avatar: c.userAvatar,
+        }))}
+      />
+    );
+  }, []);
 
   // Stable refs to mutable state so handleLineClick can avoid depending on
   // activeLineIndex / replyTarget / collapsedLines (which all change on click).
@@ -802,27 +839,48 @@ export function InlineCommentableMarkdown({
   lineRangesRef.current = lineRanges;
 
   // Handle clicking on a line in the markdown content
-  const handleLineClick = useCallback(
-    (lineNumber: number) => {
-      const lineIndex = lineNumber - 1;
-      const endLine = lineRangesRef.current.get(lineNumber);
-      const isMultiLineBlock = endLine != null && endLine > lineNumber;
+  const handleLineClick = useCallback((lineNumber: number) => {
+    const lineIndex = lineNumber - 1;
+    const endLine = lineRangesRef.current.get(lineNumber);
+    const isMultiLineBlock = endLine != null && endLine > lineNumber;
 
-      if (commentsByLine.has(lineNumber)) {
-        setActiveLineIndex(null);
-        setLineCommentInitialDraft("");
+    if (commentsByLineRef.current.has(lineNumber)) {
+      setActiveLineIndex(null);
+      setLineCommentInitialDraft("");
 
-        if (isMultiLineBlock) {
-          // Multi-line block with existing thread: always expand and piggyback on the thread
-          setCollapsedLines((prev) => {
-            const resolved = prev ?? defaultCollapsedLines(commentsByLine);
-            const updated = new Set(resolved);
+      if (isMultiLineBlock) {
+        // Multi-line block with existing thread: always expand and piggyback on the thread
+        setCollapsedLines((prev) => {
+          const resolved =
+            prev ?? defaultCollapsedLines(commentsByLineRef.current);
+          const updated = new Set(resolved);
+          updated.delete(lineNumber);
+          return updated;
+        });
+        // Only set reply target if not already replying to this line
+        if (replyTargetRef.current?.line !== lineNumber) {
+          const lineThreads = threadsByLineRef.current.get(lineNumber);
+          if (lineThreads?.length === 1) {
+            setReplyTarget({
+              type: "thread",
+              line: lineNumber,
+              threadId: lineThreads[0].id,
+            });
+          } else {
+            setReplyTarget({ type: "newThread", line: lineNumber });
+          }
+          setReplyInitialDraft("");
+        }
+      } else {
+        // Single-line element: toggle collapse/expand
+        setCollapsedLines((prev) => {
+          const resolved =
+            prev ?? defaultCollapsedLines(commentsByLineRef.current);
+          const updated = new Set(resolved);
+          if (resolved.has(lineNumber)) {
             updated.delete(lineNumber);
-            return updated;
-          });
-          // Only set reply target if not already replying to this line
-          if (replyTargetRef.current?.line !== lineNumber) {
-            const lineThreads = threadsByLine.get(lineNumber);
+            // Opening: auto-start reply if single thread, otherwise let user pick
+            const lineThreads = threadsByLineRef.current.get(lineNumber);
             if (lineThreads?.length === 1) {
               setReplyTarget({
                 type: "thread",
@@ -830,53 +888,31 @@ export function InlineCommentableMarkdown({
                 threadId: lineThreads[0].id,
               });
             } else {
-              setReplyTarget({ type: "newThread", line: lineNumber });
+              setReplyTarget(null);
             }
             setReplyInitialDraft("");
-          }
-        } else {
-          // Single-line element: toggle collapse/expand
-          setCollapsedLines((prev) => {
-            const resolved = prev ?? defaultCollapsedLines(commentsByLine);
-            const updated = new Set(resolved);
-            if (resolved.has(lineNumber)) {
-              updated.delete(lineNumber);
-              // Opening: auto-start reply if single thread, otherwise let user pick
-              const lineThreads = threadsByLine.get(lineNumber);
-              if (lineThreads?.length === 1) {
-                setReplyTarget({
-                  type: "thread",
-                  line: lineNumber,
-                  threadId: lineThreads[0].id,
-                });
-              } else {
-                setReplyTarget(null);
-              }
+          } else {
+            updated.add(lineNumber);
+            if (replyTargetRef.current?.line === lineNumber) {
+              setReplyTarget(null);
               setReplyInitialDraft("");
-            } else {
-              updated.add(lineNumber);
-              if (replyTargetRef.current?.line === lineNumber) {
-                setReplyTarget(null);
-                setReplyInitialDraft("");
-              }
             }
-            return updated;
-          });
-        }
-      } else {
-        if (activeLineIndexRef.current === lineIndex) {
-          setActiveLineIndex(null);
-          setLineCommentInitialDraft("");
-        } else {
-          setReplyTarget(null);
-          setReplyInitialDraft("");
-          setActiveLineIndex(lineIndex);
-          setLineCommentInitialDraft("");
-        }
+          }
+          return updated;
+        });
       }
-    },
-    [commentsByLine, threadsByLine],
-  );
+    } else {
+      if (activeLineIndexRef.current === lineIndex) {
+        setActiveLineIndex(null);
+        setLineCommentInitialDraft("");
+      } else {
+        setReplyTarget(null);
+        setReplyInitialDraft("");
+        setActiveLineIndex(lineIndex);
+        setLineCommentInitialDraft("");
+      }
+    }
+  }, []);
 
   // Auto-expand the collapsed group that contains the highlighted comment
   useEffect(() => {
@@ -897,8 +933,8 @@ export function InlineCommentableMarkdown({
 
   // Initialize collapsed state: collapse all if more than 3 comment blocks
   const resolvedCollapsedLines = useMemo(
-    () => collapsedLines ?? defaultCollapsedLines(commentsByLine),
-    [collapsedLines, commentsByLine],
+    () => collapsedLines ?? defaultCollapsedLines(layoutCommentsByLine),
+    [collapsedLines, layoutCommentsByLine],
   );
 
   // Calculate all comment box positions to prevent overlaps
@@ -914,7 +950,7 @@ export function InlineCommentableMarkdown({
       }> = [];
 
       // Add all existing comment boxes
-      for (const ln of commentsByLine.keys()) {
+      for (const ln of layoutCommentsByLine.keys()) {
         boxesToPosition.push({
           lineNum: ln,
           ref: commentBoxRefs.current.get(ln) || null,
@@ -979,7 +1015,7 @@ export function InlineCommentableMarkdown({
     // removing it prevents a re-trigger when ELC boxes mount and shift layout.
     const raf = requestAnimationFrame(() => recalcPositions());
     return () => cancelAnimationFrame(raf);
-  }, [commentsByLine, activeLineIndex, resolvedCollapsedLines]);
+  }, [layoutCommentsByLine, activeLineIndex, resolvedCollapsedLines]);
 
   // Helper to get the position for a specific line
   const getCommentPosition = (lineNumber: number): number => {
@@ -1120,7 +1156,7 @@ export function InlineCommentableMarkdown({
     }
   }
 
-  // Memoized components – only recomputes when comments change, not on hover/active state changes.
+  // Memoized components – stable when comments load (comment UI reads refs).
   // Hover highlighting is applied imperatively in LineHoverController (injected <style>).
 
   const markdownComponents = useMemo(
@@ -1129,7 +1165,7 @@ export function InlineCommentableMarkdown({
         const lineNumber = props["data-line-element"];
         return (
           <h1
-            className={`relative mb-3 mt-4 py-2 border-b border-gray-20 text-4xl font-serif! font-normal! tracking-tight leading-tight text-foreground ${lineNumber ? "cursor-pointer" : ""} ${lineNumber && commentsByLine.has(lineNumber) ? "pr-8" : ""}`}
+            className={`relative mb-3 mt-4 py-2 border-b border-gray-20 text-4xl font-serif! font-normal! tracking-tight leading-tight text-foreground ${lineNumber ? "cursor-pointer" : ""} ${lineNumber && lineHasComments(lineNumber) ? "pr-8" : ""}`}
             onClick={() => lineNumber && handleLineClick(lineNumber)}
             onMouseEnter={() => lineNumber && handleMouseEnterLine(lineNumber)}
             onMouseLeave={handleMouseLeaveLine}
@@ -1146,7 +1182,7 @@ export function InlineCommentableMarkdown({
         const lineNumber = props["data-line-element"];
         return (
           <h2
-            className={`relative mb-3 mt-3 py-2 border-b border-gray-20 text-3xl font-serif! font-normal! tracking-tight leading-tight text-foreground ${lineNumber ? "cursor-pointer" : ""} ${lineNumber && commentsByLine.has(lineNumber) ? "pr-8" : ""}`}
+            className={`relative mb-3 mt-3 py-2 border-b border-gray-20 text-3xl font-serif! font-normal! tracking-tight leading-tight text-foreground ${lineNumber ? "cursor-pointer" : ""} ${lineNumber && lineHasComments(lineNumber) ? "pr-8" : ""}`}
             onClick={() => lineNumber && handleLineClick(lineNumber)}
             onMouseEnter={() => lineNumber && handleMouseEnterLine(lineNumber)}
             onMouseLeave={handleMouseLeaveLine}
@@ -1163,7 +1199,7 @@ export function InlineCommentableMarkdown({
         const lineNumber = props["data-line-element"];
         return (
           <h3
-            className={`relative mb-2 mt-4 text-xl font-sans! font-semibold! leading-snug text-foreground ${lineNumber ? "cursor-pointer" : ""} ${lineNumber && commentsByLine.has(lineNumber) ? "pr-8" : ""}`}
+            className={`relative mb-2 mt-4 text-xl font-sans! font-semibold! leading-snug text-foreground ${lineNumber ? "cursor-pointer" : ""} ${lineNumber && lineHasComments(lineNumber) ? "pr-8" : ""}`}
             onClick={() => lineNumber && handleLineClick(lineNumber)}
             onMouseEnter={() => lineNumber && handleMouseEnterLine(lineNumber)}
             onMouseLeave={handleMouseLeaveLine}
@@ -1180,7 +1216,7 @@ export function InlineCommentableMarkdown({
         const lineNumber = props["data-line-element"];
         return (
           <p
-            className={`relative my-2 ${lineNumber ? "cursor-pointer" : ""} ${lineNumber && commentsByLine.has(lineNumber) ? "pr-8" : ""}`}
+            className={`relative my-2 ${lineNumber ? "cursor-pointer" : ""} ${lineNumber && lineHasComments(lineNumber) ? "pr-8" : ""}`}
             onClick={() => lineNumber && handleLineClick(lineNumber)}
             onMouseEnter={() => lineNumber && handleMouseEnterLine(lineNumber)}
             onMouseLeave={handleMouseLeaveLine}
@@ -1237,7 +1273,7 @@ export function InlineCommentableMarkdown({
         const lineNumber = props["data-line-element"];
         return (
           <li
-            className={`relative text-gray-90 ${lineNumber ? "cursor-pointer" : ""} ${lineNumber && commentsByLine.has(lineNumber) ? "pr-8" : ""}`}
+            className={`relative text-gray-90 ${lineNumber ? "cursor-pointer" : ""} ${lineNumber && lineHasComments(lineNumber) ? "pr-8" : ""}`}
             onClick={() => lineNumber && handleLineClick(lineNumber)}
             onMouseEnter={() => lineNumber && handleMouseEnterLine(lineNumber)}
             onMouseLeave={handleMouseLeaveLine}
@@ -1422,11 +1458,11 @@ export function InlineCommentableMarkdown({
       },
     }),
     [
-      commentsByLine,
       handleLineClick,
       handleMouseEnterLine,
       handleMouseLeaveLine,
       renderProfilePictures,
+      lineHasComments,
       owner,
       repo,
       markdownFilePath,
@@ -1473,7 +1509,7 @@ export function InlineCommentableMarkdown({
         dispatchRef={hoverDispatchRef}
         lineAlias={lineAlias}
         activeLineIndex={activeLineIndex}
-        commentsByLine={commentsByLine}
+        commentsByLine={layoutCommentsByLine}
         commentBoxRefs={commentBoxRefs}
         commentPositions={commentPositions}
         resolvedCollapsedLines={resolvedCollapsedLines}
@@ -1493,7 +1529,7 @@ export function InlineCommentableMarkdown({
             replyInitialDraft={replyInitialDraft}
             resolvedCollapsedLines={resolvedCollapsedLines}
             highlightedCommentId={highlightedCommentId}
-            commentsByLine={commentsByLine}
+            commentsByLine={layoutCommentsByLine}
             commentsLoading={commentsLoading}
             onCloseActiveComment={() => {
               setActiveLineIndex(null);

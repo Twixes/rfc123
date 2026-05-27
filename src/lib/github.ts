@@ -1,10 +1,21 @@
-import { Octokit } from "octokit";
+import { throttling } from "@octokit/plugin-throttling";
+import { Octokit as BaseOctokit } from "octokit";
+
+// Augment the bundled Octokit with throttling so GraphQL bursts (e.g. the
+// per-org repo sweep in `listViewerRepos`) back off cleanly on secondary
+// rate limits instead of cascading into hard failures.
+const Octokit = BaseOctokit.plugin(throttling);
+// Re-export the augmented class as a type under the same name so existing
+// `octokit: Octokit` annotations keep working after the plugin call.
+type Octokit = InstanceType<typeof Octokit>;
+
 import {
   deleteCachedData,
   getCachedJsonData,
   getCachedJsonDataBatch,
   setCachedJsonData,
   setCachedJsonDataBatch,
+  withCachedJsonData,
 } from "./cache";
 import { sha256Hex } from "./mcp-oauth";
 import { captureServerException } from "./posthog-server";
@@ -39,6 +50,16 @@ export interface RepoOption {
   /** True if the viewer can push (WRITE / MAINTAIN / ADMIN). The "Start an
    *  RFC" flow uses this to disable repos the user can't commit to. */
   canPush: boolean;
+  /**
+   * Present when an adoption PR is in flight (the direct commit was rejected
+   * by branch protection, so we opened a PR instead). The picker uses this to
+   * render a pending row and the modal uses it to resume into pending state.
+   */
+  pendingAdoption?: {
+    prNumber: number;
+    prUrl: string;
+    layout: RfcLayout;
+  };
 }
 
 export interface RFC {
@@ -115,6 +136,8 @@ export interface RFCDetail extends RFC {
   /** Boolean GitHub merge-readiness (null = not yet computed). */
   mergeable: boolean | null;
   comments: Comment[];
+  /** Diagnostic steps when no `.md` file was found on the PR (see UI). */
+  markdownMissingAttempts?: string[];
 }
 
 /** Standard label name used to mark "this RFC has a registered decision". */
@@ -194,7 +217,23 @@ export type { CommentThread } from "./comment-threads";
 export { groupIntoThreads } from "./comment-threads";
 
 export async function getOctokit(accessToken: string) {
-  return new Octokit({ auth: accessToken });
+  return new Octokit({
+    auth: accessToken,
+    throttle: {
+      onRateLimit: (retryAfter, options, _octokit, retryCount) => {
+        console.warn(
+          `[octokit] primary rate limit hit on ${options.method} ${options.url}; retrying in ${retryAfter}s (attempt ${retryCount + 1})`,
+        );
+        return retryCount < 2;
+      },
+      onSecondaryRateLimit: (retryAfter, options, _octokit, retryCount) => {
+        console.warn(
+          `[octokit] secondary rate limit on ${options.method} ${options.url}; retrying in ${retryAfter}s (attempt ${retryCount + 1})`,
+        );
+        return retryCount < 2;
+      },
+    },
+  });
 }
 
 /**
@@ -266,8 +305,13 @@ interface ViewerRepo {
 }
 
 // Cache key includes a version segment so a payload-shape change can
-// invalidate prior entries by bumping it.
-const VIEWER_REPOS_CACHE_TTL_SECONDS = 300;
+// invalidate prior entries by bumping it. TTL is generous (1h) because
+// the cold sweep is expensive enough to trip GitHub's GraphQL secondary
+// rate limit on viewers in giant orgs; every RFC123-driven write
+// (adoption, RFC creation) already calls `invalidateViewerRepos`, so
+// the only staleness window is for out-of-band repo / `.rfc123.json`
+// changes made directly on GitHub.
+const VIEWER_REPOS_CACHE_TTL_SECONDS = 3600;
 function viewerReposCacheKey(accessToken: string): string {
   return `viewer_repos:v2:${tokenKey(accessToken)}`;
 }
@@ -279,14 +323,93 @@ const WRITE_PERMISSIONS = new Set(["WRITE", "MAINTAIN", "ADMIN"]);
  *  from the default branch's root. */
 const RFC_CONFIG_HEAD_EXPR = `HEAD:${RFC_CONFIG_PATH}`;
 
+interface RepoNode {
+  name: string;
+  nameWithOwner: string;
+  viewerPermission: string | null;
+  pushedAt: string | null;
+  owner: { login: string; __typename: string };
+  defaultBranchRef: { name: string } | null;
+}
+
+const REPO_NODE_FIELDS = `
+  name
+  nameWithOwner
+  viewerPermission
+  pushedAt
+  owner { login __typename }
+  defaultBranchRef { name }
+`;
+
+function repoNodeToViewerRepo(node: RepoNode): ViewerRepo {
+  return {
+    owner: node.owner.login,
+    name: node.name,
+    fullName: node.nameWithOwner,
+    canPush: WRITE_PERMISSIONS.has(node.viewerPermission ?? ""),
+    isOrg: node.owner.__typename === "Organization",
+    defaultBranch: node.defaultBranchRef?.name ?? null,
+    // Populated by the code-search pass in `listViewerRepos`, not here.
+    hasRfcConfig: false,
+    pushedAt: node.pushedAt,
+  };
+}
+
 /**
- * One-shot GraphQL sweep of every repo the viewer can see, annotated with
- * push permission and `.rfc123.json` presence. Replaces N×3 REST probes with
- * `ceil(N/100)` GraphQL requests – the difference is night and day for users
- * sitting in orgs with hundreds of repos.
+ * Use GitHub code search to find every accessible repo with `.rfc123.json`
+ * at the root of its default branch. Replaces a per-repo `object(expression:
+ * "HEAD:.rfc123.json")` GraphQL probe across every page of every org sweep
+ * with one search round-trip — for a viewer in a 600-repo org this turns
+ * ~7 expensive page fetches into 1 cheap one.
  *
- * Pages are walked sequentially because each cursor depends on the previous
- * response; for typical accounts that's 1–3 round-trips total.
+ * Code search only indexes the default branch, which is exactly what we want.
+ * There's a short (seconds-to-minutes) indexing lag for fresh commits; the
+ * pending-adoption flow handles that gap independently via Convex.
+ */
+async function findRfcBearingRepos(
+  octokit: Awaited<ReturnType<typeof getOctokit>>,
+): Promise<Set<string>> {
+  const found = new Set<string>();
+  try {
+    // `filename:` matches by basename; we further restrict to root via
+    // `path === RFC_CONFIG_PATH` below. Capped at 1000 results × 100/page = 10
+    // pages, far above any realistic per-viewer footprint.
+    for (let page = 1; page <= 10; page++) {
+      const { data } = await octokit.rest.search.code({
+        q: `filename:${RFC_CONFIG_PATH}`,
+        per_page: 100,
+        page,
+      });
+      for (const item of data.items) {
+        if (item.path === RFC_CONFIG_PATH) {
+          found.add(item.repository.full_name);
+        }
+      }
+      if (data.items.length < 100) break;
+    }
+  } catch (e) {
+    // Code-search outages shouldn't take the picker down – degrade to "no
+    // repos look RFC-bearing" rather than failing the whole sweep. The next
+    // refresh will retry.
+    console.error("[findRfcBearingRepos] code search failed:", e);
+  }
+  return found;
+}
+
+/**
+ * Sweeps GitHub for every repo the viewer can see, annotated with push
+ * permission and `.rfc123.json` presence. Three passes, merged by `fullName`:
+ *
+ * 1. `viewer.repositories(affiliations: OWNER|ORGANIZATION_MEMBER|COLLABORATOR)` —
+ *    catches personal repos and outside-collaborator repos.
+ * 2. `organization(login).repositories` for every org the viewer belongs to —
+ *    necessary because the affiliations-based viewer sweep silently omits some
+ *    org repos even when the viewer has direct ADMIN/WRITE on them (a known
+ *    GitHub quirk). Capped concurrency to keep us under GitHub's secondary
+ *    rate limit; pages within an org are sequential (cursor-based).
+ * 3. Code search for `.rfc123.json` — one cheap request that annotates which
+ *    of the swept repos have the file, instead of paying a per-repo GraphQL
+ *    `object(expression:)` probe on every page.
  */
 async function listViewerRepos(accessToken: string): Promise<ViewerRepo[]> {
   const cached = await getCachedJsonData<ViewerRepo[]>(
@@ -295,6 +418,45 @@ async function listViewerRepos(accessToken: string): Promise<ViewerRepo[]> {
   if (cached) return cached;
 
   const octokit = await getOctokit(accessToken);
+
+  const [viewerRepos, orgLogins, rfcRepoSet] = await Promise.all([
+    sweepViewerRepositories(octokit),
+    listViewerOrganizations(octokit),
+    findRfcBearingRepos(octokit),
+  ]);
+  const orgSweeps = await mapWithConcurrency(
+    orgLogins,
+    ORG_SWEEP_CONCURRENCY,
+    (login) => sweepOrgRepositories(octokit, login),
+  );
+
+  // Merge by `fullName`, preferring entries with push permission so a stale
+  // read-only hit from one sweep can't shadow a push-capable hit from another.
+  const byKey = new Map<string, ViewerRepo>();
+  for (const r of [...viewerRepos, ...orgSweeps.flat()]) {
+    const annotated: ViewerRepo = {
+      ...r,
+      hasRfcConfig: rfcRepoSet.has(r.fullName),
+    };
+    const existing = byKey.get(annotated.fullName);
+    if (!existing || (annotated.canPush && !existing.canPush)) {
+      byKey.set(annotated.fullName, annotated);
+    }
+  }
+  const merged = Array.from(byKey.values());
+
+  await setCachedJsonData(
+    viewerReposCacheKey(accessToken),
+    merged,
+    VIEWER_REPOS_CACHE_TTL_SECONDS,
+    { name: "listViewerRepos:viewer_repos" },
+  );
+  return merged;
+}
+
+async function sweepViewerRepositories(
+  octokit: Awaited<ReturnType<typeof getOctokit>>,
+): Promise<ViewerRepo[]> {
   const query = `
     query($cursor: String) {
       viewer {
@@ -305,100 +467,296 @@ async function listViewerRepos(accessToken: string): Promise<ViewerRepo[]> {
           orderBy: {field: UPDATED_AT, direction: DESC}
         ) {
           pageInfo { hasNextPage endCursor }
-          nodes {
-            name
-            nameWithOwner
-            viewerPermission
-            pushedAt
-            owner { login __typename }
-            defaultBranchRef { name }
-            rfcConfig: object(expression: "${RFC_CONFIG_HEAD_EXPR}") { __typename }
-          }
+          nodes { ${REPO_NODE_FIELDS} }
         }
       }
     }
   `;
-
-  interface PageNode {
-    name: string;
-    nameWithOwner: string;
-    viewerPermission: string | null;
-    pushedAt: string | null;
-    owner: { login: string; __typename: string };
-    defaultBranchRef: { name: string } | null;
-    rfcConfig: { __typename: string } | null;
-  }
   interface PageResponse {
     viewer: {
       repositories: {
         pageInfo: { hasNextPage: boolean; endCursor: string | null };
-        nodes: PageNode[];
+        nodes: RepoNode[];
       };
     };
   }
-
-  const repos: ViewerRepo[] = [];
+  const out: ViewerRepo[] = [];
   let cursor: string | null = null;
   while (true) {
     const page: PageResponse = await octokit.graphql<PageResponse>(query, {
       cursor,
     });
     for (const node of page.viewer.repositories.nodes) {
-      repos.push({
-        owner: node.owner.login,
-        name: node.name,
-        fullName: node.nameWithOwner,
-        canPush: WRITE_PERMISSIONS.has(node.viewerPermission ?? ""),
-        isOrg: node.owner.__typename === "Organization",
-        defaultBranch: node.defaultBranchRef?.name ?? null,
-        hasRfcConfig: !!node.rfcConfig,
-        pushedAt: node.pushedAt,
-      });
+      out.push(repoNodeToViewerRepo(node));
     }
     if (!page.viewer.repositories.pageInfo.hasNextPage) break;
     cursor = page.viewer.repositories.pageInfo.endCursor;
     if (!cursor) break;
   }
+  return out;
+}
 
-  await setCachedJsonData(
-    viewerReposCacheKey(accessToken),
-    repos,
-    VIEWER_REPOS_CACHE_TTL_SECONDS,
-    { name: "listViewerRepos:viewer_repos" },
+async function listViewerOrganizations(
+  octokit: Awaited<ReturnType<typeof getOctokit>>,
+): Promise<string[]> {
+  const query = `
+    query($cursor: String) {
+      viewer {
+        organizations(first: 100, after: $cursor) {
+          pageInfo { hasNextPage endCursor }
+          nodes { login }
+        }
+      }
+    }
+  `;
+  interface PageResponse {
+    viewer: {
+      organizations: {
+        pageInfo: { hasNextPage: boolean; endCursor: string | null };
+        nodes: Array<{ login: string }>;
+      };
+    };
+  }
+  const out: string[] = [];
+  let cursor: string | null = null;
+  while (true) {
+    const page: PageResponse = await octokit.graphql<PageResponse>(query, {
+      cursor,
+    });
+    for (const node of page.viewer.organizations.nodes) out.push(node.login);
+    if (!page.viewer.organizations.pageInfo.hasNextPage) break;
+    cursor = page.viewer.organizations.pageInfo.endCursor;
+    if (!cursor) break;
+  }
+  return out;
+}
+
+/** Safety cap: refuse to walk an org past this many pages so a misbehaving
+ *  giant org can't pin the request. 50 pages × 100 repos = 5,000 repos. */
+const MAX_ORG_PAGES = 50;
+
+/** How many org sweeps to run in parallel. The throttle plugin retries any
+ *  GraphQL request that trips GitHub's secondary rate limit, so we keep
+ *  parallelism modest rather than serial — the 1h cache means most loads
+ *  hit Redis anyway, and on the rare cold fill the parallel walk pays off. */
+const ORG_SWEEP_CONCURRENCY = 3;
+
+async function mapWithConcurrency<T, U>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<U>,
+): Promise<U[]> {
+  const results = new Array<U>(items.length);
+  let next = 0;
+  const workers = Array.from(
+    { length: Math.min(concurrency, items.length) },
+    async () => {
+      while (true) {
+        const i = next++;
+        if (i >= items.length) return;
+        results[i] = await fn(items[i]);
+      }
+    },
   );
-  return repos;
+  await Promise.all(workers);
+  return results;
+}
+
+async function sweepOrgRepositories(
+  octokit: Awaited<ReturnType<typeof getOctokit>>,
+  login: string,
+): Promise<ViewerRepo[]> {
+  const query = `
+    query($login: String!, $cursor: String) {
+      organization(login: $login) {
+        repositories(
+          first: 100,
+          after: $cursor,
+          orderBy: {field: UPDATED_AT, direction: DESC}
+        ) {
+          pageInfo { hasNextPage endCursor }
+          nodes { ${REPO_NODE_FIELDS} }
+        }
+      }
+    }
+  `;
+  interface PageResponse {
+    organization: {
+      repositories: {
+        pageInfo: { hasNextPage: boolean; endCursor: string | null };
+        nodes: RepoNode[];
+      };
+    } | null;
+  }
+  const out: ViewerRepo[] = [];
+  let cursor: string | null = null;
+  for (let page = 0; page < MAX_ORG_PAGES; page++) {
+    const r: PageResponse = await octokit.graphql<PageResponse>(query, {
+      login,
+      cursor,
+    });
+    if (!r.organization) break;
+    for (const node of r.organization.repositories.nodes) {
+      // viewerPermission is null when the viewer has no access (the org-scoped
+      // query returns *all* org repos in some cases). Skip those.
+      if (!node.viewerPermission) continue;
+      out.push(repoNodeToViewerRepo(node));
+    }
+    if (!r.organization.repositories.pageInfo.hasNextPage) break;
+    cursor = r.organization.repositories.pageInfo.endCursor;
+    if (!cursor) break;
+  }
+  return out;
 }
 
 /**
- * Drop the cached viewer-repo sweep for `accessToken`. Call after any action
- * that changes the set of RFC-bearing repos (creating one, adopting an
- * existing one) so the next list call rebuilds with the latest state.
+ * Drop both viewer-repo caches for `accessToken`. Call after any action that
+ * changes the set of RFC-bearing repos (creating one, adopting an existing
+ * one) so the next list call rebuilds with the latest state and the
+ * fast-path `/rfcs` onboarding check doesn't bounce a freshly-adopted user
+ * back to onboarding.
  */
 export async function invalidateViewerRepos(
   accessToken: string,
 ): Promise<void> {
-  await deleteCachedData(viewerReposCacheKey(accessToken));
+  await Promise.all([
+    deleteCachedData(viewerReposCacheKey(accessToken)),
+    deleteCachedData(hasAnyRfcBearingRepoCacheKey(accessToken)),
+    deleteCachedData(rfcBearingReposFastCacheKey(accessToken)),
+    deleteCachedData(reposWithRfcsCacheKey(accessToken)),
+    deleteCachedData(writableReposCacheKey(accessToken)),
+  ]);
+}
+
+function reposWithRfcsCacheKey(accessToken: string): string {
+  return `repos_with_rfcs_fast:v1:${tokenKey(accessToken)}`;
+}
+
+function writableReposCacheKey(accessToken: string): string {
+  return `writable_repos_fast:v1:${tokenKey(accessToken)}`;
+}
+
+function rfcBearingReposFastCacheKey(accessToken: string): string {
+  return `rfc_bearing_repos_fast:v1:${tokenKey(accessToken)}`;
+}
+
+/**
+ * Fast alternative to `listReposWithRFCs` for the RFC list view. Uses GitHub
+ * code search (one request, ~450ms) instead of the full org sweep
+ * (`listViewerRepos` can take 100s+ for large orgs). Returns only
+ * `{owner, name, fullName}` — enough for `listAllRFCs` which only needs to
+ * call `listRFCs(owner, name)` on each repo.
+ *
+ * Cached at the same TTL as `listViewerRepos` so repeated calls are free.
+ * Invalidated by `invalidateViewerRepos` alongside the other caches.
+ */
+async function listRfcBearingReposFast(
+  octokit: Octokit,
+  accessToken: string,
+): Promise<Pick<RepoOption, "owner" | "name" | "fullName">[]> {
+  return withCachedJsonData(
+    rfcBearingReposFastCacheKey(accessToken),
+    VIEWER_REPOS_CACHE_TTL_SECONDS,
+    async () => {
+      const rfcRepoSet = await findRfcBearingRepos(octokit);
+      return Array.from(rfcRepoSet).map((fullName) => {
+        const [owner, name] = fullName.split("/");
+        return { owner, name, fullName };
+      });
+    },
+    { name: "listRfcBearingReposFast" },
+  );
 }
 
 export async function listReposWithRFCs(
   accessToken: string,
 ): Promise<RepoOption[]> {
   try {
-    const repos = await listViewerRepos(accessToken);
-    return repos
-      .filter((r) => r.hasRfcConfig)
-      .map((r) => ({
-        owner: r.owner,
-        name: r.name,
-        fullName: r.fullName,
-        canPush: r.canPush,
-      }));
+    const octokit = await getOctokit(accessToken);
+    return withCachedJsonData(
+      reposWithRfcsCacheKey(accessToken),
+      VIEWER_REPOS_CACHE_TTL_SECONDS,
+      async () => {
+        const rfcRepos = await listRfcBearingReposFast(octokit, accessToken);
+        if (rfcRepos.length === 0) return [];
+
+        // Single batched GraphQL call for all RFC repo permissions.
+        const aliases = rfcRepos
+          .map(
+            (r, i) =>
+              `r${i}: repository(owner: "${r.owner}", name: "${r.name}") { viewerPermission }`,
+          )
+          .join("\n");
+        const perms = await octokit.graphql<
+          Record<string, { viewerPermission: string | null } | null>
+        >(`{ ${aliases} }`);
+
+        return rfcRepos.map((r, i) => ({
+          owner: r.owner,
+          name: r.name,
+          fullName: r.fullName,
+          canPush: WRITE_PERMISSIONS.has(
+            perms[`r${i}`]?.viewerPermission ?? "",
+          ),
+        }));
+      },
+      { name: "listReposWithRFCs" },
+    );
   } catch (error) {
     captureServerException(error as Error, undefined, {
       function: "listReposWithRFCs",
       context: "fetching_repos_with_rfcs",
     });
     throw error;
+  }
+}
+
+function hasAnyRfcBearingRepoCacheKey(accessToken: string): string {
+  return `has_rfc_repos:v1:${tokenKey(accessToken)}`;
+}
+
+/**
+ * Server-render fast path for `/rfcs/page.tsx`: returns true iff the viewer
+ * has *any* repo with `.rfc123.json` at root. One code-search request, so the
+ * page shell ships in <1s.
+ *
+ * Code search has indexing lag (seconds to minutes), so a brand-new repo
+ * might briefly flip the answer to false. Acceptable for the onboarding
+ * redirect: a refresh resolves it and the cache TTL is short enough that
+ * a freshly-adopted user lands on `/rfcs` properly within the hour.
+ */
+export async function hasAnyRfcBearingRepo(
+  accessToken: string,
+): Promise<boolean> {
+  // If the full sweep is already cached, derive from it rather than spending
+  // another code-search call. Invalidations clear both keys together so this
+  // stays consistent with the "real" picker view.
+  const cachedRepos = await getCachedJsonData<ViewerRepo[]>(
+    viewerReposCacheKey(accessToken),
+  );
+  if (cachedRepos) return cachedRepos.some((r) => r.hasRfcConfig);
+
+  const cacheKey = hasAnyRfcBearingRepoCacheKey(accessToken);
+  const cached = await getCachedJsonData<boolean>(cacheKey);
+  if (typeof cached === "boolean") return cached;
+
+  try {
+    const octokit = await getOctokit(accessToken);
+    const { data } = await octokit.rest.search.code({
+      q: `filename:${RFC_CONFIG_PATH}`,
+      per_page: 10,
+    });
+    const result = data.items.some((i) => i.path === RFC_CONFIG_PATH);
+    await setCachedJsonData(cacheKey, result, VIEWER_REPOS_CACHE_TTL_SECONDS, {
+      name: "hasAnyRfcBearingRepo:code_search",
+    });
+    return result;
+  } catch (e) {
+    // Treat outages as "yes" so we don't bounce an established user to
+    // onboarding because GitHub had a hiccup. The client-side `/api/repos`
+    // call will still surface the real list (or its absence).
+    console.error("[hasAnyRfcBearingRepo] code search failed:", e);
+    return true;
   }
 }
 
@@ -663,8 +1021,8 @@ export async function listAllRFCs(
   } = {},
 ): Promise<RFC[]> {
   try {
-    // Get all repos with RFC directories
-    const repos = await listReposWithRFCs(accessToken);
+    const octokit = await getOctokit(accessToken);
+    const repos = await listRfcBearingReposFast(octokit, accessToken);
 
     // Fetch RFCs from all repos in parallel
     const allRFCsArrays = await Promise.all(
@@ -775,6 +1133,37 @@ export async function fetchInlineCommentCounts(
   }
 }
 
+/** How many changed files `pulls.listFiles` returns per page (GitHub max 100). */
+const PR_FILES_LIST_PAGE_SIZE = 100;
+
+function buildMarkdownMissingAttempts(
+  prNumber: number,
+  files: Array<{ filename: string }>,
+): string[] {
+  const attempts: string[] = [
+    `Listed changed files on pull request #${prNumber} via GitHub \`pulls/list-files\` (up to ${PR_FILES_LIST_PAGE_SIZE} per page).`,
+  ];
+  if (files.length >= PR_FILES_LIST_PAGE_SIZE) {
+    attempts.push(
+      `Only the first ${PR_FILES_LIST_PAGE_SIZE} changed files were scanned; an RFC markdown file on a later page would not be detected.`,
+    );
+  }
+  if (files.length === 0) {
+    attempts.push("The changed-file list for this PR was empty.");
+  } else {
+    attempts.push(
+      `Checked ${files.length} changed path(s) for a filename ending in \`.md\`; none matched.`,
+    );
+    const sample = files.slice(0, 5).map((f) => f.filename);
+    if (sample.length > 0) {
+      attempts.push(
+        `Sample paths from this page: ${sample.join(", ")}${files.length > 5 ? ", …" : ""}.`,
+      );
+    }
+  }
+  return attempts;
+}
+
 export async function getRFCDetail(
   accessToken: string,
   owner: string,
@@ -789,7 +1178,7 @@ export async function getRFCDetail(
     // Check cache for RFC content (PR details + markdown + reviewers).
     // The `:v2` suffix invalidates pre-enrichment shapes that lacked
     // per-reviewer state + submittedAt.
-    const contentCacheKey = `rfc:${owner}:${repo}:${prNumber}:content:v3`;
+    const contentCacheKey = `rfc:${owner}:${repo}:${prNumber}:content:v5`;
     interface CachedRFCContent {
       pr: any;
       files: any[];
@@ -798,6 +1187,7 @@ export async function getRFCDetail(
       markdownFileSha: string | null;
       headRef: string;
       markdownEtag?: string;
+      markdownMissingAttempts?: string[];
       reviewers: RFCDetail["reviewers"];
       /** Logins of users with a pending review request – used to derive `reviewRequested` per-user. */
       requestedReviewerLogins: string[];
@@ -814,6 +1204,7 @@ export async function getRFCDetail(
     let markdownContent = "";
     let markdownFilePath: string | null = null;
     let markdownFileSha: string | null = null;
+    let markdownMissingAttempts: string[] | undefined;
     let reviewers: RFCDetail["reviewers"] = [];
     let requestedReviewerLogins: string[] = [];
     let cacheValid = false;
@@ -832,7 +1223,8 @@ export async function getRFCDetail(
             owner,
             repo,
             path: cachedContent.markdownFilePath,
-            ref: cachedContent.pr.head.ref,
+            // Head SHA, not branch name – merged PRs often have deleted branches.
+            ref: cachedContent.pr.head.sha,
             headers: {
               "If-None-Match": cachedContent.markdownEtag,
             } as Record<string, string>,
@@ -853,6 +1245,7 @@ export async function getRFCDetail(
         markdownContent = cachedContent.markdownContent;
         markdownFilePath = cachedContent.markdownFilePath;
         markdownFileSha = cachedContent.markdownFileSha ?? null;
+        markdownMissingAttempts = cachedContent.markdownMissingAttempts;
         reviewers = cachedContent.reviewers;
         requestedReviewerLogins = cachedContent.requestedReviewerLogins ?? [];
       }
@@ -873,6 +1266,7 @@ export async function getRFCDetail(
             owner,
             repo,
             pull_number: prNumber,
+            per_page: PR_FILES_LIST_PAGE_SIZE,
           }),
           octokit.rest.pulls.listRequestedReviewers({
             owner,
@@ -891,8 +1285,11 @@ export async function getRFCDetail(
 
       const markdownFile = files.find((file) => file.filename.endsWith(".md"));
 
-      markdownContent = pr.body || "";
+      markdownContent = "";
       markdownFilePath = markdownFile?.filename || null;
+      if (!markdownFile) {
+        markdownMissingAttempts = buildMarkdownMissingAttempts(prNumber, files);
+      }
 
       let markdownEtag: string | undefined;
       if (markdownFile) {
@@ -905,7 +1302,7 @@ export async function getRFCDetail(
               owner,
               repo,
               path: markdownFile.filename,
-              ref: pr.head.ref,
+              ref: pr.head.sha,
             },
           );
           console.log(
@@ -1013,6 +1410,7 @@ export async function getRFCDetail(
           markdownFilePath,
           markdownFileSha,
           headRef: pr.head.ref,
+          markdownMissingAttempts,
           reviewers,
           requestedReviewerLogins,
           markdownEtag,
@@ -1052,6 +1450,7 @@ export async function getRFCDetail(
       markdownContent,
       markdownFilePath,
       markdownFileSha,
+      markdownMissingAttempts,
       headRef: pr.head.ref,
       headSha: pr.head.sha,
       reviewers,
@@ -1160,7 +1559,7 @@ async function invalidateRfcCaches(
   prNumber: number,
 ): Promise<void> {
   await Promise.all([
-    deleteCachedData(`rfc:${owner}:${repo}:${prNumber}:content:v3`),
+    deleteCachedData(`rfc:${owner}:${repo}:${prNumber}:content:v5`),
     deleteCachedData(`rfcs:${owner}:${repo}:graphql:with-teams:v2`),
     deleteCachedData(`rfcs:${owner}:${repo}:graphql:no-teams:v2`),
   ]);
@@ -1616,7 +2015,7 @@ export async function getRFCTitle(
   try {
     const t0 = performance.now();
     // Same key as getRFCDetail (`:v2` – older `:content` keys are obsolete).
-    const contentCacheKey = `rfc:${owner}:${repo}:${prNumber}:content:v3`;
+    const contentCacheKey = `rfc:${owner}:${repo}:${prNumber}:content:v5`;
     const cached = await getCachedJsonData<{ pr: { title: string } }>(
       contentCacheKey,
     );
@@ -1657,37 +2056,108 @@ export interface WritableRepo extends RepoOption {
 }
 
 /**
- * List repos the authenticated user has any access to, annotated with push
+ * List repos the authenticated user has access to, annotated with push
  * permission and whether the repo already hosts RFCs. Used by the "Create RFC"
- * flow's repo picker, which needs more info than the read-only RFC list does.
+ * flow's repo picker's initial/unfiltered load.
  *
- * Derives from the shared `listViewerRepos` sweep so we don't pay a second
- * round of repo enumeration here.
+ * Returns the first page of recently-updated viewer repos (100, ordered by
+ * `UPDATED_AT DESC`) plus any RFC-bearing repos not in that page. This covers
+ * the "recents" use case without sweeping all org repos. Repos outside the
+ * first page can be found via `/api/writable-repos?q=` → `searchAccessibleRepos`.
  */
 export async function listWritableRepos(
   accessToken: string,
 ): Promise<WritableRepo[]> {
   try {
-    const repos = await listViewerRepos(accessToken);
-    const annotated: WritableRepo[] = repos.map((r) => ({
-      owner: r.owner,
-      name: r.name,
-      fullName: r.fullName,
-      canPush: r.canPush,
-      hasRFCs: r.hasRfcConfig,
-      isOrg: r.isOrg,
-      defaultBranch: r.defaultBranch ?? "main",
-      pushedAt: r.pushedAt,
-    }));
+    const octokit = await getOctokit(accessToken);
+    return withCachedJsonData(
+      writableReposCacheKey(accessToken),
+      300,
+      async () => {
+        interface FirstPageResponse {
+          viewer: { repositories: { nodes: RepoNode[] } };
+        }
+        const [firstPageNodes, rfcRepoSet] = await Promise.all([
+          octokit
+            .graphql<FirstPageResponse>(
+              `query {
+                viewer {
+                  repositories(
+                    first: 100,
+                    affiliations: [OWNER, ORGANIZATION_MEMBER, COLLABORATOR],
+                    orderBy: {field: UPDATED_AT, direction: DESC}
+                  ) { nodes { ${REPO_NODE_FIELDS} } }
+                }
+              }`,
+            )
+            .then((r) => r.viewer.repositories.nodes),
+          findRfcBearingRepos(octokit),
+        ]);
 
-    // Sort: RFC repos first (familiar territory), then by last updated
-    // (which is the order GraphQL already returns them in).
-    annotated.sort((a, b) => {
-      if (a.hasRFCs !== b.hasRFCs) return a.hasRFCs ? -1 : 1;
-      return 0;
-    });
+        const byFullName = new Map<string, ViewerRepo>();
+        for (const node of firstPageNodes) {
+          const r = repoNodeToViewerRepo(node);
+          byFullName.set(r.fullName, {
+            ...r,
+            hasRfcConfig: rfcRepoSet.has(r.fullName),
+          });
+        }
 
-    return annotated;
+        // RFC repos not in the first page still need to appear in the picker
+        // with accurate canPush info. Typically 0 repos need this.
+        const missingRfcFullNames = Array.from(rfcRepoSet).filter(
+          (fn) => !byFullName.has(fn),
+        );
+        if (missingRfcFullNames.length > 0) {
+          await Promise.all(
+            missingRfcFullNames.map(async (fullName) => {
+              const [owner, name] = fullName.split("/");
+              try {
+                const { data } = await octokit.rest.repos.get({
+                  owner,
+                  repo: name,
+                });
+                byFullName.set(fullName, {
+                  owner,
+                  name,
+                  fullName,
+                  canPush: !!data.permissions?.push,
+                  isOrg: data.owner.type === "Organization",
+                  defaultBranch: data.default_branch ?? null,
+                  hasRfcConfig: true,
+                  pushedAt: data.pushed_at ?? null,
+                });
+              } catch {
+                // Repo inaccessible — omit rather than showing a broken entry.
+              }
+            }),
+          );
+        }
+
+        const annotated: WritableRepo[] = Array.from(byFullName.values()).map(
+          (r) => ({
+            owner: r.owner,
+            name: r.name,
+            fullName: r.fullName,
+            canPush: r.canPush,
+            hasRFCs: r.hasRfcConfig,
+            isOrg: r.isOrg,
+            defaultBranch: r.defaultBranch ?? "main",
+            pushedAt: r.pushedAt,
+          }),
+        );
+
+        // RFC repos first (familiar territory), then by last updated
+        // (which is the order GraphQL already returns them in).
+        annotated.sort((a, b) => {
+          if (a.hasRFCs !== b.hasRFCs) return a.hasRFCs ? -1 : 1;
+          return 0;
+        });
+
+        return annotated;
+      },
+      { name: "listWritableRepos" },
+    );
   } catch (error) {
     captureServerException(error as Error, undefined, {
       function: "listWritableRepos",
@@ -2415,6 +2885,30 @@ function isFileExists422(err: {
   return /sha.*supplied/i.test(message) || /already exists/i.test(message);
 }
 
+/**
+ * The two flavors of "branch protection wouldn't let me push" GitHub returns:
+ *   - 409 + "Repository rule violations" (the newer rulesets surface this way,
+ *     including the "Changes must be made through a pull request" rule).
+ *   - 422 + "protected branch" / "required status checks" / similar (legacy
+ *     branch protections).
+ * Both are recoverable by opening a PR instead, so we treat them the same.
+ */
+function isBranchProtectionError(err: {
+  status?: number;
+  message?: string;
+  response?: { data?: { message?: string } };
+}): boolean {
+  const status = err.status ?? 0;
+  if (status !== 409 && status !== 422) return false;
+  const message = err.message ?? err.response?.data?.message ?? "";
+  return (
+    /rule violations/i.test(message) ||
+    /protected branch/i.test(message) ||
+    /through a pull request/i.test(message) ||
+    /required status check/i.test(message)
+  );
+}
+
 export interface AdoptRfcRepoInput {
   accessToken: string;
   owner: string;
@@ -2422,21 +2916,43 @@ export interface AdoptRfcRepoInput {
   layout: RfcLayout;
 }
 
-export interface AdoptRfcRepoResult {
-  owner: string;
-  name: string;
-  fullName: string;
-  alreadyAdopted: boolean;
-  config: RfcConfig;
+export interface AdoptRfcRepoPendingPR {
+  number: number;
+  url: string;
+  branchName: string;
+  defaultBranch: string;
 }
 
+export type AdoptRfcRepoResult =
+  | {
+      status: "adopted";
+      owner: string;
+      name: string;
+      fullName: string;
+      alreadyAdopted: boolean;
+      config: RfcConfig;
+    }
+  | {
+      status: "pending";
+      owner: string;
+      name: string;
+      fullName: string;
+      config: RfcConfig;
+      pr: AdoptRfcRepoPendingPR;
+    };
+
+const ADOPT_COMMIT_MESSAGE = "Add .rfc123.json";
+const ADOPT_PR_TITLE = "Add .rfc123.json";
+const ADOPT_PR_BODY =
+  "Adopting this repo on [RFC123](https://rfc123.com). `.rfc123.json` is the marker, as well as the configuration file.\n\nMerge this PR and the repo will show up in RFC123 automatically.";
+const ADOPT_BRANCH_PREFIX = "rfc123/add-config";
+
 /**
- * Adopt an existing repo as an RFCs repo by committing `.rfc123.json` to its
- * default branch. The list/picker keys off that file, so writing it is the
- * one and only step needed to bring a legacy repo back onto the user's list.
- *
- * Idempotent: if the file already exists we return `alreadyAdopted: true`
- * without an extra commit (the user reaches the list through normal discovery).
+ * Adopt an existing repo by committing `.rfc123.json` to its default branch
+ * (the only file `listReposWithRFCs` keys off). When branch protection /
+ * rulesets reject the direct commit ("Changes must be made through a pull
+ * request"), the caller gets back `status: "pending"` and the PR pointer
+ * instead – the modal then polls until the PR merges.
  *
  * Throws a typed error with `code = "no_write_access"` when the viewer lacks
  * push permission, so the API route can surface a friendly 403.
@@ -2460,29 +2976,44 @@ export async function adoptRfcRepo(
   }
   const defaultBranch = repoInfo.default_branch;
   const config = defaultRfcConfig({ layout });
+  const encodedConfig = Buffer.from(
+    serializeRfcConfig(config),
+    "utf-8",
+  ).toString("base64");
 
-  // Attempt the commit directly. GitHub returns 422 for several reasons –
-  // file-exists-without-sha is the "already adopted" case we want to short
-  // circuit; branch protection, push protection, signed-commit requirements,
-  // and archived repos also return 422 and MUST surface as real errors
-  // (otherwise we'd seed the cache and tell the user "added!" while the
-  // file was never actually written).
   let alreadyAdopted = false;
   try {
     await octokit.rest.repos.createOrUpdateFileContents({
       owner,
       repo: name,
       path: RFC_CONFIG_PATH,
-      message: "Add .rfc123.json",
-      content: Buffer.from(serializeRfcConfig(config), "utf-8").toString(
-        "base64",
-      ),
+      message: ADOPT_COMMIT_MESSAGE,
+      content: encodedConfig,
       branch: defaultBranch,
     });
   } catch (e) {
     const err = e as { status?: number; message?: string };
-    if (err?.status !== 422 || !isFileExists422(err)) throw e;
-    alreadyAdopted = true;
+    if (err?.status === 422 && isFileExists422(err)) {
+      alreadyAdopted = true;
+    } else if (isBranchProtectionError(err)) {
+      const pr = await openAdoptionPullRequest({
+        octokit,
+        owner,
+        name,
+        defaultBranch,
+        encodedConfig,
+      });
+      return {
+        status: "pending",
+        owner,
+        name,
+        fullName: repoInfo.full_name,
+        config,
+        pr,
+      };
+    } else {
+      throw e;
+    }
   }
 
   await Promise.all([
@@ -2493,12 +3024,165 @@ export async function adoptRfcRepo(
   ]);
 
   return {
+    status: "adopted",
     owner,
     name,
     fullName: repoInfo.full_name,
     alreadyAdopted,
     config,
   };
+}
+
+/**
+ * Best-effort idempotent: if a previous adoption attempt already opened a PR
+ * (e.g. the same user kicked one off from another device), we reuse it
+ * instead of stacking duplicates.
+ */
+async function openAdoptionPullRequest(args: {
+  octokit: Octokit;
+  owner: string;
+  name: string;
+  defaultBranch: string;
+  encodedConfig: string;
+}): Promise<AdoptRfcRepoPendingPR> {
+  const { octokit, owner, name, defaultBranch, encodedConfig } = args;
+
+  // List open PRs and resolve the base ref in parallel – we always need the
+  // ref SHA to create a branch; reusing an existing PR is the happy-path
+  // bypass that just discards the ref lookup.
+  const [openPrsResult, baseRefResult] = await Promise.allSettled([
+    octokit.rest.pulls.list({
+      owner,
+      repo: name,
+      state: "open",
+      per_page: 100,
+    }),
+    octokit.rest.git.getRef({
+      owner,
+      repo: name,
+      ref: `heads/${defaultBranch}`,
+    }),
+  ]);
+
+  if (openPrsResult.status === "fulfilled") {
+    const existing = openPrsResult.value.data.find(
+      (pr) =>
+        pr.head.ref.startsWith(ADOPT_BRANCH_PREFIX) &&
+        pr.base.ref === defaultBranch,
+    );
+    if (existing) {
+      return {
+        number: existing.number,
+        url: existing.html_url,
+        branchName: existing.head.ref,
+        defaultBranch,
+      };
+    }
+  }
+
+  if (baseRefResult.status === "rejected") throw baseRefResult.reason;
+  const baseSha = baseRefResult.value.data.object.sha;
+
+  let branchName = ADOPT_BRANCH_PREFIX;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      await octokit.rest.git.createRef({
+        owner,
+        repo: name,
+        ref: `refs/heads/${branchName}`,
+        sha: baseSha,
+      });
+      break;
+    } catch (e) {
+      const err = e as { status?: number; message?: string };
+      if (
+        err.status === 422 &&
+        /already exists/i.test(err.message ?? "") &&
+        attempt < 4
+      ) {
+        branchName = `${ADOPT_BRANCH_PREFIX}-${randomSuffix()}`;
+        continue;
+      }
+      throw e;
+    }
+  }
+
+  await octokit.rest.repos.createOrUpdateFileContents({
+    owner,
+    repo: name,
+    path: RFC_CONFIG_PATH,
+    message: ADOPT_COMMIT_MESSAGE,
+    content: encodedConfig,
+    branch: branchName,
+  });
+
+  const { data: pr } = await octokit.rest.pulls.create({
+    owner,
+    repo: name,
+    title: ADOPT_PR_TITLE,
+    head: branchName,
+    base: defaultBranch,
+    body: ADOPT_PR_BODY,
+  });
+
+  return {
+    number: pr.number,
+    url: pr.html_url,
+    branchName,
+    defaultBranch,
+  };
+}
+
+export interface AdoptionPrStatus {
+  state: "open" | "merged" | "closed";
+  number: number;
+  url: string;
+  mergedAt: string | null;
+}
+
+export async function getAdoptionPrStatus(
+  accessToken: string,
+  owner: string,
+  repo: string,
+  prNumber: number,
+): Promise<AdoptionPrStatus> {
+  const octokit = await getOctokit(accessToken);
+  const { data: pr } = await octokit.rest.pulls.get({
+    owner,
+    repo,
+    pull_number: prNumber,
+  });
+  const state: AdoptionPrStatus["state"] = pr.merged_at
+    ? "merged"
+    : pr.state === "closed"
+      ? "closed"
+      : "open";
+  return {
+    state,
+    number: pr.number,
+    url: pr.html_url,
+    mergedAt: pr.merged_at ?? null,
+  };
+}
+
+/**
+ * Seeds the config cache + invalidates the viewer-repo sweep so the next
+ * `/api/repos` call picks the freshly-merged repo up immediately rather than
+ * waiting on the 5-minute TTL.
+ */
+export async function finalizeAdoptedRepo(
+  accessToken: string,
+  owner: string,
+  name: string,
+  layout: RfcLayout,
+): Promise<void> {
+  const config = defaultRfcConfig({ layout });
+  await Promise.all([
+    setCachedJsonData(rfcConfigCacheKey(owner, name), config, 3600, {
+      name: "finalizeAdoptedRepo:seed_config",
+    }),
+    invalidateViewerRepos(accessToken),
+  ]);
 }
 
 function renderRfcRepoReadme({

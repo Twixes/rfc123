@@ -1,5 +1,6 @@
 "use client";
 
+import posthog from "posthog-js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Checkbox from "@/components/Checkbox";
 import HourSelect from "@/components/HourSelect";
@@ -137,6 +138,7 @@ export default function SettingsClient({
     } catch {
       // Non-fatal – proceed to Slack OAuth anyway.
     }
+    posthog.capture("slack_workspace_connected", { mode });
     window.location.href = `/api/slack/install?mode=${mode}`;
   }
 
@@ -147,6 +149,7 @@ export default function SettingsClient({
       body: JSON.stringify({ teamId }),
     });
     if (res.ok) {
+      posthog.capture("slack_workspace_disconnected");
       setSlackLinks((prev) => prev.filter((l) => l.teamId !== teamId));
     }
   }
@@ -166,6 +169,7 @@ export default function SettingsClient({
         throw new Error(json.error ?? `HTTP ${res.status}`);
       }
       if (json.sent) {
+        posthog.capture("daily_briefing_sent", { rfc_count: json.count ?? 0 });
         setBriefingSendStatus({ kind: "sent", count: json.count ?? 0 });
       } else {
         setBriefingSendStatus({ kind: "empty" });

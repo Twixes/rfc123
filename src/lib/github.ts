@@ -15,6 +15,7 @@ import {
   getCachedJsonDataBatch,
   setCachedJsonData,
   setCachedJsonDataBatch,
+  withCachedJsonData,
 } from "./cache";
 import { sha256Hex } from "./mcp-oauth";
 import { captureServerException } from "./posthog-server";
@@ -619,22 +620,86 @@ export async function invalidateViewerRepos(
   await Promise.all([
     deleteCachedData(viewerReposCacheKey(accessToken)),
     deleteCachedData(hasAnyRfcBearingRepoCacheKey(accessToken)),
+    deleteCachedData(rfcBearingReposFastCacheKey(accessToken)),
+    deleteCachedData(reposWithRfcsCacheKey(accessToken)),
+    deleteCachedData(writableReposCacheKey(accessToken)),
   ]);
+}
+
+function reposWithRfcsCacheKey(accessToken: string): string {
+  return `repos_with_rfcs_fast:v1:${tokenKey(accessToken)}`;
+}
+
+function writableReposCacheKey(accessToken: string): string {
+  return `writable_repos_fast:v1:${tokenKey(accessToken)}`;
+}
+
+function rfcBearingReposFastCacheKey(accessToken: string): string {
+  return `rfc_bearing_repos_fast:v1:${tokenKey(accessToken)}`;
+}
+
+/**
+ * Fast alternative to `listReposWithRFCs` for the RFC list view. Uses GitHub
+ * code search (one request, ~450ms) instead of the full org sweep
+ * (`listViewerRepos` can take 100s+ for large orgs). Returns only
+ * `{owner, name, fullName}` — enough for `listAllRFCs` which only needs to
+ * call `listRFCs(owner, name)` on each repo.
+ *
+ * Cached at the same TTL as `listViewerRepos` so repeated calls are free.
+ * Invalidated by `invalidateViewerRepos` alongside the other caches.
+ */
+async function listRfcBearingReposFast(
+  octokit: Octokit,
+  accessToken: string,
+): Promise<Pick<RepoOption, "owner" | "name" | "fullName">[]> {
+  return withCachedJsonData(
+    rfcBearingReposFastCacheKey(accessToken),
+    VIEWER_REPOS_CACHE_TTL_SECONDS,
+    async () => {
+      const rfcRepoSet = await findRfcBearingRepos(octokit);
+      return Array.from(rfcRepoSet).map((fullName) => {
+        const [owner, name] = fullName.split("/");
+        return { owner, name, fullName };
+      });
+    },
+    { name: "listRfcBearingReposFast" },
+  );
 }
 
 export async function listReposWithRFCs(
   accessToken: string,
 ): Promise<RepoOption[]> {
   try {
-    const repos = await listViewerRepos(accessToken);
-    return repos
-      .filter((r) => r.hasRfcConfig)
-      .map((r) => ({
-        owner: r.owner,
-        name: r.name,
-        fullName: r.fullName,
-        canPush: r.canPush,
-      }));
+    const octokit = await getOctokit(accessToken);
+    return withCachedJsonData(
+      reposWithRfcsCacheKey(accessToken),
+      VIEWER_REPOS_CACHE_TTL_SECONDS,
+      async () => {
+        const rfcRepos = await listRfcBearingReposFast(octokit, accessToken);
+        if (rfcRepos.length === 0) return [];
+
+        // Single batched GraphQL call for all RFC repo permissions.
+        const aliases = rfcRepos
+          .map(
+            (r, i) =>
+              `r${i}: repository(owner: "${r.owner}", name: "${r.name}") { viewerPermission }`,
+          )
+          .join("\n");
+        const perms = await octokit.graphql<
+          Record<string, { viewerPermission: string | null } | null>
+        >(`{ ${aliases} }`);
+
+        return rfcRepos.map((r, i) => ({
+          owner: r.owner,
+          name: r.name,
+          fullName: r.fullName,
+          canPush: WRITE_PERMISSIONS.has(
+            perms[`r${i}`]?.viewerPermission ?? "",
+          ),
+        }));
+      },
+      { name: "listReposWithRFCs" },
+    );
   } catch (error) {
     captureServerException(error as Error, undefined, {
       function: "listReposWithRFCs",
@@ -650,9 +715,8 @@ function hasAnyRfcBearingRepoCacheKey(accessToken: string): string {
 
 /**
  * Server-render fast path for `/rfcs/page.tsx`: returns true iff the viewer
- * has *any* repo with `.rfc123.json` at root. One code-search request instead
- * of the full per-org sweep that `listReposWithRFCs` triggers, so the page
- * shell ships in <1s even for viewers sitting in 600+ repo orgs.
+ * has *any* repo with `.rfc123.json` at root. One code-search request, so the
+ * page shell ships in <1s.
  *
  * Code search has indexing lag (seconds to minutes), so a brand-new repo
  * might briefly flip the answer to false. Acceptable for the onboarding
@@ -955,8 +1019,8 @@ export async function listAllRFCs(
   } = {},
 ): Promise<RFC[]> {
   try {
-    // Get all repos with RFC directories
-    const repos = await listReposWithRFCs(accessToken);
+    const octokit = await getOctokit(accessToken);
+    const repos = await listRfcBearingReposFast(octokit, accessToken);
 
     // Fetch RFCs from all repos in parallel
     const allRFCsArrays = await Promise.all(
@@ -1949,37 +2013,108 @@ export interface WritableRepo extends RepoOption {
 }
 
 /**
- * List repos the authenticated user has any access to, annotated with push
+ * List repos the authenticated user has access to, annotated with push
  * permission and whether the repo already hosts RFCs. Used by the "Create RFC"
- * flow's repo picker, which needs more info than the read-only RFC list does.
+ * flow's repo picker's initial/unfiltered load.
  *
- * Derives from the shared `listViewerRepos` sweep so we don't pay a second
- * round of repo enumeration here.
+ * Returns the first page of recently-updated viewer repos (100, ordered by
+ * `UPDATED_AT DESC`) plus any RFC-bearing repos not in that page. This covers
+ * the "recents" use case without sweeping all org repos. Repos outside the
+ * first page can be found via `/api/writable-repos?q=` → `searchAccessibleRepos`.
  */
 export async function listWritableRepos(
   accessToken: string,
 ): Promise<WritableRepo[]> {
   try {
-    const repos = await listViewerRepos(accessToken);
-    const annotated: WritableRepo[] = repos.map((r) => ({
-      owner: r.owner,
-      name: r.name,
-      fullName: r.fullName,
-      canPush: r.canPush,
-      hasRFCs: r.hasRfcConfig,
-      isOrg: r.isOrg,
-      defaultBranch: r.defaultBranch ?? "main",
-      pushedAt: r.pushedAt,
-    }));
+    const octokit = await getOctokit(accessToken);
+    return withCachedJsonData(
+      writableReposCacheKey(accessToken),
+      300,
+      async () => {
+        interface FirstPageResponse {
+          viewer: { repositories: { nodes: RepoNode[] } };
+        }
+        const [firstPageNodes, rfcRepoSet] = await Promise.all([
+          octokit
+            .graphql<FirstPageResponse>(
+              `query {
+                viewer {
+                  repositories(
+                    first: 100,
+                    affiliations: [OWNER, ORGANIZATION_MEMBER, COLLABORATOR],
+                    orderBy: {field: UPDATED_AT, direction: DESC}
+                  ) { nodes { ${REPO_NODE_FIELDS} } }
+                }
+              }`,
+            )
+            .then((r) => r.viewer.repositories.nodes),
+          findRfcBearingRepos(octokit),
+        ]);
 
-    // Sort: RFC repos first (familiar territory), then by last updated
-    // (which is the order GraphQL already returns them in).
-    annotated.sort((a, b) => {
-      if (a.hasRFCs !== b.hasRFCs) return a.hasRFCs ? -1 : 1;
-      return 0;
-    });
+        const byFullName = new Map<string, ViewerRepo>();
+        for (const node of firstPageNodes) {
+          const r = repoNodeToViewerRepo(node);
+          byFullName.set(r.fullName, {
+            ...r,
+            hasRfcConfig: rfcRepoSet.has(r.fullName),
+          });
+        }
 
-    return annotated;
+        // RFC repos not in the first page still need to appear in the picker
+        // with accurate canPush info. Typically 0 repos need this.
+        const missingRfcFullNames = Array.from(rfcRepoSet).filter(
+          (fn) => !byFullName.has(fn),
+        );
+        if (missingRfcFullNames.length > 0) {
+          await Promise.all(
+            missingRfcFullNames.map(async (fullName) => {
+              const [owner, name] = fullName.split("/");
+              try {
+                const { data } = await octokit.rest.repos.get({
+                  owner,
+                  repo: name,
+                });
+                byFullName.set(fullName, {
+                  owner,
+                  name,
+                  fullName,
+                  canPush: !!data.permissions?.push,
+                  isOrg: data.owner.type === "Organization",
+                  defaultBranch: data.default_branch ?? null,
+                  hasRfcConfig: true,
+                  pushedAt: data.pushed_at ?? null,
+                });
+              } catch {
+                // Repo inaccessible — omit rather than showing a broken entry.
+              }
+            }),
+          );
+        }
+
+        const annotated: WritableRepo[] = Array.from(byFullName.values()).map(
+          (r) => ({
+            owner: r.owner,
+            name: r.name,
+            fullName: r.fullName,
+            canPush: r.canPush,
+            hasRFCs: r.hasRfcConfig,
+            isOrg: r.isOrg,
+            defaultBranch: r.defaultBranch ?? "main",
+            pushedAt: r.pushedAt,
+          }),
+        );
+
+        // RFC repos first (familiar territory), then by last updated
+        // (which is the order GraphQL already returns them in).
+        annotated.sort((a, b) => {
+          if (a.hasRFCs !== b.hasRFCs) return a.hasRFCs ? -1 : 1;
+          return 0;
+        });
+
+        return annotated;
+      },
+      { name: "listWritableRepos" },
+    );
   } catch (error) {
     captureServerException(error as Error, undefined, {
       function: "listWritableRepos",

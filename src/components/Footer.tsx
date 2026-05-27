@@ -20,7 +20,7 @@ const SECTIONS = [
     links: [
       { href: "/compare/google-docs", label: "vs. Google Docs" },
       { href: "/compare/notion", label: "vs. Notion" },
-      { href: "/compare/markdown-prs", label: "vs. plain markdown PRs" },
+      { href: "/compare/plain-github", label: "vs. plain GitHub" },
       { href: "/compare/slack-canvases", label: "vs. Slack Canvases" },
     ],
   },

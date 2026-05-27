@@ -101,7 +101,7 @@ export default async function MarketingDocPage({
           actions={actions}
         />
 
-        <section className="mb-8">
+        <section className="mb-6">
           <div className="mb-6 flex items-center gap-3">
             <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-gray-50">
               {eyebrow}

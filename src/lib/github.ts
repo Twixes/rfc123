@@ -136,6 +136,8 @@ export interface RFCDetail extends RFC {
   /** Boolean GitHub merge-readiness (null = not yet computed). */
   mergeable: boolean | null;
   comments: Comment[];
+  /** Diagnostic steps when no `.md` file was found on the PR (see UI). */
+  markdownMissingAttempts?: string[];
 }
 
 /** Standard label name used to mark "this RFC has a registered decision". */
@@ -1131,6 +1133,37 @@ export async function fetchInlineCommentCounts(
   }
 }
 
+/** How many changed files `pulls.listFiles` returns per page (GitHub max 100). */
+const PR_FILES_LIST_PAGE_SIZE = 100;
+
+function buildMarkdownMissingAttempts(
+  prNumber: number,
+  files: Array<{ filename: string }>,
+): string[] {
+  const attempts: string[] = [
+    `Listed changed files on pull request #${prNumber} via GitHub \`pulls/list-files\` (up to ${PR_FILES_LIST_PAGE_SIZE} per page).`,
+  ];
+  if (files.length >= PR_FILES_LIST_PAGE_SIZE) {
+    attempts.push(
+      `Only the first ${PR_FILES_LIST_PAGE_SIZE} changed files were scanned; an RFC markdown file on a later page would not be detected.`,
+    );
+  }
+  if (files.length === 0) {
+    attempts.push("The changed-file list for this PR was empty.");
+  } else {
+    attempts.push(
+      `Checked ${files.length} changed path(s) for a filename ending in \`.md\`; none matched.`,
+    );
+    const sample = files.slice(0, 5).map((f) => f.filename);
+    if (sample.length > 0) {
+      attempts.push(
+        `Sample paths from this page: ${sample.join(", ")}${files.length > 5 ? ", …" : ""}.`,
+      );
+    }
+  }
+  return attempts;
+}
+
 export async function getRFCDetail(
   accessToken: string,
   owner: string,
@@ -1145,7 +1178,7 @@ export async function getRFCDetail(
     // Check cache for RFC content (PR details + markdown + reviewers).
     // The `:v2` suffix invalidates pre-enrichment shapes that lacked
     // per-reviewer state + submittedAt.
-    const contentCacheKey = `rfc:${owner}:${repo}:${prNumber}:content:v3`;
+    const contentCacheKey = `rfc:${owner}:${repo}:${prNumber}:content:v5`;
     interface CachedRFCContent {
       pr: any;
       files: any[];
@@ -1154,6 +1187,7 @@ export async function getRFCDetail(
       markdownFileSha: string | null;
       headRef: string;
       markdownEtag?: string;
+      markdownMissingAttempts?: string[];
       reviewers: RFCDetail["reviewers"];
       /** Logins of users with a pending review request – used to derive `reviewRequested` per-user. */
       requestedReviewerLogins: string[];
@@ -1170,6 +1204,7 @@ export async function getRFCDetail(
     let markdownContent = "";
     let markdownFilePath: string | null = null;
     let markdownFileSha: string | null = null;
+    let markdownMissingAttempts: string[] | undefined;
     let reviewers: RFCDetail["reviewers"] = [];
     let requestedReviewerLogins: string[] = [];
     let cacheValid = false;
@@ -1188,7 +1223,8 @@ export async function getRFCDetail(
             owner,
             repo,
             path: cachedContent.markdownFilePath,
-            ref: cachedContent.pr.head.ref,
+            // Head SHA, not branch name – merged PRs often have deleted branches.
+            ref: cachedContent.pr.head.sha,
             headers: {
               "If-None-Match": cachedContent.markdownEtag,
             } as Record<string, string>,
@@ -1209,6 +1245,7 @@ export async function getRFCDetail(
         markdownContent = cachedContent.markdownContent;
         markdownFilePath = cachedContent.markdownFilePath;
         markdownFileSha = cachedContent.markdownFileSha ?? null;
+        markdownMissingAttempts = cachedContent.markdownMissingAttempts;
         reviewers = cachedContent.reviewers;
         requestedReviewerLogins = cachedContent.requestedReviewerLogins ?? [];
       }
@@ -1229,6 +1266,7 @@ export async function getRFCDetail(
             owner,
             repo,
             pull_number: prNumber,
+            per_page: PR_FILES_LIST_PAGE_SIZE,
           }),
           octokit.rest.pulls.listRequestedReviewers({
             owner,
@@ -1247,8 +1285,11 @@ export async function getRFCDetail(
 
       const markdownFile = files.find((file) => file.filename.endsWith(".md"));
 
-      markdownContent = pr.body || "";
+      markdownContent = "";
       markdownFilePath = markdownFile?.filename || null;
+      if (!markdownFile) {
+        markdownMissingAttempts = buildMarkdownMissingAttempts(prNumber, files);
+      }
 
       let markdownEtag: string | undefined;
       if (markdownFile) {
@@ -1261,7 +1302,7 @@ export async function getRFCDetail(
               owner,
               repo,
               path: markdownFile.filename,
-              ref: pr.head.ref,
+              ref: pr.head.sha,
             },
           );
           console.log(
@@ -1369,6 +1410,7 @@ export async function getRFCDetail(
           markdownFilePath,
           markdownFileSha,
           headRef: pr.head.ref,
+          markdownMissingAttempts,
           reviewers,
           requestedReviewerLogins,
           markdownEtag,
@@ -1408,6 +1450,7 @@ export async function getRFCDetail(
       markdownContent,
       markdownFilePath,
       markdownFileSha,
+      markdownMissingAttempts,
       headRef: pr.head.ref,
       headSha: pr.head.sha,
       reviewers,
@@ -1516,7 +1559,7 @@ async function invalidateRfcCaches(
   prNumber: number,
 ): Promise<void> {
   await Promise.all([
-    deleteCachedData(`rfc:${owner}:${repo}:${prNumber}:content:v3`),
+    deleteCachedData(`rfc:${owner}:${repo}:${prNumber}:content:v5`),
     deleteCachedData(`rfcs:${owner}:${repo}:graphql:with-teams:v2`),
     deleteCachedData(`rfcs:${owner}:${repo}:graphql:no-teams:v2`),
   ]);
@@ -1972,7 +2015,7 @@ export async function getRFCTitle(
   try {
     const t0 = performance.now();
     // Same key as getRFCDetail (`:v2` – older `:content` keys are obsolete).
-    const contentCacheKey = `rfc:${owner}:${repo}:${prNumber}:content:v3`;
+    const contentCacheKey = `rfc:${owner}:${repo}:${prNumber}:content:v5`;
     const cached = await getCachedJsonData<{ pr: { title: string } }>(
       contentCacheKey,
     );

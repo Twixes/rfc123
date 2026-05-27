@@ -16,6 +16,7 @@ import RFCDetailLoadingSkeleton from "@/components/RFCDetailLoadingSkeleton";
 import { RFCMetadataHeader } from "@/components/RFCMetadataHeader";
 import RFCsTopBar from "@/components/RFCsTopBar";
 import RFCsTopBarActions from "@/components/RFCsTopBarActions";
+import { RfcMarkdownMissing } from "@/components/RfcMarkdownMissing";
 import Tooltip from "@/components/Tooltip";
 import type { Comment, RFCDetail, RfcStateAction } from "@/lib/github";
 import { type LineDiffEntry, lineDiff } from "@/lib/line-diff";
@@ -666,7 +667,7 @@ export default function RFCDetailClient({
           </div>
         }
         bylineActions={
-          editingBody == null ? (
+          editingBody == null && rfc.markdownFilePath ? (
             <ViewModeToggle
               value={viewMode}
               onChange={setViewMode}
@@ -675,7 +676,7 @@ export default function RFCDetailClient({
                 { value: "raw", label: "Raw" },
               ]}
             />
-          ) : (
+          ) : editingBody != null ? (
             <ViewModeToggle
               value={editTab}
               onChange={setEditTab}
@@ -684,7 +685,7 @@ export default function RFCDetailClient({
                 { value: "preview", label: "Preview" },
               ]}
             />
-          )
+          ) : null
         }
       />
 
@@ -717,6 +718,15 @@ export default function RFCDetailClient({
             onResetAndRefresh={resetAndRefresh}
             saveError={bodySaveError}
           />
+        ) : !rfc.markdownFilePath ? (
+          <RfcMarkdownMissing
+            attempts={
+              rfc.markdownMissingAttempts ?? [
+                "Listed changed files on this pull request and looked for a path ending in `.md`.",
+              ]
+            }
+            githubUrl={rfc.url}
+          />
         ) : viewMode === "pretty" ? (
           <InlineCommentableMarkdown
             content={rfc.markdownContent}
@@ -724,7 +734,7 @@ export default function RFCDetailClient({
             owner={owner}
             repo={repo}
             markdownFilePath={rfc.markdownFilePath}
-            headRef={rfc.headRef}
+            headRef={rfc.headSha}
             comments={lineComments}
             commentsLoading={commentsLoading}
             highlightedCommentId={highlightedCommentId}

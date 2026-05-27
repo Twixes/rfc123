@@ -27,8 +27,8 @@ const SECTIONS = [
   {
     title: "Legal",
     links: [
-      { href: "/terms", label: "Terms of service" },
-      { href: "/privacy", label: "Privacy policy" },
+      { href: "/terms", label: "Terms" },
+      { href: "/privacy", label: "Privacy" },
     ],
   },
 ] as const;

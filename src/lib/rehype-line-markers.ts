@@ -122,6 +122,20 @@ export function rehypeLineMarkers() {
       // Skip table and tr – tables get markers in the dedicated table pass
       if (node.tagName === "table" || node.tagName === "tr") return;
 
+      // Skip `pre` wrappers around code blocks. The inner `<code>` already
+      // injected per-line markers for the content; adding another marker on
+      // the `pre` here would map the opening-fence line to the same Y as
+      // the first content line and stack the two numbers on top of each
+      // other in the gutter.
+      if (
+        node.tagName === "pre" &&
+        node.children?.some(
+          (child) => child.type === "element" && child.tagName === "code",
+        )
+      ) {
+        return;
+      }
+
       // For all other elements, inject an invisible marker span for position tracking
       if (node.position?.start?.line) {
         const lineNumber = node.position.start.line;

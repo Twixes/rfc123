@@ -668,6 +668,74 @@ async function listRfcBearingReposFast(
   );
 }
 
+export interface RFCSearchHit {
+  number: number;
+  owner: string;
+  repo: string;
+  title: string;
+  url: string;
+  state: string;
+  matchedIn: "title" | "description";
+}
+
+/**
+ * Deterministic text search across pull requests the user can see, via
+ * GitHub's `search/issues` API (`in:title,body`). Returns at most `limit`
+ * hits (default 20, max 50). No LLM, no embeddings.
+ *
+ * `matchedIn` is a best-effort classification: we strip search qualifiers
+ * (`label:foo`, surrounding quotes) and check if the cleaned query appears
+ * in the title; anything else falls through to `description`. Callers that
+ * care about RFC-specific scoping should intersect the result against an
+ * RFC list locally – GitHub search returns every PR the token can see, not
+ * just RFCs.
+ */
+export async function searchRFCsByText(input: {
+  accessToken: string;
+  query: string;
+  limit?: number;
+  ownerFilter?: string;
+}): Promise<RFCSearchHit[]> {
+  const { accessToken, query } = input;
+  const limit = Math.min(input.limit ?? 20, 50);
+  const octokit = await getOctokit(accessToken);
+
+  const ownerClause = input.ownerFilter ? ` user:${input.ownerFilter}` : "";
+  const issueSearch = `${query} is:pr in:title,body${ownerClause}`;
+  const { data: prData } = await octokit.rest.search.issuesAndPullRequests({
+    q: issueSearch,
+    per_page: limit,
+  });
+
+  const haystackQuery = query
+    .replace(/\b[a-z]+:[^\s"]+/gi, " ")
+    .replace(/["']/g, "")
+    .trim()
+    .toLowerCase();
+
+  return prData.items
+    .filter((item) => item.pull_request)
+    .map((item) => {
+      const repoUrl = item.repository_url;
+      const parts = repoUrl.split("/");
+      const repo = parts[parts.length - 1];
+      const owner = parts[parts.length - 2];
+      const matchedIn: RFCSearchHit["matchedIn"] =
+        haystackQuery && item.title.toLowerCase().includes(haystackQuery)
+          ? "title"
+          : "description";
+      return {
+        number: item.number,
+        owner,
+        repo,
+        title: item.title,
+        url: item.html_url,
+        state: item.state,
+        matchedIn,
+      };
+    });
+}
+
 export async function listReposWithRFCs(
   accessToken: string,
 ): Promise<RepoOption[]> {
@@ -716,7 +784,7 @@ function hasAnyRfcBearingRepoCacheKey(accessToken: string): string {
 }
 
 /**
- * Server-render fast path for `/rfcs/page.tsx`: returns true iff the viewer
+ * Server-render fast path for `/rfcs` list page: returns true iff the viewer
  * has *any* repo with `.rfc123.json` at root. One code-search request, so the
  * page shell ships in <1s.
  *

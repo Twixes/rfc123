@@ -1,5 +1,5 @@
 import { Octokit } from "octokit";
-import { listReposWithRFCs } from "./github";
+import { listReposWithRFCs, searchRFCsByText } from "./github";
 import { captureServerException } from "./posthog-server";
 
 /**
@@ -655,8 +655,9 @@ export interface SearchResult {
 }
 
 /**
- * Deterministic text search across RFC pull requests the user can see. Uses
- * GitHub's search API. No LLM, no embeddings.
+ * Deterministic text search across RFC pull requests the user can see. Thin
+ * wrapper around `searchRFCsByText` that preserves the `matchedOn: 'title'
+ * | 'body'` field MCP consumers expect.
  */
 export async function searchRFCs(input: {
   accessToken: string;
@@ -664,53 +665,16 @@ export async function searchRFCs(input: {
   limit?: number;
   ownerFilter?: string;
 }): Promise<SearchResult[]> {
-  const { accessToken, query } = input;
-  const limit = Math.min(input.limit ?? 20, 50);
-  const octokit = new Octokit({ auth: accessToken });
-
-  const ownerClause = input.ownerFilter ? ` user:${input.ownerFilter}` : "";
-
   try {
-    const issueSearch = `${query} is:pr in:title,body${ownerClause}`;
-    const { data: prData } = await octokit.rest.search.issuesAndPullRequests({
-      q: issueSearch,
-      per_page: limit,
-    });
-
-    // Strip GitHub search qualifiers (`label:foo`) and surrounding quotes
-    // before classifying – otherwise `"design doc"` would never match a title
-    // because the title doesn't contain the literal quotes.
-    const haystackQuery = query
-      .replace(/\b[a-z]+:[^\s"]+/gi, " ")
-      .replace(/["']/g, "")
-      .trim()
-      .toLowerCase();
-
-    return prData.items
-      .filter((item) => item.pull_request)
-      .map((item) => {
-        const repoUrl = item.repository_url;
-        const parts = repoUrl.split("/");
-        const repo = parts[parts.length - 1];
-        const owner = parts[parts.length - 2];
-        const matchedOn: SearchResult["matchedOn"] =
-          haystackQuery && item.title.toLowerCase().includes(haystackQuery)
-            ? "title"
-            : "body";
-        return {
-          number: item.number,
-          owner,
-          repo,
-          title: item.title,
-          url: item.html_url,
-          state: item.state,
-          matchedOn,
-        };
-      });
+    const hits = await searchRFCsByText(input);
+    return hits.map(({ matchedIn, ...rest }) => ({
+      ...rest,
+      matchedOn: matchedIn === "title" ? "title" : "body",
+    }));
   } catch (error) {
     captureServerException(error as Error, undefined, {
       function: "searchRFCs",
-      query,
+      query: input.query,
     });
     return [];
   }

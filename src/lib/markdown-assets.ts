@@ -50,3 +50,35 @@ export function isRelativeMarkdownAssetSrc(src: string): boolean {
   if (s.startsWith("//")) return false;
   return !/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(s);
 }
+
+export interface RfcMarkdownImageAssets {
+  owner: string;
+  repo: string;
+  headRef: string;
+  markdownFilePath: string | null;
+}
+
+/** Proxy markdown image src for private repos and GitHub attachments. */
+export function proxyMarkdownImageSrc(
+  src: string,
+  assets?: RfcMarkdownImageAssets | null,
+): string {
+  if (assets && isRelativeMarkdownAssetSrc(src)) {
+    const repoPath = resolveMarkdownImageRepoPath(assets.markdownFilePath, src);
+    if (repoPath) {
+      return `/api/rfc-asset?owner=${encodeURIComponent(assets.owner)}&repo=${encodeURIComponent(assets.repo)}&ref=${encodeURIComponent(assets.headRef)}&path=${encodeURIComponent(repoPath)}`;
+    }
+  }
+  try {
+    const url = new URL(src);
+    if (
+      url.hostname === "github.com" &&
+      url.pathname.startsWith("/user-attachments/")
+    ) {
+      return `/api/github-image?url=${encodeURIComponent(src)}`;
+    }
+  } catch {
+    /* keep src */
+  }
+  return src;
+}

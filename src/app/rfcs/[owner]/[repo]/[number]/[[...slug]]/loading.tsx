@@ -3,5 +3,5 @@ import RFCDetailLoadingSkeleton from "@/components/RFCDetailLoadingSkeleton";
 
 export default async function Loading() {
   const session = await auth();
-  return <RFCDetailLoadingSkeleton user={session?.user ?? null} />;
+  return <RFCDetailLoadingSkeleton user={session?.user ?? null} entry />;
 }

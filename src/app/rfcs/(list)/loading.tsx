@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import RFCListSkeleton from "@/components/RFCListSkeleton";
 import RFCsFilterBarSkeleton from "@/components/RFCsFilterBarSkeleton";
+import RFCsSearchSkeleton from "@/components/RFCsSearchSkeleton";
 import RFCsTopBar from "@/components/RFCsTopBar";
 import RFCsTopBarActions from "@/components/RFCsTopBarActions";
 
@@ -20,8 +21,9 @@ export default async function Loading() {
         actions={<RFCsTopBarActions />}
       />
 
+      <RFCsSearchSkeleton />
       <RFCsFilterBarSkeleton />
-      <RFCListSkeleton />
+      <RFCListSkeleton entry />
     </div>
   );
 }

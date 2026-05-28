@@ -111,7 +111,7 @@ export function RFCMetadataHeader({
             onSave={authorControls.onTitleSave}
           />
         ) : (
-          <h1 className="max-w-3xl text-balance text-3xl sm:text-5xl font-serif font-normal leading-[1.05] tracking-tight text-foreground">
+          <h1 className="max-w-3xl text-balance text-3xl sm:text-5xl font-serif font-bold leading-[1.05] tracking-tight text-foreground">
             {rfc.title}
           </h1>
         )}
@@ -256,7 +256,7 @@ function EditableRfcTitle({ value, onSave }: EditableRfcTitleProps) {
         type="button"
         onClick={start}
         title="Edit title"
-        className="group max-w-3xl text-left text-balance text-3xl sm:text-5xl font-serif font-normal leading-[1.05] tracking-tight text-foreground transition-colors hover:text-foreground/80 cursor-pointer"
+        className="group max-w-3xl text-left text-balance text-3xl sm:text-5xl font-serif font-bold leading-[1.05] tracking-tight text-foreground transition-colors hover:text-foreground/80 cursor-pointer"
       >
         {value}
         <PencilIcon className="ml-2 inline-block h-4 w-4 align-middle text-gray-50 opacity-0 transition-opacity group-hover:opacity-100" />
@@ -282,7 +282,7 @@ function EditableRfcTitle({ value, onSave }: EditableRfcTitleProps) {
         }}
         disabled={saving}
         aria-label="RFC title"
-        className="w-full bg-transparent text-balance text-3xl sm:text-5xl font-serif font-normal leading-[1.05] tracking-tight text-foreground placeholder-gray-40 focus:outline-none border-b border-cyan disabled:opacity-60"
+        className="w-full bg-transparent text-balance text-3xl sm:text-5xl font-serif font-bold leading-[1.05] tracking-tight text-foreground placeholder-gray-40 focus:outline-none border-b border-cyan disabled:opacity-60"
       />
       <div className="mt-2 flex items-center gap-2">
         <button

@@ -710,7 +710,7 @@ export function InlineCommentableMarkdown({
   threadsByLineRef.current = threadsByLine;
 
   // Calculate line offsets after render using injected markers
-  useEffect(() => {
+  const recalcLinePositions = useCallback(() => {
     if (!markdownRef.current) return;
 
     const offsets = new Map<number, number>();
@@ -802,6 +802,33 @@ export function InlineCommentableMarkdown({
     // lineRanges/lineOffsets/lineAlias, which destabilized handleLineClick and
     // forced a full ReactMarkdown re-parse via markdownComponents.
   }, [lines, layoutCommentsByLine]);
+
+  // Re-run after async DOM growth (Mermaid diagrams that mount their SVG
+  // after the initial render pass, images that resolve their natural
+  // height later, etc.) so that markers downstream of the growth stay
+  // aligned. rAF-throttled to coalesce bursts of ResizeObserver callbacks.
+  const recalcLineRafRef = useRef<number | null>(null);
+  useEffect(() => {
+    recalcLinePositions();
+    const el = markdownRef.current;
+    if (!el) return;
+    const schedule = () => {
+      if (recalcLineRafRef.current != null) return;
+      recalcLineRafRef.current = requestAnimationFrame(() => {
+        recalcLineRafRef.current = null;
+        recalcLinePositions();
+      });
+    };
+    const ro = new ResizeObserver(schedule);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      if (recalcLineRafRef.current != null) {
+        cancelAnimationFrame(recalcLineRafRef.current);
+        recalcLineRafRef.current = null;
+      }
+    };
+  }, [recalcLinePositions]);
 
   // Stable hover callbacks – delegate to LineHoverController via ref so this component
   // does not re-render when hover state changes.

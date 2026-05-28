@@ -26,18 +26,9 @@ export default function PrivacyPage() {
             We also keep the settings you choose inside RFC123.
           </p>
           <p className="mt-3">
-            If you connect a Slack workspace, we keep the connection details we
-            need to deliver the daily DM you opted into.
-          </p>
-          <p className="mt-3">
-            If you connect an AI agent through our MCP server, we keep the
-            connection details that let the agent reach RFC123 on your behalf.
-          </p>
-          <p className="mt-3">
-            We use product analytics to understand how RFC123 is used and to
-            catch bugs. This captures page views, basic device and browser
-            information, and uncaught errors. See <em>Cookies and analytics</em>{" "}
-            below.
+            We use analytics to understand how RFC123 is used and to catch bugs.
+            This captures page views, basic device and browser information, and
+            uncaught errors. See <em>Cookies and analytics</em> below.
           </p>
         </section>
 
@@ -72,7 +63,7 @@ export default function PrivacyPage() {
               <strong>Convex</strong>: our database provider.
             </li>
             <li>
-              <strong>PostHog</strong>: product analytics and error tracking.
+              <strong>PostHog</strong>: analytics and error tracking.
             </li>
           </ul>
           <p className="mt-3">

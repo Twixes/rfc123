@@ -29,6 +29,7 @@ import {
   isRelativeMarkdownAssetSrc,
   resolveMarkdownImageRepoPath,
 } from "@/lib/markdown-assets";
+import { extractMermaidChart } from "@/lib/markdown-mermaid";
 import { rehypeLineMarkers } from "@/lib/rehype-line-markers";
 import { remarkMentions } from "@/lib/remark-mentions";
 import { remarkMergeParagraphs } from "@/lib/remark-merge-paragraphs";
@@ -1311,13 +1312,11 @@ export function InlineCommentableMarkdown({
       },
       pre: ({ children, node: _node, ...props }: MDProps<"pre">) => {
         const lineNumber = props["data-line-element"];
-        const codeChild = children as
-          | React.ReactElement<{ className?: string; children?: unknown }>
-          | undefined;
-        const childProps = codeChild?.props;
-        const isMermaid = childProps?.className?.includes("language-mermaid");
-        if (isMermaid) {
-          const chart = String(childProps?.children ?? "").trim();
+        // `children` may be either the bare <code> element or an array
+        // containing rehype-line-markers sibling span(s) plus the <code>.
+        // Walk to find the mermaid block in either shape.
+        const chart = extractMermaidChart(children);
+        if (chart !== null) {
           return (
             <div
               className={`relative ${lineNumber ? "cursor-pointer" : ""}`}

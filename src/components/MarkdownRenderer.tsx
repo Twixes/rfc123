@@ -6,6 +6,8 @@ import rehypeRaw from "rehype-raw";
 import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
 import { ClickableImage } from "@/components/ClickableImage";
+import { MermaidDiagram } from "@/components/MermaidDiagram";
+import { extractMermaidChart } from "@/lib/markdown-mermaid";
 import { markdownSanitizeSchema } from "@/lib/markdown-sanitize-schema";
 import { remarkMentions } from "@/lib/remark-mentions";
 
@@ -21,7 +23,7 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
         rehypePlugins={[
           rehypeRaw,
           [rehypeSanitize, markdownSanitizeSchema],
-          rehypeHighlight,
+          [rehypeHighlight, { plainText: ["mermaid"] }],
         ]}
         components={{
           img: ({ src, alt, ...props }) => {
@@ -100,11 +102,21 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
               </code>
             );
           },
-          pre: ({ children }) => (
-            <pre className="my-4 overflow-x-auto border border-gray-30 rounded bg-gray-90 p-4">
-              {children}
-            </pre>
-          ),
+          pre: ({ children }) => {
+            const chart = extractMermaidChart(children);
+            if (chart !== null) {
+              return (
+                <div className="my-4">
+                  <MermaidDiagram chart={chart} />
+                </div>
+              );
+            }
+            return (
+              <pre className="my-4 overflow-x-auto border border-gray-30 rounded bg-gray-90 p-4">
+                {children}
+              </pre>
+            );
+          },
           blockquote: ({ children }) => (
             <blockquote className="my-4 border-l-2 border-l-magenta bg-gray-5 py-2 pl-4 pr-4 italic text-gray-70">
               {children}

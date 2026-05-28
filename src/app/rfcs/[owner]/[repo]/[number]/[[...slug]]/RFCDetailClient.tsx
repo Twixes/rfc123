@@ -9,7 +9,6 @@ import { GeneralCommentsSection } from "@/components/GeneralCommentsSection";
 import { InlineCommentableMarkdown } from "@/components/InlineCommentableMarkdown";
 import { PencilIcon } from "@/components/icons/PencilIcon";
 import { MarkdownRawView } from "@/components/MarkdownRawView";
-import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import { RelativeTime } from "@/components/RelativeTime";
 import { RFCBodyEditor } from "@/components/RFCBodyEditor";
 import RFCDetailLoadingSkeleton from "@/components/RFCDetailLoadingSkeleton";
@@ -17,6 +16,10 @@ import { RFCMetadataHeader } from "@/components/RFCMetadataHeader";
 import RFCsTopBar from "@/components/RFCsTopBar";
 import RFCsTopBarActions from "@/components/RFCsTopBarActions";
 import { RfcMarkdownMissing } from "@/components/RfcMarkdownMissing";
+import {
+  type RfcMarkdownAssets,
+  RfcPrettyMarkdown,
+} from "@/components/RfcPrettyMarkdown";
 import Tooltip from "@/components/Tooltip";
 import type { Comment, RFCDetail, RfcStateAction } from "@/lib/github";
 import { type LineDiffEntry, lineDiff } from "@/lib/line-diff";
@@ -96,6 +99,16 @@ export default function RFCDetailClient({
       lastEditedAt: new Date().toISOString(),
     };
   }, [editingBody, rfc?.markdownContent, rfc?.markdownFileSha]);
+
+  const editPreviewAssets = useMemo((): RfcMarkdownAssets | undefined => {
+    if (!rfc?.headSha || !rfc.markdownFilePath) return undefined;
+    return {
+      owner,
+      repo,
+      headRef: rfc.headSha,
+      markdownFilePath: rfc.markdownFilePath,
+    };
+  }, [owner, repo, rfc?.headSha, rfc?.markdownFilePath]);
 
   const {
     pendingDraft: pendingBodyDraft,
@@ -706,6 +719,14 @@ export default function RFCDetailClient({
           <BodyEditMode
             body={editingBody}
             originalBody={rfc.markdownContent}
+            previewAssets={
+              editPreviewAssets ?? {
+                owner,
+                repo,
+                headRef: rfc.headSha,
+                markdownFilePath: rfc.markdownFilePath,
+              }
+            }
             onBodyChange={setEditingBody}
             mode={editTab}
             onModeChange={setEditTab}
@@ -763,6 +784,7 @@ interface BodyEditModeProps {
   /** The unedited version of the body – used as the "before" side of the diff
    *  view when the user toggles Preview → Diff. */
   originalBody: string;
+  previewAssets: RfcMarkdownAssets;
   onBodyChange: (next: string) => void;
   /** Page-level Write/Preview toggle drives the editor – RFCBodyEditor hides
    *  its internal tabs when controlled. */
@@ -783,6 +805,7 @@ interface BodyEditModeProps {
 function BodyEditMode({
   body,
   originalBody,
+  previewAssets,
   onBodyChange,
   mode,
   onModeChange,
@@ -804,9 +827,9 @@ function BodyEditMode({
   const previewSlot =
     mode === "preview" ? (
       showDiff ? (
-        <DiffView entries={diffEntries ?? []} />
+        <DiffView entries={diffEntries ?? []} assets={previewAssets} />
       ) : body.trim() ? (
-        <MarkdownRenderer content={body} />
+        <RfcPrettyMarkdown content={body} assets={previewAssets} />
       ) : (
         <p className="text-sm text-gray-50">Nothing to preview yet.</p>
       )
@@ -844,19 +867,12 @@ function BodyEditMode({
           mode={mode}
           onModeChange={onModeChange}
           previewSlot={previewSlot}
+          previewAssets={previewAssets}
         />
         {saveError && !conflict && (
           <div className="rounded-sm border border-magenta bg-magenta-light px-3 py-2 text-sm text-foreground">
             {saveError}
           </div>
-        )}
-        {mode === "preview" && (
-          <Checkbox
-            checked={showDiff}
-            onChange={setShowDiff}
-            label="Show diff against the saved revision"
-            className="text-xs text-gray-70"
-          />
         )}
       </div>
       <EditCommitBar
@@ -866,6 +882,9 @@ function BodyEditMode({
         saving={saving}
         conflict={conflict}
         onSave={onSave}
+        showDiff={showDiff}
+        onShowDiffChange={setShowDiff}
+        showDiffVisible={mode === "preview"}
       />
     </>
   );
@@ -878,6 +897,10 @@ interface EditCommitBarProps {
   saving: boolean;
   conflict: boolean;
   onSave: () => void;
+  showDiff: boolean;
+  onShowDiffChange: (next: boolean) => void;
+  /** Diff toggle only applies in Preview; hide it in Write. */
+  showDiffVisible: boolean;
 }
 
 /** Fixed commit message + save control for RFC body edit mode. */
@@ -888,6 +911,9 @@ function EditCommitBar({
   saving,
   conflict,
   onSave,
+  showDiff,
+  onShowDiffChange,
+  showDiffVisible,
 }: EditCommitBarProps) {
   return (
     <section
@@ -895,11 +921,19 @@ function EditCommitBar({
       aria-label="Commit changes"
     >
       <div className="mx-auto flex max-w-360 items-center gap-3 px-4 py-3 sm:gap-4 sm:px-8 sm:py-3.5">
+        {showDiffVisible && (
+          <Checkbox
+            checked={showDiff}
+            onChange={onShowDiffChange}
+            label="Show diff"
+            className="shrink-0"
+          />
+        )}
         <input
           type="text"
           value={commitMessage}
           onChange={(e) => onCommitMessageChange(e.target.value)}
-          placeholder="Commit message"
+          placeholder="What's changed?"
           className="min-w-0 flex-1 rounded-md border border-gray-20 bg-background/60 px-3.5 py-2 text-sm text-foreground placeholder:text-gray-50 transition-colors hover:border-gray-30 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-cyan"
         />
         <SaveButton
@@ -1032,15 +1066,13 @@ function BodyDraftRestoreBanner({
 
 interface DiffViewProps {
   entries: LineDiffEntry[];
+  assets: RfcMarkdownAssets;
 }
 
 /** Renders a block-level diff over the rendered markdown. Consecutive lines
- *  of the same kind are grouped and rendered through MarkdownRenderer so the
- *  diff reads as the regular preview, just with red + strikethrough for
- *  removed blocks and a green hairline for added blocks. Some markdown
- *  structure (e.g. a half-removed list) inevitably breaks across block
- *  boundaries – that's acceptable for a preview affordance. */
-function DiffView({ entries }: DiffViewProps) {
+ *  of the same kind are grouped and rendered like the Pretty view, with red +
+ *  strikethrough for removed blocks and a green hairline for added blocks. */
+function DiffView({ entries, assets }: DiffViewProps) {
   if (entries.length === 0) {
     return <p className="text-sm text-gray-50">No diff to show yet.</p>;
   }
@@ -1070,7 +1102,7 @@ function DiffView({ entries }: DiffViewProps) {
           return (
             // biome-ignore lint/suspicious/noArrayIndexKey: diff blocks have no stable identity; the list re-renders on every edit
             <div key={idx}>
-              <MarkdownRenderer content={block.text} />
+              <RfcPrettyMarkdown content={block.text} assets={assets} />
             </div>
           );
         }
@@ -1093,7 +1125,7 @@ function DiffView({ entries }: DiffViewProps) {
             >
               {isAdded ? "Added" : "Removed"}
             </span>
-            <MarkdownRenderer content={block.text} />
+            <RfcPrettyMarkdown content={block.text} assets={assets} />
           </div>
         );
       })}

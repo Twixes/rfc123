@@ -13,43 +13,33 @@ import {
   useState,
 } from "react";
 import ReactMarkdown from "react-markdown";
-import rehypeHighlight from "rehype-highlight";
-import remarkBreaks from "remark-breaks";
-import remarkGfm from "remark-gfm";
 import { ClickableImage } from "@/components/ClickableImage";
 import { ExistingLineComments } from "@/components/ExistingLineComments";
 
 import { LineCommentBox } from "@/components/LineCommentBox";
 import { MermaidDiagram } from "@/components/MermaidDiagram";
 import { ProfilePictures } from "@/components/ProfilePictures";
+import {
+  RFC_PRETTY_REHYPE_PLUGINS,
+  RFC_PRETTY_REMARK_PLUGINS,
+} from "@/components/RfcPrettyMarkdown";
 import type { CommentThread } from "@/lib/comment-threads";
 import { groupIntoThreads } from "@/lib/comment-threads";
 import type { Comment } from "@/lib/github";
-import {
-  isRelativeMarkdownAssetSrc,
-  resolveMarkdownImageRepoPath,
-} from "@/lib/markdown-assets";
+import { proxyMarkdownImageSrc } from "@/lib/markdown-assets";
 import {
   MARKDOWN_INLINE_CODE_CLASS,
   MARKDOWN_PRE_CLASS,
 } from "@/lib/markdown-code";
 import { extractMermaidChart } from "@/lib/markdown-mermaid";
 import { rehypeLineMarkers } from "@/lib/rehype-line-markers";
-import { remarkMentions } from "@/lib/remark-mentions";
-import { remarkMergeParagraphs } from "@/lib/remark-merge-paragraphs";
 
-// Module-level constants – stable references across all renders and instances.
+// Pretty-view plugins + line markers for inline comments.
 type PluginList = NonNullable<
   React.ComponentProps<typeof ReactMarkdown>["rehypePlugins"]
 >;
-const REMARK_PLUGINS: PluginList = [
-  remarkGfm,
-  remarkMentions,
-  remarkBreaks,
-  remarkMergeParagraphs,
-];
 const REHYPE_PLUGINS: PluginList = [
-  [rehypeHighlight, { plainText: ["mermaid"] }],
+  ...RFC_PRETTY_REHYPE_PLUGINS,
   rehypeLineMarkers,
 ];
 
@@ -73,6 +63,18 @@ function setsEqual<T>(a: Set<T>, b: Set<T>): boolean {
   if (a.size !== b.size) return false;
   for (const v of a) if (!b.has(v)) return false;
   return true;
+}
+
+function groupCommentsByLine(comments: Comment[]): Map<number, Comment[]> {
+  const map = new Map<number, Comment[]>();
+  for (const comment of comments) {
+    if (!comment.line) continue;
+    const line = comment.line;
+    const group = map.get(line);
+    if (group) group.push(comment);
+    else map.set(line, [comment]);
+  }
+  return map;
 }
 
 /** Resolve the source line under a pointer event inside a `<pre>`, by
@@ -551,7 +553,7 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
 }) {
   return (
     <ReactMarkdown
-      remarkPlugins={REMARK_PLUGINS}
+      remarkPlugins={RFC_PRETTY_REMARK_PLUGINS}
       rehypePlugins={REHYPE_PLUGINS}
       components={components}
     >
@@ -830,29 +832,17 @@ export function InlineCommentableMarkdown({
   const [minContentHeight, setMinContentHeight] = useState(0);
 
   // Group comments by line number
-  const commentsByLine = useMemo(() => {
-    const map = new Map<number, Comment[]>();
-    for (const comment of comments) {
-      if (comment.line) {
-        const existing = map.get(comment.line) || [];
-        map.set(comment.line, [...existing, comment]);
-      }
-    }
-    return map;
-  }, [comments]);
+  const commentsByLine = useMemo(
+    () => groupCommentsByLine(comments),
+    [comments],
+  );
 
   /** Sidebar + layout work is deferred so comment load does not block the markdown column. */
   const deferredComments = useDeferredValue(comments);
-  const layoutCommentsByLine = useMemo(() => {
-    const map = new Map<number, Comment[]>();
-    for (const comment of deferredComments) {
-      if (comment.line) {
-        const existing = map.get(comment.line) || [];
-        map.set(comment.line, [...existing, comment]);
-      }
-    }
-    return map;
-  }, [deferredComments]);
+  const layoutCommentsByLine = useMemo(
+    () => groupCommentsByLine(deferredComments),
+    [deferredComments],
+  );
 
   /** Latest comment map for markdown renderers without rebuilding `markdownComponents`. */
   const commentsByLineRef = useRef(commentsByLine);
@@ -1664,39 +1654,22 @@ export function InlineCommentableMarkdown({
           {children}
         </td>
       ),
-      img: ({ node: _node, src, alt, ...props }: MDProps<"img">) => {
-        let proxiedSrc = src;
-        if (typeof src === "string") {
-          if (isRelativeMarkdownAssetSrc(src) && headRef) {
-            const repoPath = resolveMarkdownImageRepoPath(
-              markdownFilePath,
-              src,
-            );
-            if (repoPath) {
-              proxiedSrc = `/api/rfc-asset?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}&ref=${encodeURIComponent(headRef)}&path=${encodeURIComponent(repoPath)}`;
-            }
-          } else {
-            try {
-              const url = new URL(src);
-              if (
-                url.hostname === "github.com" &&
-                url.pathname.startsWith("/user-attachments/")
-              ) {
-                proxiedSrc = `/api/github-image?url=${encodeURIComponent(src)}`;
-              }
-            } catch {
-              /* keep src */
-            }
+      img: ({ node: _node, src, alt, ...props }: MDProps<"img">) => (
+        <ClickableImage
+          src={
+            typeof src === "string"
+              ? proxyMarkdownImageSrc(
+                  src,
+                  headRef
+                    ? { owner, repo, headRef, markdownFilePath }
+                    : undefined,
+                )
+              : undefined
           }
-        }
-        return (
-          <ClickableImage
-            src={proxiedSrc as string | undefined}
-            alt={(alt as string) ?? ""}
-            {...props}
-          />
-        );
-      },
+          alt={(alt as string) ?? ""}
+          {...props}
+        />
+      ),
     }),
     [
       handleLineClick,

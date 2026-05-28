@@ -190,7 +190,7 @@ export default async function LandingPage() {
           </div>
         </section>
 
-        <figure className="flex items-start gap-10 ml-5">
+        <figure className="flex items-start gap-14 ml-5">
           <Dingbat glyph="❞" className="text-gray-70" />
           <div className="flex-1 min-w-0">
             <blockquote className="font-serif text-xl leading-snug text-gray-70">

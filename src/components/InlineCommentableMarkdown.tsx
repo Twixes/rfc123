@@ -1336,7 +1336,32 @@ export function InlineCommentableMarkdown({
         return (
           <pre
             className={`relative my-4 max-w-full overflow-x-auto border border-gray-30 rounded whitespace-pre-wrap bg-gray-90 p-4 ${lineNumber ? "cursor-pointer" : ""}`}
-            onClick={() => lineNumber && handleLineClick(lineNumber)}
+            onClick={(e) => {
+              if (!lineNumber) return;
+              // Route the click to the source line nearest at-or-above the
+              // click Y. Each rendered code line carries a 0-size
+              // `line-marker-N` span; picking the closest above makes every
+              // code line individually commentable.
+              const pre = e.currentTarget;
+              const markers = pre.querySelectorAll<HTMLElement>(
+                '[id^="line-marker-"]',
+              );
+              let bestLine = lineNumber;
+              let bestDelta = Number.POSITIVE_INFINITY;
+              for (const marker of markers) {
+                const top = marker.getBoundingClientRect().top;
+                const delta = e.clientY - top;
+                if (delta >= 0 && delta < bestDelta) {
+                  bestDelta = delta;
+                  const parsed = Number.parseInt(
+                    marker.id.slice("line-marker-".length),
+                    10,
+                  );
+                  if (!Number.isNaN(parsed)) bestLine = parsed;
+                }
+              }
+              handleLineClick(bestLine);
+            }}
             onMouseEnter={() => lineNumber && handleMouseEnterLine(lineNumber)}
             onMouseLeave={handleMouseLeaveLine}
             {...props}

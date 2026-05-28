@@ -751,7 +751,6 @@ export default function RFCDetailClient({
         ) : viewMode === "pretty" ? (
           <InlineCommentableMarkdown
             content={rfc.markdownContent}
-            prNumber={rfc.number}
             owner={owner}
             repo={repo}
             markdownFilePath={rfc.markdownFilePath}

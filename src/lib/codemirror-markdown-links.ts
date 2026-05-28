@@ -75,41 +75,57 @@ function openHref(href: string) {
   window.open(href, "_blank", "noopener,noreferrer");
 }
 
-function buildLinkDecorations(view: EditorView): DecorationSet {
-  const marks: Array<{ from: number; to: number; href: string }> = [];
-  const seen = new Set<string>();
+type LinkMark = { from: number; to: number; href: string };
 
-  for (const { from, to } of view.visibleRanges) {
-    syntaxTree(view.state).iterate({
-      from,
-      to,
-      enter(node) {
-        if (node.name === "URL" || node.name === "Autolink") {
-          const href = normalizeMarkdownHref(
-            view.state.doc.sliceString(node.from, node.to),
-          );
-          if (!href) return;
-          const key = `${node.from}:${node.to}`;
-          if (seen.has(key)) return;
-          seen.add(key);
-          marks.push({ from: node.from, to: node.to, href });
-        }
-        if (node.name === "Link" || node.name === "Image") {
-          const url = node.node.getChild("URL");
-          if (!url) return;
-          const href = normalizeMarkdownHref(
-            view.state.doc.sliceString(url.from, url.to),
-          );
-          if (!href) return;
-          const key = `${url.from}:${url.to}`;
-          if (seen.has(key)) return;
-          seen.add(key);
-          marks.push({ from: url.from, to: url.to, href });
-        }
-      },
-    });
+function spansOverlap(
+  from: number,
+  to: number,
+  spans: ReadonlyArray<{ from: number; to: number }>,
+): boolean {
+  for (const span of spans) {
+    if (from < span.to && to > span.from) return true;
   }
+  return false;
+}
 
+function collectLinkMarksInRange(
+  view: EditorView,
+  from: number,
+  to: number,
+  marks: LinkMark[],
+  seen: Set<string>,
+): void {
+  syntaxTree(view.state).iterate({
+    from,
+    to,
+    enter(node) {
+      if (node.name === "URL" || node.name === "Autolink") {
+        const href = normalizeMarkdownHref(
+          view.state.doc.sliceString(node.from, node.to),
+        );
+        if (!href) return;
+        const key = `${node.from}:${node.to}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        marks.push({ from: node.from, to: node.to, href });
+      }
+      if (node.name === "Link" || node.name === "Image") {
+        const url = node.node.getChild("URL");
+        if (!url) return;
+        const href = normalizeMarkdownHref(
+          view.state.doc.sliceString(url.from, url.to),
+        );
+        if (!href) return;
+        const key = `${url.from}:${url.to}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        marks.push({ from: url.from, to: url.to, href });
+      }
+    },
+  });
+}
+
+function linkMarksToDecorations(marks: LinkMark[]) {
   marks.sort((a, b) => a.from - b.from);
   const builder = [];
   for (const { from, to, href } of marks) {
@@ -122,7 +138,40 @@ function buildLinkDecorations(view: EditorView): DecorationSet {
       }).range(from, to),
     );
   }
-  return Decoration.set(builder, true);
+  return builder;
+}
+
+function buildLinkDecorations(view: EditorView): DecorationSet {
+  const marks: LinkMark[] = [];
+  const seen = new Set<string>();
+  for (const { from, to } of view.visibleRanges) {
+    collectLinkMarksInRange(view, from, to, marks, seen);
+  }
+  return Decoration.set(linkMarksToDecorations(marks), true);
+}
+
+function updateLinkDecorations(
+  update: ViewUpdate,
+  decorations: DecorationSet,
+): DecorationSet {
+  const next = decorations.map(update.changes);
+  const spans: Array<{ from: number; to: number }> = [];
+  update.changes.iterChanges((_fromA, _toA, fromB, toB) => {
+    spans.push({ from: fromB, to: toB });
+  });
+  if (spans.length === 0) return next;
+
+  const marks: LinkMark[] = [];
+  const seen = new Set<string>();
+  for (const { from, to } of spans) {
+    collectLinkMarksInRange(update.view, from, to, marks, seen);
+  }
+
+  return next.update({
+    filter: (from, to) => !spansOverlap(from, to, spans),
+    add: linkMarksToDecorations(marks),
+    sort: true,
+  });
 }
 
 const linkPointerPlugin = ViewPlugin.fromClass(
@@ -132,7 +181,9 @@ const linkPointerPlugin = ViewPlugin.fromClass(
       this.decorations = buildLinkDecorations(view);
     }
     update(update: ViewUpdate) {
-      if (update.docChanged || update.viewportChanged) {
+      if (update.docChanged) {
+        this.decorations = updateLinkDecorations(update, this.decorations);
+      } else if (update.viewportChanged) {
         this.decorations = buildLinkDecorations(update.view);
       }
     }

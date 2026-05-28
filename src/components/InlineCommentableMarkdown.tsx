@@ -13,25 +13,20 @@ import {
   useState,
 } from "react";
 import ReactMarkdown from "react-markdown";
-import { ClickableImage } from "@/components/ClickableImage";
 import { ExistingLineComments } from "@/components/ExistingLineComments";
-
 import { LineCommentBox } from "@/components/LineCommentBox";
-import { MermaidDiagram } from "@/components/MermaidDiagram";
 import { ProfilePictures } from "@/components/ProfilePictures";
 import {
   RFC_PRETTY_REHYPE_PLUGINS,
   RFC_PRETTY_REMARK_PLUGINS,
 } from "@/components/RfcPrettyMarkdown";
+import {
+  createRfcMarkdownComponents,
+  PROSE_WRAPPER_CLASS,
+} from "@/components/rfc-pretty-markdown-components";
 import type { CommentThread } from "@/lib/comment-threads";
 import { groupIntoThreads } from "@/lib/comment-threads";
 import type { Comment } from "@/lib/github";
-import { proxyMarkdownImageSrc } from "@/lib/markdown-assets";
-import {
-  MARKDOWN_INLINE_CODE_CLASS,
-  MARKDOWN_PRE_CLASS,
-} from "@/lib/markdown-code";
-import { extractMermaidChart } from "@/lib/markdown-mermaid";
 import { rehypeLineMarkers } from "@/lib/rehype-line-markers";
 
 // Pretty-view plugins + line markers for inline comments.
@@ -245,7 +240,7 @@ function LineHoverController({
   commentPositions: _commentPositions,
   resolvedCollapsedLines: _resolvedCollapsedLines,
   markdownRef,
-  containerRef,
+  containerEl,
   markdownColumn,
   sidebar,
 }: {
@@ -257,7 +252,7 @@ function LineHoverController({
   commentPositions: Map<number, number>;
   resolvedCollapsedLines: Set<number>;
   markdownRef: React.RefObject<HTMLDivElement | null>;
-  containerRef: React.RefObject<HTMLDivElement | null>;
+  containerEl: HTMLDivElement | null;
   markdownColumn: React.ReactNode;
   sidebar: React.ReactNode;
 }) {
@@ -299,7 +294,7 @@ function LineHoverController({
   }, [applyHover, dispatchRef]);
 
   const recalcArrows = useCallback(() => {
-    const container = containerRef.current;
+    const container = containerEl;
     const markdown = markdownRef.current;
     if (!container || !markdown || typeof window === "undefined") return;
 
@@ -442,7 +437,7 @@ function LineHoverController({
     activeLineIndex,
     lineAlias,
     commentBoxRefs,
-    containerRef,
+    containerEl,
     markdownRef,
   ]);
 
@@ -456,9 +451,10 @@ function LineHoverController({
   }, [recalcArrows]);
 
   useEffect(() => {
+    if (!containerEl) return;
     scheduleRecalcArrows();
     const ro = new ResizeObserver(() => scheduleRecalcArrows());
-    if (containerRef.current) ro.observe(containerRef.current);
+    ro.observe(containerEl);
     const onScroll = () => scheduleRecalcArrows();
     window.addEventListener("scroll", onScroll, true);
     const timer = setTimeout(() => scheduleRecalcArrows(), 350);
@@ -470,7 +466,7 @@ function LineHoverController({
         cancelAnimationFrame(arrowsRafRef.current);
       }
     };
-  }, [scheduleRecalcArrows, containerRef.current]);
+  }, [scheduleRecalcArrows, containerEl]);
 
   return (
     <>
@@ -561,14 +557,6 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
     </ReactMarkdown>
   );
 });
-
-// `node` is react-markdown's HAST element; data-line-* come from rehypeLineMarkers.
-type MDProps<T extends React.ElementType> =
-  React.ComponentPropsWithoutRef<T> & {
-    node?: unknown;
-    "data-line-element"?: number;
-    "data-line-end"?: number;
-  };
 
 interface LineNumbersColumnProps {
   lines: string[];
@@ -764,7 +752,6 @@ type ReplyTarget =
 
 interface InlineCommentableMarkdownProps {
   content: string;
-  prNumber: number;
   owner: string;
   repo: string;
   markdownFilePath: string | null;
@@ -781,7 +768,6 @@ interface InlineCommentableMarkdownProps {
 
 export function InlineCommentableMarkdown({
   content,
-  prNumber: _prNumber,
   owner,
   repo,
   markdownFilePath,
@@ -819,7 +805,7 @@ export function InlineCommentableMarkdown({
    *  repeated dispatches while the cursor moves within the same line. */
   const lastHoverLineRef = useRef<number | null>(null);
   const markdownRef = useRef<HTMLDivElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerEl, setContainerEl] = useState<HTMLDivElement | null>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const isSelectingRef = useRef(false);
 
@@ -848,7 +834,8 @@ export function InlineCommentableMarkdown({
   const commentsByLineRef = useRef(commentsByLine);
   commentsByLineRef.current = commentsByLine;
   const lineHasComments = useCallback(
-    (lineNumber: number) => commentsByLineRef.current.has(lineNumber),
+    (lineNumber: number | undefined) =>
+      lineNumber != null && commentsByLineRef.current.has(lineNumber),
     [],
   );
 
@@ -1359,318 +1346,19 @@ export function InlineCommentableMarkdown({
   // Hover highlighting is applied imperatively in LineHoverController (injected <style>).
 
   const markdownComponents = useMemo(
-    () => ({
-      h1: ({ children, node: _node, ...props }: MDProps<"h1">) => {
-        const lineNumber = props["data-line-element"];
-        return (
-          <h1
-            className={`relative mb-3 mt-4 py-2 border-b border-gray-20 text-4xl font-serif! font-normal! tracking-tight leading-tight text-foreground ${lineNumber ? "cursor-pointer" : ""} ${lineNumber && lineHasComments(lineNumber) ? "pr-8" : ""}`}
-            onClick={() => lineNumber && handleLineClick(lineNumber)}
-            onMouseEnter={() => lineNumber && handleMouseEnterLine(lineNumber)}
-            onMouseLeave={handleMouseLeaveLine}
-            {...props}
-          >
-            {children}
-            <span className="absolute right-[3px] top-[3px]">
-              {renderProfilePictures(lineNumber)}
-            </span>
-          </h1>
-        );
-      },
-      h2: ({ children, node: _node, ...props }: MDProps<"h2">) => {
-        const lineNumber = props["data-line-element"];
-        return (
-          <h2
-            className={`relative mb-3 mt-3 py-2 border-b border-gray-20 text-3xl font-serif! font-normal! tracking-tight leading-tight text-foreground ${lineNumber ? "cursor-pointer" : ""} ${lineNumber && lineHasComments(lineNumber) ? "pr-8" : ""}`}
-            onClick={() => lineNumber && handleLineClick(lineNumber)}
-            onMouseEnter={() => lineNumber && handleMouseEnterLine(lineNumber)}
-            onMouseLeave={handleMouseLeaveLine}
-            {...props}
-          >
-            {children}
-            <span className="absolute right-[3px] top-[3px]">
-              {renderProfilePictures(lineNumber)}
-            </span>
-          </h2>
-        );
-      },
-      h3: ({ children, node: _node, ...props }: MDProps<"h3">) => {
-        const lineNumber = props["data-line-element"];
-        return (
-          <h3
-            className={`relative mb-2 mt-4 text-xl font-sans! font-semibold! leading-snug text-foreground ${lineNumber ? "cursor-pointer" : ""} ${lineNumber && lineHasComments(lineNumber) ? "pr-8" : ""}`}
-            onClick={() => lineNumber && handleLineClick(lineNumber)}
-            onMouseEnter={() => lineNumber && handleMouseEnterLine(lineNumber)}
-            onMouseLeave={handleMouseLeaveLine}
-            {...props}
-          >
-            {children}
-            <span className="absolute right-[3px] top-[3px]">
-              {renderProfilePictures(lineNumber)}
-            </span>
-          </h3>
-        );
-      },
-      p: ({ children, node: _node, ...props }: MDProps<"p">) => {
-        const lineNumber = props["data-line-element"];
-        return (
-          <p
-            className={`relative my-2 ${lineNumber ? "cursor-pointer" : ""} ${lineNumber && lineHasComments(lineNumber) ? "pr-8" : ""}`}
-            onClick={() => lineNumber && handleLineClick(lineNumber)}
-            onMouseEnter={() => lineNumber && handleMouseEnterLine(lineNumber)}
-            onMouseLeave={handleMouseLeaveLine}
-            {...props}
-          >
-            {children}
-            <span className="absolute right-[3px] top-[3px]">
-              {renderProfilePictures(lineNumber)}
-            </span>
-          </p>
-        );
-      },
-      a: ({ href, children }: React.ComponentPropsWithoutRef<"a">) => (
-        <a
-          href={href}
-          className="text-foreground underline decoration-cyan underline-offset-2 transition-all hover:decoration-foreground"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          {children}
-        </a>
-      ),
-      strong: ({ children, node: _node, ...props }: MDProps<"strong">) => (
-        <strong className="font-semibold" {...props}>
-          {children}
-        </strong>
-      ),
-      hr: ({ node: _node, ...props }: MDProps<"hr">) => (
-        <hr className="my-6 border-0 border-t-2 border-gray-20" {...props} />
-      ),
-      ul: ({ children, node: _node, ...props }: MDProps<"ul">) => {
-        const { "data-line-element": _stripped, ...rest } = props;
-        return (
-          <ul
-            className="my-2 ml-6 list-disc space-y-0.5 text-gray-90"
-            {...rest}
-          >
-            {children}
-          </ul>
-        );
-      },
-      ol: ({ children, node: _node, ...props }: MDProps<"ol">) => {
-        const { "data-line-element": _stripped, ...rest } = props;
-        return (
-          <ol
-            className="my-2 ml-6 list-decimal space-y-0.5 text-gray-90"
-            {...rest}
-          >
-            {children}
-          </ol>
-        );
-      },
-      li: ({ children, node: _node, ...props }: MDProps<"li">) => {
-        const lineNumber = props["data-line-element"];
-        return (
-          <li
-            className={`relative text-gray-90 ${lineNumber ? "cursor-pointer" : ""} ${lineNumber && lineHasComments(lineNumber) ? "pr-8" : ""}`}
-            onClick={() => lineNumber && handleLineClick(lineNumber)}
-            onMouseEnter={() => lineNumber && handleMouseEnterLine(lineNumber)}
-            onMouseLeave={handleMouseLeaveLine}
-            {...props}
-          >
-            {children}
-            <span className="absolute right-[3px] top-[3px]">
-              {renderProfilePictures(lineNumber)}
-            </span>
-          </li>
-        );
-      },
-      code: ({
-        className,
-        children,
-        node: _node,
-        ...props
-      }: MDProps<"code">) => {
-        const isInline = !className;
-        if (isInline) {
-          return (
-            <code className={MARKDOWN_INLINE_CODE_CLASS} {...props}>
-              {children}
-            </code>
-          );
-        }
-        return (
-          <code className={className} {...props}>
-            {children}
-          </code>
-        );
-      },
-      pre: ({ children, node: _node, ...props }: MDProps<"pre">) => {
-        const lineNumber = props["data-line-element"];
-        // `children` may be either the bare <code> element or an array
-        // containing the rehype-line-markers sibling span(s) plus the
-        // <code>. Walk to find the mermaid block in either shape.
-        const chart = extractMermaidChart(children);
-        if (chart !== null) {
-          return (
-            <div
-              className={`mermaid-block relative my-4 ${lineNumber ? "cursor-pointer" : ""}`}
-              data-line-element={lineNumber}
-              data-line-end={props["data-line-end"]}
-              onClick={() => lineNumber && handleLineClick(lineNumber)}
-              onMouseEnter={() =>
-                lineNumber && handleMouseEnterLine(lineNumber)
-              }
-              onMouseLeave={handleMouseLeaveLine}
-            >
-              {lineNumber && (
-                <span
-                  id={`line-marker-${lineNumber}`}
-                  data-line={lineNumber}
-                  style={{
-                    display: "inline",
-                    width: 0,
-                    height: 0,
-                    overflow: "hidden",
-                    pointerEvents: "none",
-                  }}
-                />
-              )}
-              <MermaidDiagram chart={chart} />
-              <span className="absolute right-2 top-2">
-                {renderProfilePictures(lineNumber)}
-              </span>
-            </div>
-          );
-        }
-        return (
-          <pre
-            className={`relative my-4 max-w-full whitespace-pre-wrap ${MARKDOWN_PRE_CLASS}`}
-            onClick={(e) => {
-              if (!lineNumber) return;
-              handleLineClick(
-                findSourceLineFromPreEvent(
-                  e.currentTarget,
-                  e.clientY,
-                  lineNumber,
-                ),
-              );
-            }}
-            onMouseOver={(e) => {
-              if (!lineNumber) return;
-              const line = findSourceLineFromPreEvent(
-                e.currentTarget,
-                e.clientY,
-                lineNumber,
-              );
-              if (line === lastHoverLineRef.current) return;
-              lastHoverLineRef.current = line;
-              handleMouseEnterLine(line);
-            }}
-            onMouseLeave={() => {
-              lastHoverLineRef.current = null;
-              handleMouseLeaveLine();
-            }}
-            {...props}
-          >
-            {children}
-            <span className="absolute right-2 top-2">
-              {renderProfilePictures(lineNumber)}
-            </span>
-          </pre>
-        );
-      },
-      blockquote: ({
-        children,
-        node: _node,
-        ...props
-      }: MDProps<"blockquote">) => {
-        const lineNumber = props["data-line-element"];
-        return (
-          <blockquote
-            className={`relative my-4 border-l-2 border-l-magenta bg-gray-5 py-2 pl-4 pr-4 italic text-gray-70 ${lineNumber ? "cursor-pointer" : ""}`}
-            onClick={() => lineNumber && handleLineClick(lineNumber)}
-            onMouseEnter={() => lineNumber && handleMouseEnterLine(lineNumber)}
-            onMouseLeave={handleMouseLeaveLine}
-            {...props}
-          >
-            {children}
-            <span className="absolute right-2 top-2">
-              {renderProfilePictures(lineNumber)}
-            </span>
-          </blockquote>
-        );
-      },
-      table: ({ children, node: _node, ...props }: MDProps<"table">) => {
-        const { "data-line-element": _stripped, ...rest } = props;
-        return (
-          <div className="my-4 overflow-x-auto">
-            <table
-              className="min-w-full border border-gray-20 rounded"
-              {...rest}
-            >
-              {children}
-            </table>
-          </div>
-        );
-      },
-      thead: ({ children, node: _node, ...props }: MDProps<"thead">) => (
-        <thead className="bg-gray-10" {...props}>
-          {children}
-        </thead>
-      ),
-      tbody: ({ children, node: _node, ...props }: MDProps<"tbody">) => (
-        <tbody className="divide-y divide-gray-20 bg-surface" {...props}>
-          {children}
-        </tbody>
-      ),
-      tr: ({ children, node: _node, ...props }: MDProps<"tr">) => {
-        const lineNumber = props["data-line-element"];
-        return (
-          <tr
-            className={`border-gray-20 ${lineNumber ? "cursor-pointer" : ""}`}
-            onClick={() => lineNumber && handleLineClick(lineNumber)}
-            onMouseEnter={() => lineNumber && handleMouseEnterLine(lineNumber)}
-            onMouseLeave={handleMouseLeaveLine}
-            {...props}
-          >
-            {children}
-          </tr>
-        );
-      },
-      th: ({ children, node: _node, ...props }: MDProps<"th">) => (
-        <th
-          className="border border-gray-20 px-4 py-2 text-left text-sm font-medium text-foreground"
-          {...props}
-        >
-          {children}
-        </th>
-      ),
-      td: ({ children, node: _node, ...props }: MDProps<"td">) => (
-        <td
-          className="border border-gray-20 px-4 py-2 text-sm text-gray-90"
-          {...props}
-        >
-          {children}
-        </td>
-      ),
-      img: ({ node: _node, src, alt, ...props }: MDProps<"img">) => (
-        <ClickableImage
-          src={
-            typeof src === "string"
-              ? proxyMarkdownImageSrc(
-                  src,
-                  headRef
-                    ? { owner, repo, headRef, markdownFilePath }
-                    : undefined,
-                )
-              : undefined
-          }
-          alt={(alt as string) ?? ""}
-          {...props}
-        />
-      ),
-    }),
+    () =>
+      createRfcMarkdownComponents({
+        assets: { owner, repo, headRef, markdownFilePath },
+        commentable: {
+          onLineClick: handleLineClick,
+          onMouseEnterLine: handleMouseEnterLine,
+          onMouseLeaveLine: handleMouseLeaveLine,
+          lineHasComments,
+          renderProfilePictures,
+          findSourceLineFromPre: findSourceLineFromPreEvent,
+          lastHoverLineRef,
+        },
+      }),
     [
       handleLineClick,
       handleMouseEnterLine,
@@ -1700,7 +1388,7 @@ export function InlineCommentableMarkdown({
       />
       <div
         ref={markdownRef}
-        className="prose prose-zinc max-w-none flex-1 min-w-0 overflow-x-auto relative [&>*:first-child]:mt-0 [&>*:first-child]:pt-0 [&>*:last-child]:mb-0 [&>*:last-child]:pb-0"
+        className={`${PROSE_WRAPPER_CLASS} flex-1 min-w-0 overflow-x-auto relative`}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleTextSelection}
@@ -1712,7 +1400,7 @@ export function InlineCommentableMarkdown({
 
   return (
     <div
-      ref={containerRef}
+      ref={setContainerEl}
       className="relative min-h-[var(--min-content-height)]"
       style={
         {
@@ -1729,7 +1417,7 @@ export function InlineCommentableMarkdown({
         commentPositions={commentPositions}
         resolvedCollapsedLines={resolvedCollapsedLines}
         markdownRef={markdownRef}
-        containerRef={containerRef}
+        containerEl={containerEl}
         markdownColumn={markdownColumn}
         sidebar={
           <CommentsSidebar

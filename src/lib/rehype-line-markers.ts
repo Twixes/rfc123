@@ -86,31 +86,35 @@ export function rehypeLineMarkers() {
           const newChildren: (Element | Text)[] = [];
 
           for (let i = 0; i < codeLines.length; i++) {
-            // Line number in the source markdown
-            // +1 because the first line inside the code fence is the line after the opening ```
+            // +1 because the first line inside the fence is the line after `​`​`​`​.
             const lineNum = baseLineNumber + 1 + i;
             linesSeen.add(lineNum);
 
-            // Add marker for this line
-            const marker: Element = {
+            // Wrap each line in a block-level span. The line-marker id stays
+            // on this element so position-calc and click routing still find
+            // it via `[id^="line-marker-"]`. `data-line-element` lets the
+            // hover-highlight CSS attach to the line. `min-width:100%` makes
+            // the highlight stretch to the visible right edge of the code
+            // block even for short lines. Empty source lines get a NBSP so
+            // the block has visible height.
+            const lineSpan: Element = {
               type: "element",
               tagName: "span",
               properties: {
                 id: `line-marker-${lineNum}`,
                 "data-line": lineNum,
-                style:
-                  "display:inline;width:0;height:0;overflow:hidden;pointer-events:none;",
+                "data-line-element": lineNum,
+                className: ["code-line"],
+                style: "display:block;min-width:100%;",
               },
-              children: [],
+              children: [
+                {
+                  type: "text",
+                  value: codeLines[i].length > 0 ? codeLines[i] : " ",
+                },
+              ],
             };
-            newChildren.push(marker);
-
-            // Add the text content for this line
-            const lineText: Text = {
-              type: "text",
-              value: codeLines[i] + (i < codeLines.length - 1 ? "\n" : ""),
-            };
-            newChildren.push(lineText);
+            newChildren.push(lineSpan);
           }
 
           node.children = newChildren;

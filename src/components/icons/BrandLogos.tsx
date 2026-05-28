@@ -1,7 +1,7 @@
 /**
  * Brand marks for comparison pages. Sized to drop in next to the
  * `Dingbat` component at `size="xl"` (h-16 w-16). Used under nominative
- * fair use — these identify the products we compare against and link to
+ * fair use – these identify the products we compare against and link to
  * external services we don't operate.
  *
  * SVG paths sourced from each brand's public asset set (Octocat, Notion

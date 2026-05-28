@@ -31,7 +31,7 @@ export default function ManifestoPage() {
             Michael Matloka
           </p>
           <p className="mt-5 border-t border-gray-30 pt-2 font-mono text-[11px] uppercase tracking-[0.18em] text-gray-50">
-            Founder of RFC123
+            Creator of RFC123
           </p>
         </div>
       </article>

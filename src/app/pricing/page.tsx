@@ -12,7 +12,7 @@ const FEATURES = [
   "Unlimited RFCs in any GitHub repo you can access",
   "Inline line-level comments and threaded reviews",
   "Daily Slack review briefings, on your timezone",
-  "MCP server access — bring Claude, ChatGPT, or any agent",
+  "MCP server access – bring Claude, ChatGPT, or any agent",
   "Agent skills for deep, repo-aware collaboration",
 ];
 

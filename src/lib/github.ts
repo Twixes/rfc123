@@ -359,7 +359,7 @@ function repoNodeToViewerRepo(node: RepoNode): ViewerRepo {
  * Use GitHub code search to find every accessible repo with `.rfc123.json`
  * at the root of its default branch. Replaces a per-repo `object(expression:
  * "HEAD:.rfc123.json")` GraphQL probe across every page of every org sweep
- * with one search round-trip — for a viewer in a 600-repo org this turns
+ * with one search round-trip – for a viewer in a 600-repo org this turns
  * ~7 expensive page fetches into 1 cheap one.
  *
  * Code search only indexes the default branch, which is exactly what we want.
@@ -400,14 +400,14 @@ async function findRfcBearingRepos(
  * Sweeps GitHub for every repo the viewer can see, annotated with push
  * permission and `.rfc123.json` presence. Three passes, merged by `fullName`:
  *
- * 1. `viewer.repositories(affiliations: OWNER|ORGANIZATION_MEMBER|COLLABORATOR)` —
+ * 1. `viewer.repositories(affiliations: OWNER|ORGANIZATION_MEMBER|COLLABORATOR)` –
  *    catches personal repos and outside-collaborator repos.
- * 2. `organization(login).repositories` for every org the viewer belongs to —
+ * 2. `organization(login).repositories` for every org the viewer belongs to –
  *    necessary because the affiliations-based viewer sweep silently omits some
  *    org repos even when the viewer has direct ADMIN/WRITE on them (a known
  *    GitHub quirk). Capped concurrency to keep us under GitHub's secondary
  *    rate limit; pages within an org are sequential (cursor-based).
- * 3. Code search for `.rfc123.json` — one cheap request that annotates which
+ * 3. Code search for `.rfc123.json` – one cheap request that annotates which
  *    of the swept repos have the file, instead of paying a per-repo GraphQL
  *    `object(expression:)` probe on every page.
  */
@@ -537,7 +537,7 @@ const MAX_ORG_PAGES = 50;
 
 /** How many org sweeps to run in parallel. The throttle plugin retries any
  *  GraphQL request that trips GitHub's secondary rate limit, so we keep
- *  parallelism modest rather than serial — the 1h cache means most loads
+ *  parallelism modest rather than serial – the 1h cache means most loads
  *  hit Redis anyway, and on the rare cold fill the parallel walk pays off. */
 const ORG_SWEEP_CONCURRENCY = 3;
 
@@ -644,7 +644,7 @@ function rfcBearingReposFastCacheKey(accessToken: string): string {
  * Fast alternative to `listReposWithRFCs` for the RFC list view. Uses GitHub
  * code search (one request, ~450ms) instead of the full org sweep
  * (`listViewerRepos` can take 100s+ for large orgs). Returns only
- * `{owner, name, fullName}` — enough for `listAllRFCs` which only needs to
+ * `{owner, name, fullName}` – enough for `listAllRFCs` which only needs to
  * call `listRFCs(owner, name)` on each repo.
  *
  * Cached at the same TTL as `listViewerRepos` so repeated calls are free.
@@ -2128,7 +2128,7 @@ export async function listWritableRepos(
                   pushedAt: data.pushed_at ?? null,
                 });
               } catch {
-                // Repo inaccessible — omit rather than showing a broken entry.
+                // Repo inaccessible – omit rather than showing a broken entry.
               }
             }),
           );

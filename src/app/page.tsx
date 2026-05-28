@@ -190,6 +190,39 @@ export default async function LandingPage() {
           </div>
         </section>
 
+        <figure className="flex items-start gap-10 ml-5">
+          <Dingbat glyph="❞" className="text-gray-70" />
+          <div className="flex-1 min-w-0">
+            <blockquote className="font-serif text-xl leading-snug text-gray-70">
+              I think RFC123 might be{" "}
+              <strong className="text-foreground">
+                the second-best addition to my professional life
+              </strong>
+              ! I love it.
+            </blockquote>
+            <figcaption className="mt-1 text-sm text-gray-50">
+              –{" "}
+              <a
+                href="https://www.linkedin.com/in/fraser-hopper-26158056/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-gray-70 underline decoration-gray-20 decoration-1 underline-offset-2 hover:decoration-gray-50"
+              >
+                Fraser Hopper
+              </a>
+              <span className="mx-1.5 text-gray-400">•</span>
+              <a
+                href="https://www.posthog.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-gray-70 underline decoration-gray-20 decoration-1 underline-offset-2 hover:decoration-gray-50"
+              >
+                PostHog
+              </a>
+            </figcaption>
+          </div>
+        </figure>
+
         <section className="flex flex-col sm:flex-row gap-3 sm:gap-6">
           <Dingbat glyph="◆" className="text-cyan -mt-4" size="xl" />
           <div className="flex-1 min-w-0">

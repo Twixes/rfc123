@@ -100,7 +100,7 @@ async function releaseLock(lockKey: string): Promise<void> {
  * each firing their own expensive operation.
  *
  * Protocol:
- * 1. Read cache — return immediately on hit.
+ * 1. Read cache – return immediately on hit.
  * 2. Try to acquire a Redis NX lock (30 s TTL so crashes self-heal).
  * 3. Lock winner: compute, write cache, release lock.
  * 4. Lock loser: poll cache every 200 ms for up to 25 s, then degrade to
@@ -128,7 +128,7 @@ export async function withCachedJsonData<T>(
     }
   }
 
-  // Another worker holds the lock — wait for them to populate the cache.
+  // Another worker holds the lock – wait for them to populate the cache.
   const deadline = Date.now() + 25_000;
   while (Date.now() < deadline) {
     await new Promise<void>((r) => setTimeout(r, 200));
@@ -136,7 +136,7 @@ export async function withCachedJsonData<T>(
     if (result !== null) return result;
   }
 
-  // Lock holder likely crashed — degrade and compute independently.
+  // Lock holder likely crashed – degrade and compute independently.
   const value = await compute();
   await setCachedJsonData(key, value, ttl, opts);
   return value;

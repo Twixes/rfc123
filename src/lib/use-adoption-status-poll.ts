@@ -18,7 +18,7 @@ interface UseAdoptionStatusPollOptions {
   /** Repos to watch. Pass an empty list (or `enabled: false`) to stop polling. */
   pending: AdoptionPollItem[];
   intervalMs?: number;
-  /** Master switch — useful for "only while the page/modal is visible". */
+  /** Master switch – useful for "only while the page/modal is visible". */
   enabled?: boolean;
   /**
    * Fired for each repo whose adoption resolved. The parent is expected to drop

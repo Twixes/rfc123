@@ -190,15 +190,15 @@ export default async function LandingPage() {
           </div>
         </section>
 
-        <figure className="flex items-start gap-14 ml-5">
+        <figure className="flex items-start gap-10 sm:gap-14 ml-5">
           <Dingbat glyph="❞" className="text-gray-70" />
           <div className="flex-1 min-w-0">
             <blockquote className="font-serif text-xl leading-snug text-gray-70">
-              I think RFC123 might be{" "}
+              I think RFC123 might&nbsp;be{" "}
               <strong className="text-foreground">
-                the second-best addition to my professional life
+                the&nbsp;second-best addition to my professional&nbsp;life
               </strong>
-              ! I love it.
+              ! I&nbsp;love&nbsp;it.
             </blockquote>
             <figcaption className="mt-1 text-sm text-gray-50">
               –{" "}
@@ -209,8 +209,8 @@ export default async function LandingPage() {
                 className="text-gray-70 underline decoration-gray-20 decoration-1 underline-offset-2 hover:decoration-gray-50"
               >
                 Fraser Hopper
-              </a>
-              <span className="mx-1.5 text-gray-400">•</span>
+              </a>{" "}
+              <span className="text-gray-400">@</span>{" "}
               <a
                 href="https://www.posthog.com/"
                 target="_blank"

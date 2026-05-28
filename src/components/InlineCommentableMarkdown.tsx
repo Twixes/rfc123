@@ -1362,7 +1362,7 @@ export function InlineCommentableMarkdown({
         }
         return (
           <pre
-            className={`relative my-4 max-w-full overflow-x-auto border border-gray-30 rounded whitespace-pre-wrap bg-gray-90 p-4 ${lineNumber ? "cursor-pointer" : ""}`}
+            className={`relative my-4 max-w-full overflow-x-auto border border-gray-30 rounded whitespace-pre-wrap bg-gray-90 px-3 py-2 ${lineNumber ? "cursor-pointer" : ""}`}
             onClick={(e) => {
               if (!lineNumber) return;
               // Route the click to the source line nearest at-or-above the

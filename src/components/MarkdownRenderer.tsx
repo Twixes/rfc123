@@ -112,7 +112,7 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
               );
             }
             return (
-              <pre className="my-4 overflow-x-auto border border-gray-30 rounded bg-gray-90 p-4">
+              <pre className="my-4 overflow-x-auto border border-gray-30 rounded bg-gray-90 px-3 py-2">
                 {children}
               </pre>
             );

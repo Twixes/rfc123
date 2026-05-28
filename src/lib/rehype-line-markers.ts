@@ -122,18 +122,26 @@ export function rehypeLineMarkers() {
       // Skip table and tr – tables get markers in the dedicated table pass
       if (node.tagName === "table" || node.tagName === "tr") return;
 
-      // Skip `pre` wrappers around code blocks. The inner `<code>` already
-      // injected per-line markers for the content; adding another marker on
-      // the `pre` here would map the opening-fence line to the same Y as
-      // the first content line and stack the two numbers on top of each
-      // other in the gutter.
-      if (
-        node.tagName === "pre" &&
-        node.children?.some(
+      // Skip `pre` wrappers around non-mermaid code blocks. The inner
+      // `<code>` already injected per-line markers for the content; adding
+      // another marker on the `pre` would map the opening-fence line to the
+      // same Y as the first content line and stack the two numbers in the
+      // gutter. Mermaid code blocks are a special case: rehype skips them
+      // (they need pristine text to render), so the only marker for the
+      // whole diagram comes from this branch – let it through.
+      if (node.tagName === "pre" && node.children) {
+        const codeChild = node.children.find(
           (child) => child.type === "element" && child.tagName === "code",
-        )
-      ) {
-        return;
+        ) as Element | undefined;
+        if (codeChild) {
+          const codeClasses = Array.isArray(codeChild.properties?.className)
+            ? codeChild.properties.className
+            : [];
+          const isMermaid = codeClasses.some(
+            (c) => String(c) === "language-mermaid",
+          );
+          if (!isMermaid) return;
+        }
       }
 
       // For all other elements, inject an invisible marker span for position tracking

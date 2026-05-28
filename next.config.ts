@@ -5,6 +5,23 @@ const nextConfig: NextConfig = {
   /* config options here */
   reactCompiler: true,
 
+  // Map GitHub-style PR URLs (/:owner/:repo/pull/:number) to our RFC routes
+  // so people can swap github.com for rfc123.com and land on the right page.
+  async redirects() {
+    return [
+      {
+        source: "/:owner/:repo/pull/:number(\\d+)",
+        destination: "/rfcs/:owner/:repo/:number",
+        permanent: false,
+      },
+      {
+        source: "/:owner/:repo/pull/:number(\\d+)/:rest*",
+        destination: "/rfcs/:owner/:repo/:number",
+        permanent: false,
+      },
+    ];
+  },
+
   // Rewrites to support PostHog ingestion endpoints
   async rewrites() {
     return [

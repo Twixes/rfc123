@@ -80,6 +80,15 @@ export function rehypeLineMarkers() {
         // Only process block code (contains newlines), not inline code
         if (textContent?.includes("\n")) {
           const codeLines = textContent.split("\n");
+          // Drop trailing empty lines – the closing fence produces an empty
+          // tail and authors often leave a blank line above it; rendering
+          // those would leave dead vertical space at the bottom of the block.
+          while (
+            codeLines.length > 1 &&
+            codeLines[codeLines.length - 1] === ""
+          ) {
+            codeLines.pop();
+          }
           const baseLineNumber = node.position.start.line;
 
           // Clear existing children and rebuild with line markers

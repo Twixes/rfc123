@@ -3,6 +3,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { RFCSearchResponseItem } from "@/app/api/rfcs/search/route";
 import { RelativeTime } from "@/components/RelativeTime";
 import RepoSelector from "@/components/RepoSelector";
 import RFCListSkeleton from "@/components/RFCListSkeleton";
@@ -18,6 +19,12 @@ import {
   STATUS_PILL_CLASSES,
 } from "@/lib/rfc-status";
 import { slugify } from "@/lib/slugify";
+
+type SearchMatch = "title" | "description";
+
+function rfcKey(rfc: Pick<RFC, "owner" | "repo" | "number">): string {
+  return `${rfc.owner}/${rfc.repo}#${rfc.number}`;
+}
 
 interface RFCsPageClientProps {
   session: {
@@ -50,6 +57,17 @@ export default function RFCsPageClient({
   // token lacks a scope we now need (read:org, for team-requested reviews).
   // We render the list in degraded mode and prompt re-auth via a banner.
   const [missingScopes, setMissingScopes] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  // Description-match hits from GitHub search, keyed by `${owner}/${repo}#${number}`.
+  // Title matches are computed locally so they appear instantly without
+  // waiting for the API round-trip.
+  const [searchMatches, setSearchMatches] = useState<Map<
+    string,
+    SearchMatch
+  > | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchRateLimited, setSearchRateLimited] = useState(false);
+  const searchAbortRef = useRef<AbortController | null>(null);
   const authorDropdownRef = useRef<HTMLDivElement>(null);
   const authorInputRef = useRef<HTMLInputElement>(null);
 
@@ -74,10 +92,14 @@ export default function RFCsPageClient({
     totalMine,
     hasAnyReviewRequested,
     hasAnyOthersUpForReview,
+    matchByKey,
   } = useMemo(() => {
     const mineRfcs: RFC[] = [];
     const reviewRequestedRfcs: RFC[] = [];
     const othersUpForReviewRfcs: RFC[] = [];
+    const matchByKey = new Map<string, SearchMatch>();
+    const trimmedQuery = searchQuery.trim();
+    const lowerQuery = trimmedQuery.toLowerCase();
     let totalMine = 0;
     let hasAnyReviewRequested = false;
     let hasAnyOthersUpForReview = false;
@@ -92,6 +114,19 @@ export default function RFCsPageClient({
       }
       if (!selectedStatuses.has(rfc.status)) continue;
       if (selectedAuthor && rfc.author !== selectedAuthor) continue;
+      if (trimmedQuery.length > 0) {
+        // Title matches resolve locally for instant feedback; description
+        // matches come from the GitHub-search response in `searchMatches`.
+        // Prefer 'title' when both fire so the badge reflects the more
+        // prominent hit.
+        const titleHit = rfc.title.toLowerCase().includes(lowerQuery);
+        const apiHit = searchMatches?.get(rfcKey(rfc));
+        if (!titleHit && !apiHit) continue;
+        matchByKey.set(
+          rfcKey(rfc),
+          titleHit ? "title" : (apiHit ?? "description"),
+        );
+      }
       if (isMine) {
         mineRfcs.push(rfc);
       } else if (rfc.reviewRequested) {
@@ -121,8 +156,16 @@ export default function RFCsPageClient({
       totalMine,
       hasAnyReviewRequested,
       hasAnyOthersUpForReview,
+      matchByKey,
     };
-  }, [rfcs, viewerLogin, selectedStatuses, selectedAuthor]);
+  }, [
+    rfcs,
+    viewerLogin,
+    selectedStatuses,
+    selectedAuthor,
+    searchQuery,
+    searchMatches,
+  ]);
 
   const filteredCount =
     mineRfcs.length + reviewRequestedRfcs.length + othersUpForReviewRfcs.length;
@@ -169,6 +212,57 @@ export default function RFCsPageClient({
   useEffect(() => {
     loadRFCs();
   }, []);
+
+  useEffect(() => {
+    const trimmed = searchQuery.trim();
+    // Empty or 1-char queries don't justify a remote call: titles match
+    // locally for instant feedback and the GitHub-search index doesn't
+    // index 1-character terms well anyway.
+    if (trimmed.length < 2) {
+      searchAbortRef.current?.abort();
+      setSearchMatches(null);
+      setSearchRateLimited(false);
+      setIsSearching(false);
+      return;
+    }
+    const handle = window.setTimeout(async () => {
+      searchAbortRef.current?.abort();
+      const controller = new AbortController();
+      searchAbortRef.current = controller;
+      setIsSearching(true);
+      setSearchRateLimited(false);
+      try {
+        const res = await fetch(
+          `/api/rfcs/search?q=${encodeURIComponent(trimmed)}`,
+          { signal: controller.signal },
+        );
+        if (controller.signal.aborted) return;
+        if (res.status === 429) {
+          setSearchRateLimited(true);
+          setSearchMatches(new Map());
+          return;
+        }
+        if (!res.ok) {
+          setSearchMatches(new Map());
+          return;
+        }
+        const data: RFCSearchResponseItem[] = await res.json();
+        if (controller.signal.aborted) return;
+        const next = new Map<string, SearchMatch>();
+        for (const h of data) {
+          next.set(`${h.owner}/${h.repo}#${h.number}`, h.matchedIn);
+        }
+        setSearchMatches(next);
+      } catch (err) {
+        if ((err as Error).name === "AbortError") return;
+        console.error("Error searching RFCs:", err);
+        setSearchMatches(new Map());
+      } finally {
+        if (!controller.signal.aborted) setIsSearching(false);
+      }
+    }, 300);
+    return () => window.clearTimeout(handle);
+  }, [searchQuery]);
 
   function repoQueryParams(repo?: RepoOption | null): string {
     return repo
@@ -322,6 +416,50 @@ export default function RFCsPageClient({
             </code>
             ).
           </span>
+        </div>
+      )}
+
+      {(isLoading || (rfcs && rfcs.length > 0)) && (
+        <div className="mb-3 relative">
+          <svg
+            aria-hidden
+            className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-50 pointer-events-none"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <title>Search</title>
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z"
+            />
+          </svg>
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search RFCs by title or description…"
+            className="w-full border border-gray-20 bg-surface rounded-md pl-9 pr-24 py-2 text-sm placeholder:text-gray-50 focus:outline-none focus:ring-2 focus:ring-cyan focus:border-transparent"
+          />
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2 text-xs text-gray-50">
+            {isSearching && <span>searching…</span>}
+            {searchRateLimited && !isSearching && (
+              <span title="GitHub search rate limit reached – falling back to title-only matching.">
+                limited
+              </span>
+            )}
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="text-gray-50 hover:text-foreground transition-colors"
+              >
+                clear
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -480,6 +618,11 @@ export default function RFCsPageClient({
         <RFCListSkeleton />
       ) : rfcs && rfcs.length === 0 ? (
         <EmptyRFCsState selectedRepo={selectedRepo} />
+      ) : searchQuery.trim().length > 0 && filteredCount === 0 ? (
+        <NoSearchResults
+          query={searchQuery}
+          onClear={() => setSearchQuery("")}
+        />
       ) : (
         <div className="space-y-10">
           {viewerLogin && (
@@ -487,6 +630,7 @@ export default function RFCsPageClient({
               title="My proposals"
               rfcs={mineRfcs}
               variant="mine"
+              matchByKey={matchByKey}
               emptyState={
                 <MyProposalsEmpty
                   selectedRepo={selectedRepo}
@@ -502,6 +646,7 @@ export default function RFCsPageClient({
               title="My review requested"
               rfcs={reviewRequestedRfcs}
               variant="review-requested"
+              matchByKey={matchByKey}
               emptyState={<HiddenByFilters onClearFilters={clearFilters} />}
             />
           )}
@@ -510,6 +655,7 @@ export default function RFCsPageClient({
               title="All up for review"
               rfcs={othersUpForReviewRfcs}
               variant="others"
+              matchByKey={matchByKey}
               emptyState={<HiddenByFilters onClearFilters={clearFilters} />}
             />
           )}
@@ -609,11 +755,13 @@ function RFCSection({
   rfcs,
   variant,
   emptyState,
+  matchByKey,
 }: {
   title: string;
   rfcs: RFC[];
   variant: "mine" | "review-requested" | "others";
   emptyState?: React.ReactNode;
+  matchByKey: Map<string, SearchMatch>;
 }) {
   return (
     <section>
@@ -645,6 +793,7 @@ function RFCSection({
               rfc={rfc}
               isFirst={index === 0}
               variant={variant}
+              matchedIn={matchByKey.get(rfcKey(rfc))}
             />
           ))}
         </motion.div>
@@ -653,14 +802,45 @@ function RFCSection({
   );
 }
 
+function NoSearchResults({
+  query,
+  onClear,
+}: {
+  query: string;
+  onClear: () => void;
+}) {
+  return (
+    <div className="mt-2 rounded-md border border-dashed border-gray-20 bg-surface px-6 py-10 text-center">
+      <h2 className="text-2xl font-serif font-normal text-foreground">
+        No RFCs match &ldquo;{query.trim()}&rdquo;
+      </h2>
+      <p className="mx-auto mt-2 max-w-md text-sm text-gray-70">
+        We search RFC titles and PR descriptions. Markdown body search
+        isn&rsquo;t live yet.
+      </p>
+      <div className="mt-5">
+        <button
+          type="button"
+          onClick={onClear}
+          className="rounded-md border border-gray-30 bg-surface px-4 py-2 text-sm font-medium text-foreground transition-all hover:bg-gray-5 cursor-pointer"
+        >
+          Clear search
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function RFCRow({
   rfc,
   isFirst,
   variant,
+  matchedIn,
 }: {
   rfc: RFC;
   isFirst: boolean;
   variant: "mine" | "review-requested" | "others";
+  matchedIn?: SearchMatch;
 }) {
   const myState = variant === "mine" ? myProposalState(rfc) : null;
   return (
@@ -691,6 +871,22 @@ function RFCRow({
               >
                 {myState?.label ?? rfc.status}
               </span>
+              {matchedIn && (
+                <span
+                  className={`rounded-sm px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium uppercase tracking-wider flex-shrink-0 text-foreground border ${
+                    matchedIn === "title"
+                      ? "border-cyan bg-cyan-light"
+                      : "border-gray-30 bg-gray-5"
+                  }`}
+                  title={
+                    matchedIn === "title"
+                      ? "Matched in the RFC title"
+                      : "Matched in the PR description"
+                  }
+                >
+                  {matchedIn === "title" ? "Title match" : "Description match"}
+                </span>
+              )}
             </div>
             <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-[10px] sm:text-xs text-gray-50">
               <span className="font-medium">

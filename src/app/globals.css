@@ -1,5 +1,5 @@
 @import "tailwindcss" important;
-@import "highlight.js/styles/github-dark.css";
+@import "highlight.js/styles/github.css";
 
 @supports (color: color(display-p3 1 1 1)) {
   :root {
@@ -178,11 +178,12 @@ h6 {
   outline-offset: 2px;
 }
 
-/* Code blocks */
+/* Code blocks – light surface; token colors from highlight.js github theme */
 pre {
-  background: color-mix(in srgb, var(--foreground) 95%, transparent) !important;
-  border: var(--border-thin) solid var(--gray-30);
+  background: var(--gray-5) !important;
+  border: var(--border-thin) solid var(--gray-20);
   border-radius: 4px;
+  color: var(--foreground);
   font-family:
     ui-monospace, "SF Mono", Monaco, "Cascadia Code", "Cascadia Mono",
     "Roboto Mono", Menlo, Consolas, "Liberation Mono", monospace;
@@ -197,12 +198,11 @@ pre {
   tab-size: 8;
   letter-spacing: -0.02ch;
   word-spacing: 0;
-  /* Force uniform character spacing */
   font-variant-numeric: tabular-nums;
 }
 
 pre code {
-  color: var(--background) !important;
+  background: transparent;
   font-family: inherit;
   font-variant-ligatures: none;
   font-feature-settings:
@@ -214,14 +214,69 @@ pre code {
   font-variant-numeric: tabular-nums;
 }
 
+pre code.hljs {
+  background: transparent;
+  padding: 0 0.25rem;
+}
+
 /* Override classes for values previously in style attributes – must win over Tailwind !important */
 .comment-line-badge {
   color: var(--magenta) !important;
   opacity: var(--comment-opacity, 0.7) !important;
 }
 
+/* Sidebar comment threads – border/hover driven by --comment-* vars set via
+   `.line-hover-shell[data-hovered-lines~="N"]` in buildCommentAndArrowHoverCss. */
+[data-comment-line] {
+  border-color: var(--comment-border-color, var(--gray-20)) !important;
+  box-shadow: var(--comment-box-shadow, 0 1px 0 0 rgba(0, 0, 0, 0.02)) !important;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s !important;
+}
+
+[data-comment-line][data-comment-draft] {
+  --comment-border-color: color-mix(in srgb, var(--cyan) 70%, transparent);
+  --comment-box-shadow:
+    0 1px 0 0 rgba(0, 0, 0, 0.02), 0 10px 28px -14px rgba(57, 144, 168, 0.35);
+}
+
 .svg-stroke-transition {
   transition:
     stroke-opacity 0.15s,
     stroke-width 0.15s !important;
+}
+
+/* Route loading.tsx entry – transform only so content stays visible without hydration. */
+@keyframes skeleton-entry-in {
+  from {
+    transform: translateY(6px);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.skeleton-entry > * {
+  animation: skeleton-entry-in 0.3s ease both;
+}
+
+.skeleton-entry > *:nth-child(2) {
+  animation-delay: 60ms;
+}
+.skeleton-entry > *:nth-child(3) {
+  animation-delay: 120ms;
+}
+.skeleton-entry > *:nth-child(4) {
+  animation-delay: 180ms;
+}
+.skeleton-entry > *:nth-child(5) {
+  animation-delay: 240ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-entry > * {
+    animation: none;
+    transform: none;
+  }
 }

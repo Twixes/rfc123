@@ -28,8 +28,8 @@ export function GeneralCommentsSection({
 }: GeneralCommentsSectionProps) {
   return (
     <section className="mt-16">
-      <div className="mb-6 flex items-baseline gap-4">
-        <h2 className="text-2xl sm:text-3xl font-serif font-normal tracking-tight text-foreground">
+      <div className="flex items-baseline gap-4">
+        <h2 className="mb-4 text-2xl sm:text-3xl font-serif font-normal tracking-tight text-foreground">
           General comments
         </h2>
         <span className="h-px flex-1 bg-gray-20" />
@@ -74,7 +74,7 @@ export function GeneralCommentsSection({
       ) : (
         comments.length > 0 && (
           <motion.ul
-            className="mb-10 divide-y divide-gray-20"
+            className="divide-y divide-gray-20"
             initial="hidden"
             animate="visible"
             variants={{

@@ -23,6 +23,123 @@ function findFirstDescendantLine(node: Element): number | undefined {
 }
 
 // Void elements that cannot have children
+function flattenText(nodes: (Element | Text)[]): string {
+  let out = "";
+  for (const node of nodes) {
+    if (node.type === "text") {
+      out += node.value;
+    } else if (node.type === "element") {
+      out += flattenText(node.children as (Element | Text)[]);
+    }
+  }
+  return out;
+}
+
+function createLineMarker(lineNum: number): Element {
+  return {
+    type: "element",
+    tagName: "span",
+    properties: {
+      id: `line-marker-${lineNum}`,
+      "data-line": lineNum,
+      style:
+        "display:inline;width:0;height:0;overflow:hidden;pointer-events:none;",
+    },
+    children: [],
+  };
+}
+
+function wrapWithHighlightStack(
+  text: string,
+  stack: Element[],
+): Element | Text {
+  let node: Element | Text = { type: "text", value: text };
+  for (let i = stack.length - 1; i >= 0; i--) {
+    const el = stack[i];
+    node = {
+      type: "element",
+      tagName: el.tagName,
+      properties: { ...el.properties },
+      children: [node],
+    };
+  }
+  return node;
+}
+
+/** Split already-highlighted code on newlines without stripping hljs spans. */
+function injectLineMarkersPreservingHighlight(
+  code: Element,
+  baseLineNumber: number,
+  linesSeen: Set<number>,
+): void {
+  const lineContents: (Element | Text)[][] = [[]];
+
+  const append = (nodes: (Element | Text)[]) => {
+    lineContents[lineContents.length - 1].push(...nodes);
+  };
+  const newline = () => {
+    lineContents.push([]);
+  };
+
+  const walk = (nodes: (Element | Text)[], stack: Element[]) => {
+    for (const node of nodes) {
+      if (node.type === "text") {
+        const parts = node.value.split("\n");
+        for (let i = 0; i < parts.length; i++) {
+          if (i > 0) newline();
+          if (parts[i].length > 0) {
+            append([wrapWithHighlightStack(parts[i], stack)]);
+          }
+        }
+      } else if (node.type === "element") {
+        walk(node.children as (Element | Text)[], [...stack, node]);
+      }
+    }
+  };
+
+  walk(code.children as (Element | Text)[], []);
+
+  // Drop trailing empty lines – the closing fence (and authors' blank
+  // tails) leave empty arrays at the end of `lineContents`. Rendering
+  // them would put dead vertical space at the bottom of the block.
+  while (
+    lineContents.length > 1 &&
+    lineContents[lineContents.length - 1].length === 0
+  ) {
+    lineContents.pop();
+  }
+
+  const newChildren: (Element | Text)[] = [];
+  for (let i = 0; i < lineContents.length; i++) {
+    const lineNum = baseLineNumber + 1 + i;
+    linesSeen.add(lineNum);
+    // Wrap each line in a block-level span. The line-marker id stays on
+    // this element so position-calc and click routing still find it via
+    // `[id^="line-marker-"]`. `data-line-element` lets the hover-highlight
+    // CSS attach to the line. `min-width:100%` makes the highlight stretch
+    // to the visible right edge of the code block. Empty source lines get
+    // a single space so the block has visible height.
+    const children: (Element | Text)[] =
+      lineContents[i].length > 0
+        ? lineContents[i]
+        : [{ type: "text", value: " " }];
+    const lineSpan: Element = {
+      type: "element",
+      tagName: "span",
+      properties: {
+        id: `line-marker-${lineNum}`,
+        "data-line": lineNum,
+        "data-line-element": lineNum,
+        className: ["code-line"],
+        style: "display:block;min-width:100%;",
+      },
+      children,
+    };
+    newChildren.push(lineSpan);
+  }
+  code.children = newChildren;
+}
+
 const VOID_ELEMENTS = new Set([
   "area",
   "base",
@@ -71,63 +188,38 @@ export function rehypeLineMarkers() {
         return;
       }
       if (node.tagName === "code" && node.children && node.position) {
-        // Check if this is an inline code element (no newlines) or a block
-        const textContent = node.children
-          .filter((child) => child.type === "text")
-          .map((child) => (child as Text).value)
-          .join("");
+        const textContent = flattenText(node.children as (Element | Text)[]);
 
         // Only process block code (contains newlines), not inline code
-        if (textContent?.includes("\n")) {
-          const codeLines = textContent.split("\n");
-          // Drop trailing empty lines – the closing fence produces an empty
-          // tail and authors often leave a blank line above it; rendering
-          // those would leave dead vertical space at the bottom of the block.
-          while (
-            codeLines.length > 1 &&
-            codeLines[codeLines.length - 1] === ""
-          ) {
-            codeLines.pop();
-          }
+        if (textContent.includes("\n")) {
           const baseLineNumber = node.position.start.line;
+          const highlighted = node.children.some(
+            (child) => child.type === "element",
+          );
 
-          // Clear existing children and rebuild with line markers
-          const newChildren: (Element | Text)[] = [];
+          if (highlighted) {
+            injectLineMarkersPreservingHighlight(
+              node,
+              baseLineNumber,
+              linesSeen,
+            );
+          } else {
+            const codeLines = textContent.split("\n");
+            const newChildren: (Element | Text)[] = [];
 
-          for (let i = 0; i < codeLines.length; i++) {
-            // +1 because the first line inside the fence is the line after `​`​`​`​.
-            const lineNum = baseLineNumber + 1 + i;
-            linesSeen.add(lineNum);
+            for (let i = 0; i < codeLines.length; i++) {
+              const lineNum = baseLineNumber + 1 + i;
+              linesSeen.add(lineNum);
+              newChildren.push(createLineMarker(lineNum));
+              const lineText: Text = {
+                type: "text",
+                value: codeLines[i] + (i < codeLines.length - 1 ? "\n" : ""),
+              };
+              newChildren.push(lineText);
+            }
 
-            // Wrap each line in a block-level span. The line-marker id stays
-            // on this element so position-calc and click routing still find
-            // it via `[id^="line-marker-"]`. `data-line-element` lets the
-            // hover-highlight CSS attach to the line. `min-width:100%` makes
-            // the highlight stretch to the visible right edge of the code
-            // block even for short lines. Empty source lines get a NBSP so
-            // the block has visible height.
-            const lineSpan: Element = {
-              type: "element",
-              tagName: "span",
-              properties: {
-                id: `line-marker-${lineNum}`,
-                "data-line": lineNum,
-                "data-line-element": lineNum,
-                className: ["code-line"],
-                style: "display:block;min-width:100%;",
-              },
-              children: [
-                {
-                  type: "text",
-                  value: codeLines[i].length > 0 ? codeLines[i] : " ",
-                },
-              ],
-            };
-            newChildren.push(lineSpan);
+            node.children = newChildren;
           }
-
-          node.children = newChildren;
-          // Skip the default element processing below
           return;
         }
       }
@@ -135,26 +227,18 @@ export function rehypeLineMarkers() {
       // Skip table and tr – tables get markers in the dedicated table pass
       if (node.tagName === "table" || node.tagName === "tr") return;
 
-      // Skip `pre` wrappers around non-mermaid code blocks. The inner
-      // `<code>` already injected per-line markers for the content; adding
-      // another marker on the `pre` would map the opening-fence line to the
-      // same Y as the first content line and stack the two numbers in the
-      // gutter. Mermaid code blocks are a special case: rehype skips them
-      // (they need pristine text to render), so the only marker for the
-      // whole diagram comes from this branch – let it through.
-      if (node.tagName === "pre" && node.children) {
-        const codeChild = node.children.find(
+      // Skip `pre` wrappers around code blocks. The inner `<code>` already
+      // injected per-line markers for the content; adding another marker on
+      // the `pre` here would map the opening-fence line to the same Y as
+      // the first content line and stack the two numbers on top of each
+      // other in the gutter.
+      if (
+        node.tagName === "pre" &&
+        node.children?.some(
           (child) => child.type === "element" && child.tagName === "code",
-        ) as Element | undefined;
-        if (codeChild) {
-          const codeClasses = Array.isArray(codeChild.properties?.className)
-            ? codeChild.properties.className
-            : [];
-          const isMermaid = codeClasses.some(
-            (c) => String(c) === "language-mermaid",
-          );
-          if (!isMermaid) return;
-        }
+        )
+      ) {
+        return;
       }
 
       // For all other elements, inject an invisible marker span for position tracking
@@ -164,17 +248,7 @@ export function rehypeLineMarkers() {
         if (!linesSeen.has(lineNumber)) {
           linesSeen.add(lineNumber);
 
-          const marker: Element = {
-            type: "element",
-            tagName: "span",
-            properties: {
-              id: `line-marker-${lineNumber}`,
-              "data-line": lineNumber,
-              style:
-                "display:inline;width:0;height:0;overflow:hidden;pointer-events:none;",
-            },
-            children: [],
-          };
+          const marker = createLineMarker(lineNumber);
 
           if (node.children) {
             node.children.unshift(marker);
@@ -185,7 +259,7 @@ export function rehypeLineMarkers() {
 
     // Table rows: assign line numbers based on structure (header=line N, separator=+1,
     // first data=+2, etc.) and inject markers into first cell to avoid column layout issues.
-    visit(tree, "element", (node: Element, index, parent) => {
+    visit(tree, "element", (node: Element, _index, _parent) => {
       if (node.tagName !== "table" || !node.position?.start?.line) return;
 
       const tableLine = node.position.start.line;
@@ -214,17 +288,7 @@ export function rehypeLineMarkers() {
               (firstCell.tagName === "th" || firstCell.tagName === "td")
             ) {
               linesSeen.add(lineNumber);
-              const marker: Element = {
-                type: "element",
-                tagName: "span",
-                properties: {
-                  id: `line-marker-${lineNumber}`,
-                  "data-line": lineNumber,
-                  style:
-                    "display:inline;width:0;height:0;overflow:hidden;pointer-events:none;",
-                },
-                children: [],
-              };
+              const marker = createLineMarker(lineNumber);
               if (firstCell.children) {
                 (firstCell as Element).children.unshift(marker);
               }

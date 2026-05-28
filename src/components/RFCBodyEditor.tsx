@@ -1,6 +1,7 @@
 "use client";
 
 import { type ReactNode, useState } from "react";
+import TextareaAutosize from "react-textarea-autosize";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 
 export type RFCBodyEditorMode = "write" | "preview";
@@ -13,8 +14,8 @@ interface RFCBodyEditorProps {
    *  nothing when the surrounding page renders its own tab toggle. */
   headerSlot?: ReactNode;
   placeholder?: string;
-  /** Default 24. */
-  rows?: number;
+  /** Minimum visible rows in write mode. Default 12. */
+  minRows?: number;
   /** When provided, the editor becomes controlled by the parent and its
    *  internal Write/Preview tab buttons are hidden. The detail-page edit mode
    *  drives the mode from the page-level segmented toggle instead. */
@@ -31,7 +32,7 @@ export function RFCBodyEditor({
   onBodyChange,
   headerSlot,
   placeholder = "Write your RFC in Markdown…",
-  rows = 24,
+  minRows = 12,
   mode,
   onModeChange,
   previewSlot,
@@ -88,16 +89,18 @@ export function RFCBodyEditor({
         </div>
       )}
       {activeTab === "write" ? (
-        <textarea
-          value={body}
-          onChange={(e) => onBodyChange(e.target.value)}
-          rows={rows}
-          spellCheck
-          placeholder={placeholder}
-          className="block w-full bg-transparent p-5 sm:p-6 text-sm text-foreground placeholder-gray-50 focus:outline-none font-mono resize-y"
-        />
+        <div className="px-5 py-5 sm:px-6 sm:py-6">
+          <TextareaAutosize
+            value={body}
+            onChange={(e) => onBodyChange(e.target.value)}
+            minRows={minRows}
+            spellCheck
+            placeholder={placeholder}
+            className="block w-full box-border bg-transparent p-0 text-sm leading-relaxed text-foreground placeholder-gray-50 focus:outline-none font-mono resize-none overflow-hidden"
+          />
+        </div>
       ) : (
-        <div className="p-5 sm:p-6 min-h-[24rem]">
+        <div className="p-5 sm:p-6 min-h-96">
           {previewSlot ??
             (body.trim() ? (
               <MarkdownRenderer content={body} />

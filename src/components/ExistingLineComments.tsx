@@ -73,7 +73,7 @@ export const ExistingLineComments = memo(function ExistingLineComments({
     <motion.div
       ref={commentBoxRef}
       data-comment-line={lineNumber}
-      className="group/note lg:absolute static w-full lg:w-[400px] mb-3 lg:mb-0 rounded-md bg-surface border border-gray-20 shadow-[0_1px_0_0_rgba(0,0,0,0.02)] transition-shadow"
+      className="group/note lg:absolute static w-full lg:w-[400px] mb-3 lg:mb-0 rounded-md border bg-surface"
       initial={{ top: position }}
       animate={{ top: position }}
       transition={SPRING}

@@ -29,6 +29,10 @@ import {
   isRelativeMarkdownAssetSrc,
   resolveMarkdownImageRepoPath,
 } from "@/lib/markdown-assets";
+import {
+  MARKDOWN_INLINE_CODE_CLASS,
+  MARKDOWN_PRE_CLASS,
+} from "@/lib/markdown-code";
 import { extractMermaidChart } from "@/lib/markdown-mermaid";
 import { rehypeLineMarkers } from "@/lib/rehype-line-markers";
 import { remarkMentions } from "@/lib/remark-mentions";
@@ -59,6 +63,43 @@ type LineHoverDispatch = (
 
 type HoverState = { line: number | null; comment: number | null };
 
+function mapsEqual<K, V>(a: Map<K, V>, b: Map<K, V>): boolean {
+  if (a.size !== b.size) return false;
+  for (const [k, v] of a) if (b.get(k) !== v) return false;
+  return true;
+}
+
+function setsEqual<T>(a: Set<T>, b: Set<T>): boolean {
+  if (a.size !== b.size) return false;
+  for (const v of a) if (!b.has(v)) return false;
+  return true;
+}
+
+/** Resolve the source line under a pointer event inside a `<pre>`, by
+ *  picking the `line-marker-N` whose top is just at-or-above the event Y. */
+function findSourceLineFromPreEvent(
+  pre: HTMLElement,
+  clientY: number,
+  fallback: number,
+): number {
+  let bestLine = fallback;
+  let bestDelta = Number.POSITIVE_INFINITY;
+  for (const marker of pre.querySelectorAll<HTMLElement>(
+    '[id^="line-marker-"]',
+  )) {
+    const delta = clientY - marker.getBoundingClientRect().top;
+    if (delta >= 0 && delta < bestDelta) {
+      bestDelta = delta;
+      const parsed = Number.parseInt(
+        marker.id.slice("line-marker-".length),
+        10,
+      );
+      if (!Number.isNaN(parsed)) bestLine = parsed;
+    }
+  }
+  return bestLine;
+}
+
 function defaultCollapsedLines(
   commentsByLine: Map<number, Comment[]>,
 ): Set<number> {
@@ -80,12 +121,25 @@ function buildLineHighlightCss(
   if (activeLineIndex !== null) active.add(resolve(activeLineIndex + 1));
   const all = new Set([...hovered, ...active]);
   if (all.size === 0) return "";
+  const proseLineSelector = (ln: number) =>
+    [
+      `p[data-line-element="${ln}"]`,
+      `h1[data-line-element="${ln}"]`,
+      `h2[data-line-element="${ln}"]`,
+      `h3[data-line-element="${ln}"]`,
+      `li[data-line-element="${ln}"]`,
+      `tr[data-line-element="${ln}"]`,
+      `blockquote[data-line-element="${ln}"]`,
+      `span.code-line[data-line-element="${ln}"]`,
+      `div.mermaid-block[data-line-element="${ln}"]`,
+    ].join(", ");
+
   return Array.from(all)
     .map((ln) => {
       const isHovered = hovered.has(ln);
       const bg = isHovered ? "var(--yellow-medium)" : "var(--yellow-light)";
       return `
-      [data-line-element="${ln}"] {
+      ${proseLineSelector(ln)} {
         background-color: ${bg};
         border-radius: 2px;
         padding-left: 0.5rem;
@@ -101,6 +155,15 @@ function buildLineHighlightCss(
       }
       blockquote[data-line-element="${ln}"] {
         border-left-color: var(--yellow) !important;
+      }
+      span.code-line[data-line-element="${ln}"] {
+        margin-left: 0;
+        padding-left: 0;
+        border-radius: 0;
+      }
+      div.mermaid-block[data-line-element="${ln}"] {
+        margin-left: 0;
+        padding-left: 0;
       }`;
     })
     .join("\n");
@@ -119,9 +182,13 @@ function buildCommentAndArrowHoverCss(hover: HoverState): string {
     .map((ln) => {
       const shell = `.line-hover-shell[data-hovered-lines~="${ln}"]`;
       return `
-    ${shell} [data-comment-line="${ln}"] {
-      border-color: color-mix(in srgb, var(--magenta) 50%, transparent) !important;
-      box-shadow: 0 1px 0 0 rgba(0,0,0,0.02), 0 8px 24px -12px rgba(114,30,60,0.18) !important;
+    ${shell} [data-comment-line="${ln}"]:not([data-comment-draft]) {
+      --comment-border-color: var(--magenta) !important;
+      --comment-box-shadow: 0 1px 0 0 rgba(0,0,0,0.02), 0 8px 24px -12px rgba(114,30,60,0.18) !important;
+    }
+    ${shell} [data-comment-line="${ln}"][data-comment-draft] {
+      --comment-border-color: var(--cyan) !important;
+      --comment-box-shadow: 0 1px 0 0 rgba(0,0,0,0.02), 0 10px 28px -14px rgba(57,144,168,0.35) !important;
     }
     ${shell} [data-comment-line="${ln}"] .comment-line-badge {
       --comment-opacity: 1 !important;
@@ -507,9 +574,10 @@ interface LineNumbersColumnProps {
   lineOffsets: Map<number, number>;
   linesWithMarkers: Set<number>;
   lineRanges: Map<number, number>;
+  resolvedCollapsedLines: Set<number>;
   lineRefs: React.MutableRefObject<Map<number, HTMLButtonElement>>;
-  onLineClick: (lineNumber: number) => void;
-  onMouseEnterLine: (lineNumber: number) => void;
+  onLineClick: (lineNumber: number, fromExtraGutter?: boolean) => void;
+  onMouseEnterLine: (lineNumber: number, options?: { extra?: boolean }) => void;
   onMouseLeaveLine: () => void;
 }
 
@@ -519,79 +587,169 @@ function LineNumbersColumn({
   lineOffsets,
   linesWithMarkers,
   lineRanges,
+  resolvedCollapsedLines,
   lineRefs,
   onLineClick,
   onMouseEnterLine,
   onMouseLeaveLine,
 }: LineNumbersColumnProps) {
+  const rows = useMemo(() => {
+    const byOffset = new Map<number, number[]>();
+    for (let index = 0; index < lines.length; index++) {
+      const lineNumber = index + 1;
+      const hasMarker = linesWithMarkers.has(lineNumber);
+      const hasComments = commentsByLine.has(lineNumber);
+      if (!hasMarker && !hasComments) continue;
+      const lineOffset = lineOffsets.get(lineNumber);
+      if (lineOffset === undefined) continue;
+      const group = byOffset.get(lineOffset) ?? [];
+      group.push(lineNumber);
+      byOffset.set(lineOffset, group);
+    }
+
+    return Array.from(byOffset.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([offset, lineNumbers]) => {
+        const anchors = lineNumbers.filter((ln) => linesWithMarkers.has(ln));
+        const extras = lineNumbers
+          .filter((ln) => !linesWithMarkers.has(ln))
+          .sort((a, b) => a - b);
+        return { offset, anchors, extras };
+      });
+  }, [lines, linesWithMarkers, commentsByLine, lineOffsets]);
+
+  const renderButton = (
+    lineNumber: number,
+    { isExtra }: { isExtra: boolean },
+  ) => {
+    const hasCommentsForStyle =
+      (commentsByLine.get(lineNumber)?.length ?? 0) > 0;
+    const endLine = lineRanges.get(lineNumber);
+    const isRange = endLine != null && endLine > lineNumber;
+    const isThreadOpen =
+      hasCommentsForStyle && !resolvedCollapsedLines.has(lineNumber);
+
+    return (
+      <button
+        key={lineNumber}
+        id={`line-${lineNumber}`}
+        ref={(el) => {
+          if (el) lineRefs.current.set(lineNumber, el);
+          else lineRefs.current.delete(lineNumber);
+        }}
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onLineClick(lineNumber, isExtra);
+        }}
+        className={
+          isExtra
+            ? `min-w-[1.25rem] shrink-0 cursor-pointer rounded border px-0.5 py-px font-mono text-[10px] leading-snug transition-colors sm:text-xs ${
+                isThreadOpen
+                  ? "border-magenta/40 bg-magenta-light/40 text-magenta"
+                  : "border-gray-20 bg-surface text-magenta hover:border-magenta/30 hover:bg-magenta-light/20"
+              }`
+            : `group flex shrink-0 cursor-pointer gap-1 sm:gap-2 ${
+                isRange ? "items-start" : "items-center"
+              }`
+        }
+        style={
+          isExtra
+            ? undefined
+            : {
+                height: isRange ? "auto" : "1.5rem",
+                minHeight: "1.5rem",
+              }
+        }
+        onMouseEnter={() => onMouseEnterLine(lineNumber, { extra: isExtra })}
+        onMouseLeave={onMouseLeaveLine}
+        aria-label={
+          isExtra
+            ? `Open comments on line ${lineNumber}${isRange ? `–${endLine}` : ""}`
+            : `Add comment to lines ${lineNumber}${isRange ? `–${endLine}` : ""}`
+        }
+        aria-pressed={isExtra ? isThreadOpen : undefined}
+      >
+        {!isExtra && (
+          <div className="hidden h-4 w-4 shrink-0 items-center justify-center rounded-sm bg-cyan/90 text-surface opacity-0 transition-opacity group-hover:opacity-100 sm:flex">
+            <svg
+              className="h-2.5 w-2.5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <title>Add comment</title>
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={3}
+                d="M12 4v16m8-8H4"
+              />
+            </svg>
+          </div>
+        )}
+        <span
+          className={
+            isExtra
+              ? "whitespace-nowrap"
+              : `font-mono text-[10px] leading-snug transition-opacity sm:text-xs ${
+                  isRange ? "flex flex-col items-center" : "whitespace-nowrap"
+                } ${hasCommentsForStyle ? "text-magenta" : "text-gray-50"}`
+          }
+        >
+          {isRange ? (
+            <>
+              <span>{lineNumber}</span>
+              <span className="opacity-50">↓</span>
+              <span className="opacity-50">{endLine}</span>
+            </>
+          ) : (
+            lineNumber
+          )}
+        </span>
+      </button>
+    );
+  };
+
   return (
-    <div className="shrink-0 select-none relative w-[40px]">
-      {lines.map((_line, index) => {
-        const lineNumber = index + 1;
+    <div className="relative w-[40px] shrink-0 select-none overflow-visible">
+      {rows.map(({ offset, anchors, extras }) => {
+        const hasRange = anchors.some((ln) => {
+          const endLine = lineRanges.get(ln);
+          return endLine != null && endLine > ln;
+        });
 
-        // Only show line numbers for lines that have rendered content (DOM marker) or comments.
-        // Blank lines have no marker, so they would bunch up – hide them.
-        const hasMarker = linesWithMarkers.has(lineNumber);
-        const hasComments = commentsByLine.has(lineNumber);
-        if (!hasMarker && !hasComments) return null;
-
-        const lineOffset = lineOffsets.get(lineNumber);
-        if (lineOffset === undefined) return null;
-
-        const hasCommentsForStyle =
-          (commentsByLine.get(lineNumber)?.length ?? 0) > 0;
-        const endLine = lineRanges.get(lineNumber);
-        const isRange = endLine != null && endLine > lineNumber;
+        if (extras.length === 0) {
+          return anchors.map((lineNumber) => (
+            <div
+              key={lineNumber}
+              className={`absolute right-0 flex justify-end pr-2 ${
+                hasRange ? "items-start" : "items-center"
+              }`}
+              style={{ top: `${offset}px`, minHeight: "1.5rem" }}
+            >
+              {renderButton(lineNumber, { isExtra: false })}
+            </div>
+          ));
+        }
 
         return (
-          <button
-            key={lineNumber}
-            id={`line-${lineNumber}`}
-            ref={(el) => {
-              if (el) lineRefs.current.set(lineNumber, el);
-            }}
-            type="button"
-            onClick={() => onLineClick(lineNumber)}
-            className={`group flex gap-2 justify-end pr-2 absolute right-0 cursor-pointer ${isRange ? "items-start" : "items-center"}`}
-            style={{
-              top: `${lineOffset}px`,
-              height: isRange ? "auto" : "1.5rem",
-              minHeight: "1.5rem",
-            }}
-            onMouseEnter={() => onMouseEnterLine(lineNumber)}
-            onMouseLeave={onMouseLeaveLine}
-            aria-label={`Add comment to lines ${lineNumber}${isRange ? `–${endLine}` : ""}`}
+          <div
+            key={offset}
+            className={`absolute right-0 flex flex-row-reverse items-start gap-1 pr-2 ${
+              hasRange ? "" : "min-h-[1.5rem]"
+            }`}
+            style={{ top: `${offset}px` }}
           >
-            <div className="hidden sm:flex h-4 w-4 shrink-0 items-center justify-center rounded-sm bg-cyan/90 text-surface opacity-0 transition-opacity group-hover:opacity-100">
-              <svg
-                className="h-2.5 w-2.5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <title>Add comment</title>
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={3}
-                  d="M12 4v16m8-8H4"
-                />
-              </svg>
-            </div>
-            <span
-              className={`font-mono text-[10px] sm:text-xs transition-opacity flex flex-col items-center leading-snug ${hasCommentsForStyle ? "text-magenta" : "text-gray-50"}`}
-            >
-              {isRange ? (
-                <>
-                  <span>{lineNumber}</span>
-                  <span className="opacity-50">↓</span>
-                  <span className="opacity-50">{endLine}</span>
-                </>
-              ) : (
-                lineNumber
+            {anchors.map((lineNumber) =>
+              renderButton(lineNumber, { isExtra: false }),
+            )}
+            <div className="flex flex-col items-end gap-0.5">
+              {extras.map((lineNumber) =>
+                renderButton(lineNumber, { isExtra: true }),
               )}
-            </span>
-          </button>
+            </div>
+          </div>
         );
       })}
     </div>
@@ -647,12 +805,17 @@ export function InlineCommentableMarkdown({
   const [linesWithMarkers, setLinesWithMarkers] = useState<Set<number>>(
     new Set(),
   );
+  const linesWithMarkersRef = useRef(linesWithMarkers);
+  linesWithMarkersRef.current = linesWithMarkers;
   const [lineRanges, setLineRanges] = useState<Map<number, number>>(new Map());
   const [lineAlias, setLineAlias] = useState<Map<number, number>>(new Map());
   const [replyTarget, setReplyTarget] = useState<ReplyTarget | null>(null);
   /** Only set when opening reply UI (e.g. quoted selection), not on each keystroke. */
   const [replyInitialDraft, setReplyInitialDraft] = useState("");
   const lineRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
+  /** Last source line dispatched from a `<pre>` mouseover, so we skip
+   *  repeated dispatches while the cursor moves within the same line. */
+  const lastHoverLineRef = useRef<number | null>(null);
   const markdownRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
@@ -739,7 +902,6 @@ export function InlineCommentableMarkdown({
     // and showing their line numbers would bunch up in the gutter.
     // Alias omitted lines (no marker) with comments to the latest preceding line with rendered content.
     const alias = new Map<number, number>();
-    const aliasCountAtPrev = new Map<number, number>();
     for (let i = 1; i <= lines.length; i++) {
       if (offsets.has(i)) continue;
       const isEmpty = lines[i - 1]?.trim() === "";
@@ -765,9 +927,8 @@ export function InlineCommentableMarkdown({
       }
       if (prevLine !== undefined && prevOffset !== undefined) {
         alias.set(i, prevLine);
-        const stacked = aliasCountAtPrev.get(prevLine) ?? 0;
-        aliasCountAtPrev.set(prevLine, stacked + 1);
-        offsets.set(i, prevOffset + stacked * 4);
+        // Same Y as the anchor line; gutter row groups extras beside the anchor.
+        offsets.set(i, prevOffset);
       } else if (nextOffset !== undefined) {
         offsets.set(i, Math.max(0, nextOffset - 24));
       }
@@ -792,10 +953,17 @@ export function InlineCommentableMarkdown({
       }
     }
 
-    setLineOffsets(offsets);
-    setLinesWithMarkers(withMarkers);
-    setLineRanges(ranges);
-    setLineAlias(alias);
+    // Skip setting state when the recalc produced byte-identical results –
+    // ResizeObserver fires for any descendant size change (Mermaid mount,
+    // image load) and most of those don't actually shift line positions.
+    // Without these guards every recalc invalidates downstream memos and
+    // re-runs the hover controller's effects.
+    setLineOffsets((prev) => (mapsEqual(prev, offsets) ? prev : offsets));
+    setLinesWithMarkers((prev) =>
+      setsEqual(prev, withMarkers) ? prev : withMarkers,
+    );
+    setLineRanges((prev) => (mapsEqual(prev, ranges) ? prev : ranges));
+    setLineAlias((prev) => (mapsEqual(prev, alias) ? prev : alias));
     // activeLineIndex deliberately omitted: the comment form lives in the
     // absolutely-positioned sidebar, so toggling it does not move line markers
     // in the markdown column. Including it caused every click to rebuild
@@ -803,10 +971,10 @@ export function InlineCommentableMarkdown({
     // forced a full ReactMarkdown re-parse via markdownComponents.
   }, [lines, layoutCommentsByLine]);
 
-  // Re-run after async DOM growth (Mermaid diagrams that mount their SVG
-  // after the initial render pass, images that resolve their natural
-  // height later, etc.) so that markers downstream of the growth stay
-  // aligned. rAF-throttled to coalesce bursts of ResizeObserver callbacks.
+  // Re-run after async DOM growth (e.g. Mermaid diagrams that mount their
+  // SVG after the initial render, or images that resolve their natural
+  // height later) so that markers downstream of the growth stay aligned.
+  // rAF-throttled to coalesce bursts of ResizeObserver callbacks.
   const recalcLineRafRef = useRef<number | null>(null);
   useEffect(() => {
     recalcLinePositions();
@@ -832,11 +1000,22 @@ export function InlineCommentableMarkdown({
 
   // Stable hover callbacks – delegate to LineHoverController via ref so this component
   // does not re-render when hover state changes.
-  const handleMouseEnterLine = useCallback((lineNumber: number) => {
-    hoverDispatchRef.current({ type: "enterLine", index: lineNumber - 1 });
-  }, []);
+  const handleMouseEnterLine = useCallback(
+    (lineNumber: number, options?: { extra?: boolean }) => {
+      if (options?.extra && commentsByLineRef.current.has(lineNumber)) {
+        hoverDispatchRef.current({
+          type: "enterComment",
+          index: lineNumber - 1,
+        });
+        return;
+      }
+      hoverDispatchRef.current({ type: "enterLine", index: lineNumber - 1 });
+    },
+    [],
+  );
   const handleMouseLeaveLine = useCallback(() => {
     hoverDispatchRef.current({ type: "leaveLine" });
+    hoverDispatchRef.current({ type: "leaveComment" });
   }, []);
 
   // Render profile pictures for a line if it has comments
@@ -867,26 +1046,27 @@ export function InlineCommentableMarkdown({
   lineRangesRef.current = lineRanges;
 
   // Handle clicking on a line in the markdown content
-  const handleLineClick = useCallback((lineNumber: number) => {
-    const lineIndex = lineNumber - 1;
-    const endLine = lineRangesRef.current.get(lineNumber);
-    const isMultiLineBlock = endLine != null && endLine > lineNumber;
+  const handleLineClick = useCallback(
+    (lineNumber: number, fromExtraGutter = false) => {
+      const lineIndex = lineNumber - 1;
+      const endLine = lineRangesRef.current.get(lineNumber);
+      const isMultiLineBlock = endLine != null && endLine > lineNumber;
+      const isOutOfLayoutLine =
+        fromExtraGutter || !linesWithMarkersRef.current.has(lineNumber);
 
-    if (commentsByLineRef.current.has(lineNumber)) {
-      setActiveLineIndex(null);
-      setLineCommentInitialDraft("");
+      if (commentsByLineRef.current.has(lineNumber)) {
+        setActiveLineIndex(null);
+        setLineCommentInitialDraft("");
 
-      if (isMultiLineBlock) {
-        // Multi-line block with existing thread: always expand and piggyback on the thread
-        setCollapsedLines((prev) => {
-          const resolved =
-            prev ?? defaultCollapsedLines(commentsByLineRef.current);
-          const updated = new Set(resolved);
-          updated.delete(lineNumber);
-          return updated;
-        });
-        // Only set reply target if not already replying to this line
-        if (replyTargetRef.current?.line !== lineNumber) {
+        if (isMultiLineBlock || isOutOfLayoutLine) {
+          // Multi-line blocks and out-of-layout lines always open their thread.
+          setCollapsedLines((prev) => {
+            const resolved =
+              prev ?? defaultCollapsedLines(commentsByLineRef.current);
+            const updated = new Set(resolved);
+            updated.delete(lineNumber);
+            return updated;
+          });
           const lineThreads = threadsByLineRef.current.get(lineNumber);
           if (lineThreads?.length === 1) {
             setReplyTarget({
@@ -898,49 +1078,50 @@ export function InlineCommentableMarkdown({
             setReplyTarget({ type: "newThread", line: lineNumber });
           }
           setReplyInitialDraft("");
+        } else {
+          // Single-line element: toggle collapse/expand
+          setCollapsedLines((prev) => {
+            const resolved =
+              prev ?? defaultCollapsedLines(commentsByLineRef.current);
+            const updated = new Set(resolved);
+            if (resolved.has(lineNumber)) {
+              updated.delete(lineNumber);
+              // Opening: auto-start reply if single thread, otherwise let user pick
+              const lineThreads = threadsByLineRef.current.get(lineNumber);
+              if (lineThreads?.length === 1) {
+                setReplyTarget({
+                  type: "thread",
+                  line: lineNumber,
+                  threadId: lineThreads[0].id,
+                });
+              } else {
+                setReplyTarget(null);
+              }
+              setReplyInitialDraft("");
+            } else {
+              updated.add(lineNumber);
+              if (replyTargetRef.current?.line === lineNumber) {
+                setReplyTarget(null);
+                setReplyInitialDraft("");
+              }
+            }
+            return updated;
+          });
         }
       } else {
-        // Single-line element: toggle collapse/expand
-        setCollapsedLines((prev) => {
-          const resolved =
-            prev ?? defaultCollapsedLines(commentsByLineRef.current);
-          const updated = new Set(resolved);
-          if (resolved.has(lineNumber)) {
-            updated.delete(lineNumber);
-            // Opening: auto-start reply if single thread, otherwise let user pick
-            const lineThreads = threadsByLineRef.current.get(lineNumber);
-            if (lineThreads?.length === 1) {
-              setReplyTarget({
-                type: "thread",
-                line: lineNumber,
-                threadId: lineThreads[0].id,
-              });
-            } else {
-              setReplyTarget(null);
-            }
-            setReplyInitialDraft("");
-          } else {
-            updated.add(lineNumber);
-            if (replyTargetRef.current?.line === lineNumber) {
-              setReplyTarget(null);
-              setReplyInitialDraft("");
-            }
-          }
-          return updated;
-        });
+        if (activeLineIndexRef.current === lineIndex) {
+          setActiveLineIndex(null);
+          setLineCommentInitialDraft("");
+        } else {
+          setReplyTarget(null);
+          setReplyInitialDraft("");
+          setActiveLineIndex(lineIndex);
+          setLineCommentInitialDraft("");
+        }
       }
-    } else {
-      if (activeLineIndexRef.current === lineIndex) {
-        setActiveLineIndex(null);
-        setLineCommentInitialDraft("");
-      } else {
-        setReplyTarget(null);
-        setReplyInitialDraft("");
-        setActiveLineIndex(lineIndex);
-        setLineCommentInitialDraft("");
-      }
-    }
-  }, []);
+    },
+    [],
+  );
 
   // Auto-expand the collapsed group that contains the highlighted comment
   useEffect(() => {
@@ -1323,10 +1504,7 @@ export function InlineCommentableMarkdown({
         const isInline = !className;
         if (isInline) {
           return (
-            <code
-              className="border border-gray-20 rounded-sm bg-gray-5 px-1.5 py-0.5 font-mono text-sm text-foreground"
-              {...props}
-            >
+            <code className={MARKDOWN_INLINE_CODE_CLASS} {...props}>
               {children}
             </code>
           );
@@ -1340,19 +1518,34 @@ export function InlineCommentableMarkdown({
       pre: ({ children, node: _node, ...props }: MDProps<"pre">) => {
         const lineNumber = props["data-line-element"];
         // `children` may be either the bare <code> element or an array
-        // containing rehype-line-markers sibling span(s) plus the <code>.
-        // Walk to find the mermaid block in either shape.
+        // containing the rehype-line-markers sibling span(s) plus the
+        // <code>. Walk to find the mermaid block in either shape.
         const chart = extractMermaidChart(children);
         if (chart !== null) {
           return (
             <div
-              className={`relative ${lineNumber ? "cursor-pointer" : ""}`}
+              className={`mermaid-block relative my-4 ${lineNumber ? "cursor-pointer" : ""}`}
+              data-line-element={lineNumber}
+              data-line-end={props["data-line-end"]}
               onClick={() => lineNumber && handleLineClick(lineNumber)}
               onMouseEnter={() =>
                 lineNumber && handleMouseEnterLine(lineNumber)
               }
               onMouseLeave={handleMouseLeaveLine}
             >
+              {lineNumber && (
+                <span
+                  id={`line-marker-${lineNumber}`}
+                  data-line={lineNumber}
+                  style={{
+                    display: "inline",
+                    width: 0,
+                    height: 0,
+                    overflow: "hidden",
+                    pointerEvents: "none",
+                  }}
+                />
+              )}
               <MermaidDiagram chart={chart} />
               <span className="absolute right-2 top-2">
                 {renderProfilePictures(lineNumber)}
@@ -1362,35 +1555,32 @@ export function InlineCommentableMarkdown({
         }
         return (
           <pre
-            className={`relative my-4 max-w-full overflow-x-auto border border-gray-30 rounded whitespace-pre-wrap bg-gray-90 px-3 py-2 ${lineNumber ? "cursor-pointer" : ""}`}
+            className={`relative my-4 max-w-full whitespace-pre-wrap ${MARKDOWN_PRE_CLASS}`}
             onClick={(e) => {
               if (!lineNumber) return;
-              // Route the click to the source line nearest at-or-above the
-              // click Y. Each rendered code line carries a 0-size
-              // `line-marker-N` span; picking the closest above makes every
-              // code line individually commentable.
-              const pre = e.currentTarget;
-              const markers = pre.querySelectorAll<HTMLElement>(
-                '[id^="line-marker-"]',
+              handleLineClick(
+                findSourceLineFromPreEvent(
+                  e.currentTarget,
+                  e.clientY,
+                  lineNumber,
+                ),
               );
-              let bestLine = lineNumber;
-              let bestDelta = Number.POSITIVE_INFINITY;
-              for (const marker of markers) {
-                const top = marker.getBoundingClientRect().top;
-                const delta = e.clientY - top;
-                if (delta >= 0 && delta < bestDelta) {
-                  bestDelta = delta;
-                  const parsed = Number.parseInt(
-                    marker.id.slice("line-marker-".length),
-                    10,
-                  );
-                  if (!Number.isNaN(parsed)) bestLine = parsed;
-                }
-              }
-              handleLineClick(bestLine);
             }}
-            onMouseEnter={() => lineNumber && handleMouseEnterLine(lineNumber)}
-            onMouseLeave={handleMouseLeaveLine}
+            onMouseOver={(e) => {
+              if (!lineNumber) return;
+              const line = findSourceLineFromPreEvent(
+                e.currentTarget,
+                e.clientY,
+                lineNumber,
+              );
+              if (line === lastHoverLineRef.current) return;
+              lastHoverLineRef.current = line;
+              handleMouseEnterLine(line);
+            }}
+            onMouseLeave={() => {
+              lastHoverLineRef.current = null;
+              handleMouseLeaveLine();
+            }}
             {...props}
           >
             {children}
@@ -1529,6 +1719,7 @@ export function InlineCommentableMarkdown({
         lineOffsets={lineOffsets}
         linesWithMarkers={linesWithMarkers}
         lineRanges={lineRanges}
+        resolvedCollapsedLines={resolvedCollapsedLines}
         lineRefs={lineRefs}
         onLineClick={handleLineClick}
         onMouseEnterLine={handleMouseEnterLine}

@@ -7,6 +7,10 @@ import rehypeRaw from "rehype-raw";
 import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
 import { ClickableImage } from "@/components/ClickableImage";
+import {
+  MARKDOWN_INLINE_CODE_CLASS_COMPACT,
+  MARKDOWN_PRE_CLASS_COMPACT,
+} from "@/lib/markdown-code";
 import { markdownSanitizeSchema } from "@/lib/markdown-sanitize-schema";
 import { remarkMentions } from "@/lib/remark-mentions";
 
@@ -89,10 +93,7 @@ export const CommentMarkdown = memo(function CommentMarkdown({
             const isInline = !className;
             if (isInline) {
               return (
-                <code
-                  className="border border-gray-20 rounded-sm bg-gray-5 px-1 py-0.5 font-mono text-xs text-foreground"
-                  {...props}
-                >
+                <code className={MARKDOWN_INLINE_CODE_CLASS_COMPACT} {...props}>
                   {children}
                 </code>
               );
@@ -104,7 +105,7 @@ export const CommentMarkdown = memo(function CommentMarkdown({
             );
           },
           pre: ({ children }) => (
-            <pre className="my-2 overflow-x-auto border border-gray-30 rounded bg-gray-90 p-2 text-xs">
+            <pre className={`my-2 ${MARKDOWN_PRE_CLASS_COMPACT}`}>
               {children}
             </pre>
           ),

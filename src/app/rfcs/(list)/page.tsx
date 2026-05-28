@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { auth, getAccessToken } from "@/auth";
 import { getCurrentUserLogin, hasAnyRfcBearingRepo } from "@/lib/github";
-import RFCsPageClient from "./RFCsPageClient";
+import RFCsPageClient from "../RFCsPageClient";
 
 export const metadata: Metadata = {
   title: "RFCs",

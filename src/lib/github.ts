@@ -784,7 +784,7 @@ function hasAnyRfcBearingRepoCacheKey(accessToken: string): string {
 }
 
 /**
- * Server-render fast path for `/rfcs/page.tsx`: returns true iff the viewer
+ * Server-render fast path for `/rfcs` list page: returns true iff the viewer
  * has *any* repo with `.rfc123.json` at root. One code-search request, so the
  * page shell ships in <1s.
  *

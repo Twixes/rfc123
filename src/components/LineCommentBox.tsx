@@ -39,6 +39,7 @@ export function LineCommentBox({
   const [draft, setDraft] = useState(initialDraft);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset draft when the form is reopened against a different line/range, even if initialDraft is the same empty string
   useEffect(() => {
     setDraft(initialDraft);
   }, [initialDraft, lineNumber, endLineNumber]);
@@ -51,7 +52,9 @@ export function LineCommentBox({
   return (
     <motion.div
       ref={commentBoxRef}
-      className="lg:absolute static w-full lg:w-[400px] rounded-md bg-surface border border-cyan/70 shadow-[0_1px_0_0_rgba(0,0,0,0.02),0_10px_28px_-14px_rgba(57,144,168,0.35)]"
+      data-comment-line={lineNumber}
+      data-comment-draft=""
+      className="lg:absolute static w-full lg:w-[400px] rounded-md border bg-surface"
       style={{ top: position }}
       initial={{ opacity: 0, y: -2 }}
       animate={{ opacity: 1, y: 0 }}
@@ -99,6 +102,7 @@ export function LineCommentBox({
           placeholder="Add a comment…"
           className="w-full resize-none rounded-sm border border-gray-20 bg-surface px-3 py-2 text-sm text-foreground placeholder-gray-40 transition-shadow focus:outline-none focus:border-cyan focus:ring-2 focus:ring-cyan/20"
           rows={4}
+          // biome-ignore lint/a11y/noAutofocus: comment form opens in response to a user gesture (click on a line); focusing immediately matches expected behavior.
           autoFocus
           disabled={isSubmitting}
           onKeyDown={(e) => {

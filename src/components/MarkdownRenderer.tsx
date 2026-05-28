@@ -7,6 +7,10 @@ import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
 import { ClickableImage } from "@/components/ClickableImage";
 import { MermaidDiagram } from "@/components/MermaidDiagram";
+import {
+  MARKDOWN_INLINE_CODE_CLASS,
+  MARKDOWN_PRE_CLASS,
+} from "@/lib/markdown-code";
 import { extractMermaidChart } from "@/lib/markdown-mermaid";
 import { markdownSanitizeSchema } from "@/lib/markdown-sanitize-schema";
 import { remarkMentions } from "@/lib/remark-mentions";
@@ -88,10 +92,7 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
             const isInline = !className;
             if (isInline) {
               return (
-                <code
-                  className="border border-gray-20 rounded-sm bg-gray-5 px-1.5 py-0.5 font-mono text-sm text-foreground"
-                  {...props}
-                >
+                <code className={MARKDOWN_INLINE_CODE_CLASS} {...props}>
                   {children}
                 </code>
               );
@@ -112,9 +113,7 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
               );
             }
             return (
-              <pre className="my-4 overflow-x-auto border border-gray-30 rounded bg-gray-90 px-3 py-2">
-                {children}
-              </pre>
+              <pre className={`my-4 ${MARKDOWN_PRE_CLASS}`}>{children}</pre>
             );
           },
           blockquote: ({ children }) => (

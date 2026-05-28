@@ -813,63 +813,95 @@ function BodyEditMode({
     ) : undefined;
 
   return (
-    <div className="space-y-4">
-      {conflict && (
-        <div className="rounded-md border border-magenta bg-magenta-light px-4 py-3 text-sm">
-          <p className="font-medium text-foreground">
-            This RFC was updated on GitHub after you started editing.
-          </p>
-          <p className="mt-1 text-gray-70">
-            Your edits can't be saved as-is. Reset to discard them and reload,
-            or copy your text out first.
-          </p>
-          <div className="mt-3 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onResetAndRefresh}
-              className="rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-surface transition-all hover:opacity-80 cursor-pointer"
-            >
-              Reset and refresh
-            </button>
-            <span className="text-xs text-gray-70">
-              Keep this editor open if you'd rather copy your draft out first.
-            </span>
+    <>
+      <div className="space-y-4 pb-24">
+        {conflict && (
+          <div className="rounded-md border border-magenta bg-magenta-light px-4 py-3 text-sm">
+            <p className="font-medium text-foreground">
+              This RFC was updated on GitHub after you started editing.
+            </p>
+            <p className="mt-1 text-gray-70">
+              Your edits can't be saved as-is. Reset to discard them and reload,
+              or copy your text out first.
+            </p>
+            <div className="mt-3 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onResetAndRefresh}
+                className="rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-surface transition-all hover:opacity-80 cursor-pointer"
+              >
+                Reset and refresh
+              </button>
+              <span className="text-xs text-gray-70">
+                Keep this editor open if you'd rather copy your draft out first.
+              </span>
+            </div>
           </div>
-        </div>
-      )}
-      <RFCBodyEditor
-        body={body}
-        onBodyChange={onBodyChange}
-        mode={mode}
-        onModeChange={onModeChange}
-        previewSlot={previewSlot}
-      />
-      {saveError && !conflict && (
-        <div className="rounded-sm border border-magenta bg-magenta-light px-3 py-2 text-sm text-foreground">
-          {saveError}
-        </div>
-      )}
-      {mode === "preview" && (
-        <Checkbox
-          checked={showDiff}
-          onChange={setShowDiff}
-          label="Show diff against the saved revision"
-          className="text-xs text-gray-70"
+        )}
+        <RFCBodyEditor
+          body={body}
+          onBodyChange={onBodyChange}
+          mode={mode}
+          onModeChange={onModeChange}
+          previewSlot={previewSlot}
         />
-      )}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <label className="flex flex-col gap-1.5 sm:flex-1">
-          <span className="text-xs font-medium uppercase tracking-[0.18em] text-gray-50">
-            Commit message
-          </span>
-          <input
-            type="text"
-            value={commitMessage}
-            onChange={(e) => onCommitMessageChange(e.target.value)}
-            placeholder="What's changed?"
-            className="w-full rounded-sm border border-gray-30 bg-surface px-3 py-2 text-sm text-foreground hover:border-gray-40 focus:outline-none focus:ring-2 focus:ring-cyan focus:border-transparent transition-colors"
+        {saveError && !conflict && (
+          <div className="rounded-sm border border-magenta bg-magenta-light px-3 py-2 text-sm text-foreground">
+            {saveError}
+          </div>
+        )}
+        {mode === "preview" && (
+          <Checkbox
+            checked={showDiff}
+            onChange={setShowDiff}
+            label="Show diff against the saved revision"
+            className="text-xs text-gray-70"
           />
-        </label>
+        )}
+      </div>
+      <EditCommitBar
+        commitMessage={commitMessage}
+        onCommitMessageChange={onCommitMessageChange}
+        disabled={disabled}
+        saving={saving}
+        conflict={conflict}
+        onSave={onSave}
+      />
+    </>
+  );
+}
+
+interface EditCommitBarProps {
+  commitMessage: string;
+  onCommitMessageChange: (next: string) => void;
+  disabled: boolean;
+  saving: boolean;
+  conflict: boolean;
+  onSave: () => void;
+}
+
+/** Fixed commit message + save control for RFC body edit mode. */
+function EditCommitBar({
+  commitMessage,
+  onCommitMessageChange,
+  disabled,
+  saving,
+  conflict,
+  onSave,
+}: EditCommitBarProps) {
+  return (
+    <section
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-20/80 bg-surface/90 shadow-[0_-8px_24px_-4px_rgba(0,0,0,0.06)] backdrop-blur-md supports-backdrop-filter:bg-surface/75"
+      aria-label="Commit changes"
+    >
+      <div className="mx-auto flex max-w-360 items-center gap-3 px-4 py-3 sm:gap-4 sm:px-8 sm:py-3.5">
+        <input
+          type="text"
+          value={commitMessage}
+          onChange={(e) => onCommitMessageChange(e.target.value)}
+          placeholder="Commit message"
+          className="min-w-0 flex-1 rounded-md border border-gray-20 bg-background/60 px-3.5 py-2 text-sm text-foreground placeholder:text-gray-50 transition-colors hover:border-gray-30 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-cyan"
+        />
         <SaveButton
           disabled={disabled}
           saving={saving}
@@ -878,7 +910,7 @@ function BodyEditMode({
           onSave={onSave}
         />
       </div>
-    </div>
+    </section>
   );
 }
 

@@ -23,7 +23,7 @@ export default async function Loading() {
 
       <RFCsSearchSkeleton />
       <RFCsFilterBarSkeleton />
-      <RFCListSkeleton />
+      <RFCListSkeleton entry />
     </div>
   );
 }

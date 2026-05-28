@@ -444,20 +444,11 @@ export default function RFCsPageClient({
             className="w-full border border-gray-20 bg-surface rounded-md pl-9 pr-24 py-2 text-sm placeholder:text-gray-50 focus:outline-none focus:ring-2 focus:ring-cyan focus:border-transparent"
           />
           <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2 text-xs text-gray-50">
-            {isSearching && <span>searching…</span>}
+            {isSearching && <span>Searching…</span>}
             {searchRateLimited && !isSearching && (
               <span title="GitHub search rate limit reached – falling back to title-only matching.">
-                limited
+                Rate limited
               </span>
-            )}
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery("")}
-                className="text-gray-50 hover:text-foreground transition-colors"
-              >
-                clear
-              </button>
             )}
           </div>
         </div>
@@ -767,7 +758,7 @@ function RFCSection({
     <section>
       <div className="mb-4 flex items-baseline gap-3">
         <h2 className="text-2xl sm:text-3xl font-serif font-normal tracking-tight text-foreground">
-          {title}
+          <span className="text-gray-50 mr-2">§</span> {title}
         </h2>
         {rfcs.length > 0 && (
           <span className="text-xs text-gray-50 tabular-nums">
@@ -861,7 +852,7 @@ function RFCRow({
         <div className="flex items-start justify-between gap-4 sm:gap-6">
           <div className="flex-1 min-w-0">
             <div className="mb-2 flex flex-wrap items-center gap-2 sm:gap-3">
-              <h2 className="text-3xl font-medium text-foreground break-words font-serif">
+              <h2 className="text-3xl text-foreground break-words font-serif font-bold">
                 {rfc.title}
               </h2>
               <span

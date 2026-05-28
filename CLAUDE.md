@@ -61,7 +61,7 @@ Key interfaces:
 ### Routing Structure
 
 - `/` - Landing page (src/app/page.tsx)
-- `/rfcs` - Homepage listing all RFCs (src/app/rfcs/page.tsx)
+- `/rfcs` - Homepage listing all RFCs (src/app/rfcs/(list)/page.tsx)
 - `/rfcs/[owner]/[repo]/[number]/[[...slug]]` - Individual RFC detail (optional slug segment for readable URLs; src/app/rfcs/[owner]/[repo]/[number]/[[...slug]]/page.tsx)
 - `/invite` - Pre-auth landing for deep links to RFC pages (src/app/invite/page.tsx)
 - `/api/auth/[...nextauth]` - NextAuth authentication endpoints

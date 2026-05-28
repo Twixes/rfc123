@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "eval:commit-message": "RUN_EVALS=1 vitest run src/lib/rfc-commit-message.eval.test.ts",
     "prepare": "husky"
   },
   "lint-staged": {
@@ -39,6 +40,7 @@
     "ai": "^6.0.184",
     "canvas-confetti": "^1.9.4",
     "convex": "^1.39.1",
+    "diff": "^9.0.0",
     "hast-util-sanitize": "^5.0.2",
     "highlight.js": "^11.11.1",
     "jose": "^6.2.3",

@@ -1919,7 +1919,14 @@ export async function updateRFCContent(
   owner: string,
   repo: string,
   prNumber: number,
-  input: { content: string; message: string; baseFileSha: string },
+  // `message` may be a promise so the caller can generate it (e.g. via an LLM)
+  // concurrently with the author check + file lookup below; it's only awaited
+  // just before the write.
+  input: {
+    content: string;
+    message: string | Promise<string>;
+    baseFileSha: string;
+  },
 ): Promise<{ fileSha: string; commitSha: string }> {
   const { octokit, pr } = await assertAuthor(
     accessToken,
@@ -1946,7 +1953,7 @@ export async function updateRFCContent(
         owner,
         repo,
         path: filename,
-        message: input.message,
+        message: await input.message,
         content: Buffer.from(input.content, "utf-8").toString("base64"),
         branch: pr.head.ref,
         sha: input.baseFileSha,
@@ -1973,6 +1980,38 @@ export async function updateRFCContent(
       prNumber,
     });
     throw e;
+  }
+}
+
+/**
+ * Reads a single blob's UTF-8 contents by its git SHA. Used to recover the
+ * pre-edit RFC body when generating a commit message – the SHA the client was
+ * editing against (`baseFileSha`) is the authoritative "before" state, so we
+ * don't have to trust a client-supplied copy. Returns "" on any failure since
+ * this only feeds a best-effort summary.
+ */
+export async function getBlobContent(
+  accessToken: string,
+  owner: string,
+  repo: string,
+  fileSha: string,
+): Promise<string> {
+  try {
+    const octokit = await getOctokit(accessToken);
+    const { data } = await octokit.rest.git.getBlob({
+      owner,
+      repo,
+      file_sha: fileSha,
+    });
+    return Buffer.from(data.content, "base64").toString("utf-8");
+  } catch (e) {
+    captureServerException(e as Error, undefined, {
+      function: "getBlobContent",
+      owner,
+      repo,
+      fileSha,
+    });
+    return "";
   }
 }
 

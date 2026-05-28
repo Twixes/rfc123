@@ -1,22 +1,29 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { auth, getAccessToken } from "@/auth";
 import {
   ContentConflictError,
   ForbiddenError,
+  getBlobContent,
   updateRFCContent,
 } from "@/lib/github";
+import {
+  generateRfcCommitMessage,
+  MAX_COMMIT_MESSAGE_BYTES,
+} from "@/lib/rfc-commit-message";
 
 const MAX_BODY_BYTES = 1_000_000;
-const MAX_COMMIT_MESSAGE_BYTES = 1024;
 
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ number: string }> },
 ) {
   const session = await auth();
-  if (!(session as { accessToken?: string })?.accessToken) {
+  const accessToken = getAccessToken(session);
+  if (!accessToken) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const githubLogin =
+    (session as { githubLogin?: string } | null)?.githubLogin ?? undefined;
 
   const { number } = await params;
   const prNumber = Number.parseInt(number, 10);
@@ -31,14 +38,19 @@ export async function PATCH(
     body?: string;
     commitMessage?: string;
     baseFileSha?: string;
+    markdownFilePath?: string;
   };
   const body = typeof payload.body === "string" ? payload.body : null;
   const baseFileSha =
     typeof payload.baseFileSha === "string" ? payload.baseFileSha : null;
-  const commitMessage =
+  const providedMessage =
     typeof payload.commitMessage === "string" && payload.commitMessage.trim()
       ? payload.commitMessage.trim()
-      : "Update RFC";
+      : null;
+  const markdownFilePath =
+    typeof payload.markdownFilePath === "string"
+      ? payload.markdownFilePath
+      : undefined;
   if (body == null || !baseFileSha) {
     return NextResponse.json(
       { error: "Missing body or baseFileSha" },
@@ -48,21 +60,40 @@ export async function PATCH(
   if (Buffer.byteLength(body, "utf-8") > MAX_BODY_BYTES) {
     return NextResponse.json({ error: "RFC body too large" }, { status: 413 });
   }
-  if (Buffer.byteLength(commitMessage, "utf-8") > MAX_COMMIT_MESSAGE_BYTES) {
+  if (
+    providedMessage &&
+    Buffer.byteLength(providedMessage, "utf-8") > MAX_COMMIT_MESSAGE_BYTES
+  ) {
     return NextResponse.json(
       { error: "Commit message too long" },
       { status: 400 },
     );
   }
 
-  try {
-    const result = await updateRFCContent(
-      (session as unknown as { accessToken: string }).accessToken,
-      owner,
-      repo,
-      prNumber,
-      { content: body, message: commitMessage, baseFileSha },
+  // No commit message from the author → summarize the edit with an LLM. We
+  // recover the pre-edit body from the blob the client was editing against
+  // (`baseFileSha`) so the diff is computed entirely server-side. This runs as
+  // a promise so `updateRFCContent` can do its author/file-lookup preflight
+  // concurrently and only await the message right before writing. The
+  // generator caps its own length and falls back to a generic message; neither
+  // it nor `getBlobContent` rejects, so the promise is safe to leave pending.
+  const commitMessage: string | Promise<string> =
+    providedMessage ??
+    getBlobContent(accessToken, owner, repo, baseFileSha).then((previousBody) =>
+      generateRfcCommitMessage({
+        previousBody,
+        body,
+        markdownFilePath,
+        githubLogin,
+      }),
     );
+
+  try {
+    const result = await updateRFCContent(accessToken, owner, repo, prNumber, {
+      content: body,
+      message: commitMessage,
+      baseFileSha,
+    });
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof ForbiddenError) {

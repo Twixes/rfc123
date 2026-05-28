@@ -1,0 +1,40 @@
+// Code-based (Hog) evaluation for the RFC commit-message generator.
+//
+// Paste this into PostHog → AI Evals → New evaluation → Code-based (Hog),
+// with "Allows N/A" enabled and a property filter of `eval = true` (so it only
+// scores the offline dataset runs emitted by `pnpm eval:commit-message`, not
+// live production generations).
+//
+// The harness stores the generated message verbatim in `properties.eval_message`
+// so we don't have to unpack `$ai_output_choices` here.
+
+// Only score offline eval generations; skip everything else.
+if (ifNull(properties.eval, false) != true) {
+    return null
+}
+
+let msg := ifNull(properties.eval_message, '')
+
+if (length(msg) = 0) {
+    print('Empty commit message')
+    return false
+}
+if (length(msg) > 72) {
+    print('Too long: ' + toString(length(msg)) + ' chars (max 72)')
+    return false
+}
+if (msg = 'Update RFC') {
+    print('Fell back to the generic message – generation likely failed')
+    return false
+}
+if (msg like '%.') {
+    print('Has a trailing period')
+    return false
+}
+if (msg like '"%' or msg like '%"') {
+    print('Wrapped in quotes')
+    return false
+}
+
+print('OK: ' + msg)
+return true

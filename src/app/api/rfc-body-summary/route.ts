@@ -1,7 +1,6 @@
-import { openai } from "@ai-sdk/openai";
-import { generateText } from "ai";
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { generateTextWithTelemetry } from "@/lib/ai";
 
 /**
  * Generates the PR description from the RFC's markdown body. The format is
@@ -41,13 +40,9 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { text } = await generateText({
-      model: openai("gpt-5.5-mini"),
-      experimental_telemetry: {
-        isEnabled: true,
-        functionId: "rfc-body-summary",
-        metadata: githubLogin ? { posthog_distinct_id: githubLogin } : {},
-      },
+    const text = await generateTextWithTelemetry({
+      functionId: "rfc-body-summary",
+      githubLogin,
       system:
         "You summarize engineering RFCs (Requests for Comments) into terse, factual GitHub PR descriptions. Never invent details that aren't in the RFC. Keep bullets to one sentence each.",
       prompt: `Summarize the following RFC titled "${title}" into three sections, exactly in this format:

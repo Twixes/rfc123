@@ -411,8 +411,9 @@ export default function RFCDetailClient({
       exitBodyEdit({ clearDraft: true });
       return;
     }
+    // An empty commit message is allowed – the server generates a short one
+    // from the diff between the saved body and this edit.
     const trimmedMessage = commitMessage.trim();
-    if (!trimmedMessage) return;
     setSavingBody(true);
     setBodyConflict(false);
     setBodySaveError(null);
@@ -426,6 +427,7 @@ export default function RFCDetailClient({
             body: editingBody,
             commitMessage: trimmedMessage,
             baseFileSha: rfc.markdownFileSha,
+            markdownFilePath: rfc.markdownFilePath,
           }),
         },
       );
@@ -933,14 +935,26 @@ function EditCommitBar({
           type="text"
           value={commitMessage}
           onChange={(e) => onCommitMessageChange(e.target.value)}
-          placeholder="What's changed?"
+          onKeyDown={(e) => {
+            // Cmd/Ctrl+Enter saves, matching the Save button's guards.
+            if (
+              e.key === "Enter" &&
+              (e.metaKey || e.ctrlKey) &&
+              !saving &&
+              !disabled &&
+              !conflict
+            ) {
+              e.preventDefault();
+              onSave();
+            }
+          }}
+          placeholder="What's changed? (optional – we'll summarize it)"
           className="min-w-0 flex-1 rounded-md border border-gray-20 bg-background/60 px-3.5 py-2 text-sm text-foreground placeholder:text-gray-50 transition-colors hover:border-gray-30 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-cyan"
         />
         <SaveButton
           disabled={disabled}
           saving={saving}
           conflict={conflict}
-          commitMessage={commitMessage}
           onSave={onSave}
         />
       </div>
@@ -953,27 +967,18 @@ interface SaveButtonProps {
   disabled: boolean;
   saving: boolean;
   conflict: boolean;
-  commitMessage: string;
   onSave: () => void;
 }
 
 /** Save button + disabled-reason tooltip. The reason rotates through the
- *  states that block saving so the user knows exactly what to fix. */
-function SaveButton({
-  disabled,
-  saving,
-  conflict,
-  commitMessage,
-  onSave,
-}: SaveButtonProps) {
-  const commitMessageEmpty = commitMessage.trim().length === 0;
+ *  states that block saving so the user knows exactly what to fix. An empty
+ *  commit message no longer blocks saving – the server summarizes the diff. */
+function SaveButton({ disabled, saving, conflict, onSave }: SaveButtonProps) {
   const disabledReason: string | null = conflict
     ? "Resolve the conflict before saving."
     : disabled
       ? "Nothing to save – the body hasn't changed."
-      : commitMessageEmpty
-        ? "Write a commit message to save."
-        : null;
+      : null;
   const isDisabled = saving || disabledReason !== null;
 
   const button = (

@@ -1277,37 +1277,56 @@ export async function getRFCDetail(
     let requestedReviewerLogins: string[] = [];
     let cacheValid = false;
 
-    // On cache hit: validate markdown freshness with conditional request (304 = free, no rate limit)
+    // On cache hit: confirm the PR head hasn't moved (new commits – including
+    // in-app body saves – change head.sha), then validate markdown freshness
+    // with a conditional request (304 = free, no rate limit). Pinning the
+    // contents fetch to the *cached* head.sha alone is unsafe: after a save
+    // the blob at that old commit is unchanged, so GitHub returns 304 even
+    // though the PR branch has a newer revision.
     if (
       cachedContent &&
       cachedContent.reviewers !== undefined &&
       cachedContent.markdownFilePath &&
       cachedContent.markdownEtag
     ) {
-      try {
-        const conditionalResp = await octokit.request(
-          "GET /repos/{owner}/{repo}/contents/{path}",
-          {
-            owner,
-            repo,
-            path: cachedContent.markdownFilePath,
-            // Head SHA, not branch name – merged PRs often have deleted branches.
-            ref: cachedContent.pr.head.sha,
-            headers: {
-              "If-None-Match": cachedContent.markdownEtag,
-            } as Record<string, string>,
-          },
-        );
-        if ((conditionalResp.status as number) === 304) {
-          cacheValid = true;
-        }
-      } catch (err: unknown) {
-        const reqErr = err as { status?: number };
-        if (reqErr.status === 304) {
-          cacheValid = true;
+      const { data: currentPrHead } = await octokit.rest.pulls.get({
+        owner,
+        repo,
+        pull_number: prNumber,
+      });
+      const headStillCurrent =
+        currentPrHead.head.sha === cachedContent.pr.head.sha;
+
+      if (headStillCurrent) {
+        try {
+          const conditionalResp = await octokit.request(
+            "GET /repos/{owner}/{repo}/contents/{path}",
+            {
+              owner,
+              repo,
+              path: cachedContent.markdownFilePath,
+              // Head SHA, not branch name – merged PRs often have deleted branches.
+              ref: cachedContent.pr.head.sha,
+              headers: {
+                "If-None-Match": cachedContent.markdownEtag,
+              } as Record<string, string>,
+            },
+          );
+          if ((conditionalResp.status as number) === 304) {
+            cacheValid = true;
+          }
+        } catch (err: unknown) {
+          const reqErr = err as { status?: number };
+          if (reqErr.status === 304) {
+            cacheValid = true;
+          }
         }
       }
+
       if (cacheValid) {
+        // Keep PR metadata (title, state, comment counts) fresh even when
+        // markdown is unchanged at the same head commit.
+        cachedContent.pr = currentPrHead;
         pr = cachedContent.pr;
         files = cachedContent.files;
         markdownContent = cachedContent.markdownContent;

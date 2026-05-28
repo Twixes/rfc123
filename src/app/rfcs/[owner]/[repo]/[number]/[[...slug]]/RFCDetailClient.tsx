@@ -150,6 +150,7 @@ export default function RFCDetailClient({
       try {
         const response = await fetch(
           `/api/rfcs/${prNumber}?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}`,
+          { cache: "no-store" },
         );
         if (!response.ok) {
           throw new Error("Failed to load RFC");

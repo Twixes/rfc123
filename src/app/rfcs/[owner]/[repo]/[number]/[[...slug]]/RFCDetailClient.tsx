@@ -955,6 +955,7 @@ function EditCommitBar({
           disabled={disabled}
           saving={saving}
           conflict={conflict}
+          commitMessage={commitMessage}
           onSave={onSave}
         />
       </div>
@@ -967,18 +968,42 @@ interface SaveButtonProps {
   disabled: boolean;
   saving: boolean;
   conflict: boolean;
+  commitMessage: string;
   onSave: () => void;
 }
 
-/** Save button + disabled-reason tooltip. The reason rotates through the
- *  states that block saving so the user knows exactly what to fix. An empty
- *  commit message no longer blocks saving – the server summarizes the diff. */
-function SaveButton({ disabled, saving, conflict, onSave }: SaveButtonProps) {
+/** Save button + tooltip. When saving is blocked the tooltip explains why;
+ *  otherwise it hints at the behavior – an empty commit message gets
+ *  summarized server-side, and ⌘/Ctrl+Enter saves. */
+function SaveButton({
+  disabled,
+  saving,
+  conflict,
+  commitMessage,
+  onSave,
+}: SaveButtonProps) {
+  // Hydration-safe macOS detection: starts false (matching SSR) and resolves
+  // after mount, so the first client render never diverges from the server.
+  const [isMac, setIsMac] = useState(false);
+  useEffect(() => {
+    const platform =
+      (navigator as Navigator & { userAgentData?: { platform?: string } })
+        .userAgentData?.platform ||
+      navigator.platform ||
+      "";
+    setIsMac(/mac/i.test(platform));
+  }, []);
+  const shortcut = `${isMac ? "⌘" : "Ctrl"}+Enter`;
   const disabledReason: string | null = conflict
     ? "Resolve the conflict before saving."
     : disabled
       ? "Nothing to save – the body hasn't changed."
       : null;
+  const tooltip =
+    disabledReason ??
+    (commitMessage.trim().length === 0
+      ? `Leave blank and we'll summarize your changes. ${shortcut}`
+      : `Save your changes. ${shortcut}`);
   const isDisabled = saving || disabledReason !== null;
 
   const button = (
@@ -1007,11 +1032,10 @@ function SaveButton({ disabled, saving, conflict, onSave }: SaveButtonProps) {
     </button>
   );
 
-  if (!disabledReason) return button;
-  // Wrap the disabled button in a span so the tooltip trigger still receives
-  // pointer events (disabled <button> elements swallow them in some browsers).
+  // Wrap in a span so the tooltip trigger still receives pointer events when
+  // the button is disabled (disabled <button>s swallow them in some browsers).
   return (
-    <Tooltip content={disabledReason}>
+    <Tooltip content={tooltip}>
       <span className="inline-flex">{button}</span>
     </Tooltip>
   );

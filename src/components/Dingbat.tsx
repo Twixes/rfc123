@@ -20,7 +20,7 @@ export default function Dingbat({
   return (
     <span
       aria-hidden="true"
-      className={`inline-flex ${dimensions} flex-shrink-0 items-center justify-center mb-4 font-serif leading-none select-none ${className}`}
+      className={`inline-flex ${dimensions} flex-shrink-0 items-center justify-center mb-4 sm:mb-0 font-serif leading-none select-none ${className}`}
     >
       {glyph}
     </span>

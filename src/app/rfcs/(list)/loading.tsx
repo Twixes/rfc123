@@ -14,7 +14,7 @@ export default async function Loading() {
   }
 
   return (
-    <div className="mx-auto min-h-screen max-w-240 px-4 sm:px-8 py-6 sm:py-12">
+    <div className="mx-auto min-h-screen max-w-216 px-4 sm:px-8 py-6 sm:py-12">
       <RFCsTopBar
         user={session?.user ?? null}
         homeHref="/"

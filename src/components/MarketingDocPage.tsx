@@ -1,14 +1,12 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { auth, signIn } from "@/auth";
+import { auth } from "@/auth";
 import ConnectAgentButton from "@/components/ConnectAgentButton";
 import Footer from "@/components/Footer";
+import { GitHubSignInForm } from "@/components/GitHubSignInForm";
 import RFCsTopBar from "@/components/RFCsTopBar";
-
-const PRIMARY_BTN =
-  "inline-flex items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium text-surface transition-all hover:opacity-80 cursor-pointer";
-const SECONDARY_BTN =
-  "inline-flex items-center gap-1.5 rounded-md border border-gray-30 bg-surface px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium text-foreground transition-all hover:bg-gray-5 cursor-pointer";
+import { RFCsTopBarPrimaryAction } from "@/components/RFCsTopBarActions";
+import { MARKETING_SECONDARY_BUTTON_CLASS } from "@/lib/marketing-button-classes";
 
 function ListIcon() {
   return (
@@ -30,26 +28,6 @@ function ListIcon() {
   );
 }
 
-function PlusIcon() {
-  return (
-    <svg
-      className="w-4 h-4"
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-      aria-hidden
-    >
-      <title>New</title>
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M12 4v16m8-8H4"
-      />
-    </svg>
-  );
-}
-
 interface MarketingDocPageProps {
   eyebrow: string;
   title: string;
@@ -63,42 +41,26 @@ export default async function MarketingDocPage({
 }: MarketingDocPageProps) {
   const session = await auth();
 
-  const actions = (
-    <>
-      <ConnectAgentButton variant="secondary" label="Connect agent" />
-      {session ? (
-        <>
-          <Link href="/rfcs" className={SECONDARY_BTN}>
-            <ListIcon />
-            View RFCs
-          </Link>
-          <Link href="/rfcs/new" className={PRIMARY_BTN}>
-            <PlusIcon />
-            New RFC
-          </Link>
-        </>
-      ) : (
-        <form
-          action={async () => {
-            "use server";
-            await signIn("github");
-          }}
-        >
-          <button type="submit" className={PRIMARY_BTN}>
-            Sign in/up with GitHub
-          </button>
-        </form>
-      )}
-    </>
-  );
-
   return (
     <div className="flex min-h-screen flex-col">
       <main className="mx-auto w-full max-w-216 flex-1 px-4 sm:px-8 py-6 sm:py-12">
         <RFCsTopBar
           user={session?.user ?? null}
           homeHref="/"
-          actions={actions}
+          secondaryActions={
+            <>
+              <ConnectAgentButton variant="secondary" label="Connect agent" />
+              {session && (
+                <Link href="/rfcs" className={MARKETING_SECONDARY_BUTTON_CLASS}>
+                  <ListIcon />
+                  View RFCs
+                </Link>
+              )}
+            </>
+          }
+          primaryActions={
+            session ? <RFCsTopBarPrimaryAction /> : <GitHubSignInForm />
+          }
         />
 
         <section className="mb-6">

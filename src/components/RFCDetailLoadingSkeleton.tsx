@@ -1,5 +1,8 @@
 import RFCsTopBar from "@/components/RFCsTopBar";
-import RFCsTopBarActions from "@/components/RFCsTopBarActions";
+import {
+  RFCsTopBarPrimaryAction,
+  RFCsTopBarSecondaryActions,
+} from "@/components/RFCsTopBarActions";
 
 interface RFCDetailLoadingSkeletonProps {
   user?: { name?: string | null; image?: string | null } | null;
@@ -123,7 +126,8 @@ export default function RFCDetailLoadingSkeleton({
     <div className={`${SHELL_CLASS}${entry ? " skeleton-entry" : ""}`}>
       <RFCsTopBar
         user={user ?? null}
-        actions={<RFCsTopBarActions repo={repo} />}
+        secondaryActions={<RFCsTopBarSecondaryActions />}
+        primaryActions={<RFCsTopBarPrimaryAction repo={repo} />}
       />
       <SkeletonMasthead />
       <SkeletonContent />

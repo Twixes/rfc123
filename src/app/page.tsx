@@ -1,32 +1,18 @@
 import Link from "next/link";
-import { auth, signIn } from "@/auth";
+import { auth } from "@/auth";
 import AccountDropdown from "@/components/AccountDropdown";
 import ConnectAgentButton from "@/components/ConnectAgentButton";
 import Dingbat from "@/components/Dingbat";
+import { GitHubSignInForm } from "@/components/GitHubSignInForm";
 import MarketingPage from "@/components/MarketingPage";
+import { NewRfcPlusIcon } from "@/components/RFCsTopBarActions";
 import Tooltip from "@/components/Tooltip";
+import {
+  MARKETING_PRIMARY_BUTTON_CLASS,
+  MARKETING_SECONDARY_BUTTON_CLASS,
+} from "@/lib/marketing-button-classes";
 
 const ICON_CLASS = "w-4 h-4";
-
-function PlusIcon() {
-  return (
-    <svg
-      className={ICON_CLASS}
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-      aria-hidden
-    >
-      <title>Plus</title>
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M12 4v16m8-8H4"
-      />
-    </svg>
-  );
-}
 
 function ListIcon() {
   return (
@@ -48,72 +34,111 @@ function ListIcon() {
   );
 }
 
-const PRIMARY_BTN =
-  "inline-flex items-center gap-1.5 rounded-md bg-foreground px-4 py-2 text-sm font-medium text-surface transition-all hover:opacity-85 cursor-pointer";
-const SECONDARY_BTN =
-  "inline-flex items-center gap-1.5 rounded-md border border-gray-30 bg-surface px-4 py-2 text-sm font-medium text-foreground transition-all hover:bg-gray-5 cursor-pointer";
+type LandingSession = {
+  user?: {
+    name?: string | null;
+    image?: string | null;
+  };
+} | null;
+
+function LandingNewRfcLink() {
+  return (
+    <Link href="/rfcs/new" className={MARKETING_PRIMARY_BUTTON_CLASS}>
+      <NewRfcPlusIcon />
+      New RFC
+    </Link>
+  );
+}
+
+function LandingAvatar({ session }: { session: LandingSession }) {
+  if (!session?.user) return null;
+  return <AccountDropdown user={session.user} />;
+}
+
+function LandingDesktopActions({ session }: { session: LandingSession }) {
+  return (
+    <div className="flex flex-wrap items-center justify-start gap-2">
+      <ConnectAgentButton variant="secondary" label="Connect agent" />
+      {session ? (
+        <>
+          <Link href="/rfcs" className={MARKETING_SECONDARY_BUTTON_CLASS}>
+            <ListIcon />
+            View RFCs
+          </Link>
+          <LandingNewRfcLink />
+          <LandingAvatar session={session} />
+        </>
+      ) : (
+        <GitHubSignInForm />
+      )}
+    </div>
+  );
+}
+
+function LandingMobileActions({ session }: { session: LandingSession }) {
+  return (
+    <div className="flex flex-col items-start gap-2">
+      <div className="flex flex-wrap items-center justify-start gap-2">
+        {session ? (
+          <>
+            <LandingNewRfcLink />
+            <LandingAvatar session={session} />
+          </>
+        ) : (
+          <GitHubSignInForm />
+        )}
+      </div>
+      <div className="flex flex-wrap items-center justify-start gap-2">
+        {session && (
+          <Link href="/rfcs" className={MARKETING_SECONDARY_BUTTON_CLASS}>
+            <ListIcon />
+            View RFCs
+          </Link>
+        )}
+        <ConnectAgentButton variant="secondary" label="Connect agent" />
+      </div>
+    </div>
+  );
+}
 
 export default async function LandingPage() {
   const session = await auth();
 
   return (
     <MarketingPage>
-      <div className="flex justify-between items-start flex-wrap gap-2 mb-2">
-        <h1 className="font-serif font-normal text-5xl sm:text-6xl text-foreground mb-0">
+      <div className="mb-6 sm:mb-0 grid grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_auto_auto] gap-x-2 gap-y-2 sm:grid-rows-[auto_auto]">
+        <h1 className="col-start-1 row-start-1 self-center font-serif text-5xl font-normal text-foreground sm:text-6xl">
           RFC123
         </h1>
-
-        <div className="flex items-center gap-2 flex-wrap justify-end">
-          <ConnectAgentButton variant="secondary" label="Connect agent" />
-          {session ? (
-            <>
-              <Link href="/rfcs" className={SECONDARY_BTN}>
-                <ListIcon />
-                View RFCs
-              </Link>
-              <Link href="/rfcs/new" className={PRIMARY_BTN}>
-                <PlusIcon />
-                New RFC
-              </Link>
-              {session.user && <AccountDropdown user={session.user} />}
-            </>
-          ) : (
-            <form
-              action={async () => {
-                "use server";
-                await signIn("github");
-              }}
-            >
-              <button type="submit" className={PRIMARY_BTN}>
-                Sign in/up with GitHub
-              </button>
-            </form>
-          )}
+        <div className="col-start-2 row-start-1 hidden sm:block">
+          <LandingDesktopActions session={session} />
+        </div>
+        <p className="col-span-2 row-start-2 mb-2 text-lg font-light leading-tight text-gray-70 sm:mb-4 sm:text-xl text-balance">
+          The agent-native{" "}
+          <Tooltip
+            content={
+              <>
+                <div className="font-medium">Request for Comments</div>
+                <div className="text-gray-30">
+                  Written proposals that seek feedback on decisions, their
+                  tradeoffs, and implications.
+                </div>
+              </>
+            }
+            align="start"
+          >
+            <abbr className="cursor-help underline decoration-dotted underline-offset-4 decoration-gray-40">
+              RFC
+            </abbr>
+          </Tooltip>{" "}
+          platform for teams.
+        </p>
+        <div className="col-span-2 row-start-3 sm:hidden">
+          <LandingMobileActions session={session} />
         </div>
       </div>
 
-      <p className="mb-4 text-lg sm:text-xl font-light leading-tight text-gray-70">
-        The agent-native{" "}
-        <Tooltip
-          content={
-            <>
-              <div className="font-medium">Request for Comments</div>
-              <div className="text-gray-30">
-                Written proposals that seek feedback on decisions, their
-                tradeoffs, and implications.
-              </div>
-            </>
-          }
-          align="start"
-        >
-          <abbr className="cursor-help underline decoration-dotted underline-offset-4 decoration-gray-40">
-            RFC
-          </abbr>
-        </Tooltip>{" "}
-        platform for teams.
-      </p>
-
-      <div className="mb-8 flex flex-col sm:flex-row gap-x-6 gap-y-2 sm:gap-x-8 border-b border-gray-20 pb-6">
+      <div className="mb-8 flex flex-row gap-x-6 gap-y-2 sm:gap-x-8 border-b border-gray-20 pb-6">
         <div>
           <div className="mb-2 h-0.75 w-12 bg-cyan" />
           <div className="text-2xl font-serif text-foreground">1. Draft</div>
@@ -132,7 +157,7 @@ export default async function LandingPage() {
         <section className="flex flex-col sm:flex-row gap-3 sm:gap-6">
           <Dingbat glyph="¶" className="text-cyan" size="xl" />
           <div className="flex-1 min-w-0">
-            <h2 className="mb-3 text-2xl font-serif text-foreground leading-none">
+            <h2 className="mb-3 text-2xl font-serif text-foreground leading-none text-balance">
               Write RFCs like a cracked engineer
             </h2>
             <div className="space-y-2.5">
@@ -153,7 +178,7 @@ export default async function LandingPage() {
         <section className="flex flex-col sm:flex-row gap-3 sm:gap-6">
           <Dingbat glyph="§" className="text-magenta" size="xl" />
           <div className="flex-1 min-w-0">
-            <h2 className="mb-3 text-2xl font-serif text-foreground leading-none">
+            <h2 className="mb-3 text-2xl font-serif text-foreground leading-none text-balance">
               Collaborate with maximum synergy
             </h2>
             <div className="space-y-2.5">
@@ -174,7 +199,7 @@ export default async function LandingPage() {
         <section className="flex flex-col sm:flex-row gap-3 sm:gap-6">
           <Dingbat glyph="※" className="text-yellow -mt-4" size="xl" />
           <div className="flex-1 min-w-0">
-            <h2 className="mb-3 text-2xl font-serif text-foreground leading-none">
+            <h2 className="mb-3 text-2xl font-serif text-foreground leading-none text-balance">
               Never miss a thing
             </h2>
             <div className="space-y-2.5">
@@ -226,7 +251,7 @@ export default async function LandingPage() {
         <section className="flex flex-col sm:flex-row gap-3 sm:gap-6">
           <Dingbat glyph="◆" className="text-cyan -mt-4" size="xl" />
           <div className="flex-1 min-w-0">
-            <h2 className="mb-3 text-2xl font-serif text-foreground leading-none">
+            <h2 className="mb-3 text-2xl font-serif text-foreground leading-none text-balance">
               Bring your agent to the table
             </h2>
             <div className="space-y-2.5">

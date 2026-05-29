@@ -250,8 +250,8 @@ export default function ConnectAgentButton({
 
   const className =
     variant === "primary"
-      ? "inline-flex items-center gap-1.5 rounded-md bg-foreground px-4 py-2 text-sm font-medium text-surface transition-all hover:opacity-85 cursor-pointer"
-      : "inline-flex items-center gap-1.5 rounded-md border border-gray-30 bg-surface px-4 py-2 text-sm font-medium text-foreground transition-all hover:bg-gray-5 cursor-pointer";
+      ? "inline-flex items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium text-surface transition-all hover:opacity-85 cursor-pointer"
+      : "inline-flex items-center gap-1.5 rounded-md border border-gray-30 bg-surface px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium text-foreground transition-all hover:bg-gray-5 cursor-pointer";
 
   return (
     <>

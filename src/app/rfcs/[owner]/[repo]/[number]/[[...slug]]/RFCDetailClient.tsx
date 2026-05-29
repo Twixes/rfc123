@@ -14,7 +14,10 @@ import { RFCBodyEditor } from "@/components/RFCBodyEditor";
 import RFCDetailLoadingSkeleton from "@/components/RFCDetailLoadingSkeleton";
 import { RFCMetadataHeader } from "@/components/RFCMetadataHeader";
 import RFCsTopBar from "@/components/RFCsTopBar";
-import RFCsTopBarActions from "@/components/RFCsTopBarActions";
+import {
+  RFCsTopBarPrimaryAction,
+  RFCsTopBarSecondaryActions,
+} from "@/components/RFCsTopBarActions";
 import { RfcMarkdownMissing } from "@/components/RfcMarkdownMissing";
 import {
   type RfcMarkdownAssets,
@@ -565,7 +568,10 @@ export default function RFCDetailClient({
       <div className="mx-auto max-w-360 min-h-screen px-4 sm:px-8 py-6 sm:py-12">
         <RFCsTopBar
           user={{ name: currentUser, image: currentUserAvatar }}
-          actions={<RFCsTopBarActions repo={{ owner, name: repo }} />}
+          secondaryActions={<RFCsTopBarSecondaryActions />}
+          primaryActions={
+            <RFCsTopBarPrimaryAction repo={{ owner, name: repo }} />
+          }
         />
         <div className="py-12 text-center text-sm text-magenta">
           {error || "Failed to load RFC"}
@@ -583,7 +589,10 @@ export default function RFCDetailClient({
     <div className="mx-auto max-w-360 min-h-screen px-4 sm:px-8 py-6 sm:py-12">
       <RFCsTopBar
         user={{ name: currentUser, image: currentUserAvatar }}
-        actions={<RFCsTopBarActions repo={{ owner, name: repo }} />}
+        secondaryActions={<RFCsTopBarSecondaryActions />}
+        primaryActions={
+          <RFCsTopBarPrimaryAction repo={{ owner, name: repo }} />
+        }
       />
 
       {mutationError && (

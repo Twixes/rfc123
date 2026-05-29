@@ -1,5 +1,6 @@
 import Link from "next/link";
 import ConnectAgentButton from "@/components/ConnectAgentButton";
+import { MARKETING_PRIMARY_BUTTON_CLASS } from "@/lib/marketing-button-classes";
 
 /** Build the "Start an RFC" URL, prefilled with a repo when one is known so
  *  authoring in the same repo is one click. */
@@ -32,23 +33,19 @@ export function NewRfcPlusIcon({
   );
 }
 
-interface RFCsTopBarActionsProps {
-  repo?: { owner: string; name: string } | null;
+export function RFCsTopBarSecondaryActions() {
+  return <ConnectAgentButton variant="secondary" label="Connect agent" />;
 }
 
-export default function RFCsTopBarActions({
+export function RFCsTopBarPrimaryAction({
   repo,
-}: RFCsTopBarActionsProps = {}) {
+}: {
+  repo?: { owner: string; name: string } | null;
+}) {
   return (
-    <>
-      <ConnectAgentButton variant="secondary" label="Connect agent" />
-      <Link
-        href={newRfcHref(repo)}
-        className="rounded-md bg-foreground px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium text-surface transition-all hover:opacity-80 cursor-pointer flex items-center gap-1.5"
-      >
-        <NewRfcPlusIcon />
-        New RFC
-      </Link>
-    </>
+    <Link href={newRfcHref(repo)} className={MARKETING_PRIMARY_BUTTON_CLASS}>
+      <NewRfcPlusIcon />
+      New RFC
+    </Link>
   );
 }

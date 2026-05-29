@@ -4,7 +4,10 @@ import RFCListSkeleton from "@/components/RFCListSkeleton";
 import RFCsFilterBarSkeleton from "@/components/RFCsFilterBarSkeleton";
 import RFCsSearchSkeleton from "@/components/RFCsSearchSkeleton";
 import RFCsTopBar from "@/components/RFCsTopBar";
-import RFCsTopBarActions from "@/components/RFCsTopBarActions";
+import {
+  RFCsTopBarPrimaryAction,
+  RFCsTopBarSecondaryActions,
+} from "@/components/RFCsTopBarActions";
 
 export default async function Loading() {
   const session = await auth();
@@ -18,7 +21,8 @@ export default async function Loading() {
       <RFCsTopBar
         user={session?.user ?? null}
         homeHref="/"
-        actions={<RFCsTopBarActions />}
+        secondaryActions={<RFCsTopBarSecondaryActions />}
+        primaryActions={<RFCsTopBarPrimaryAction />}
       />
 
       <RFCsSearchSkeleton />

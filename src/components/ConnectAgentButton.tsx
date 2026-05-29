@@ -11,6 +11,7 @@ import {
   TabPanels,
 } from "@headlessui/react";
 import { useState } from "react";
+import { MarketingButton } from "@/components/MarketingButton";
 
 const MCP_URL = "https://rfc123.com/mcp";
 const SKILLS_REPO = "Twixes/rfc-123";
@@ -248,14 +249,13 @@ export default function ConnectAgentButton({
 }) {
   const [open, setOpen] = useState(false);
 
-  const className =
-    variant === "primary"
-      ? "inline-flex items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium text-surface transition-all hover:opacity-85 cursor-pointer"
-      : "inline-flex items-center gap-1.5 rounded-md border border-gray-30 bg-surface px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium text-foreground transition-all hover:bg-gray-5 cursor-pointer";
-
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} className={className}>
+      <MarketingButton
+        type="button"
+        variant={variant}
+        onClick={() => setOpen(true)}
+      >
         <svg
           className="w-4 h-4"
           fill="none"
@@ -272,7 +272,7 @@ export default function ConnectAgentButton({
           />
         </svg>
         {label}
-      </button>
+      </MarketingButton>
 
       <Dialog
         open={open}

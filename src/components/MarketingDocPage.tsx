@@ -1,12 +1,11 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
 import { auth } from "@/auth";
 import ConnectAgentButton from "@/components/ConnectAgentButton";
 import Footer from "@/components/Footer";
 import { GitHubSignInForm } from "@/components/GitHubSignInForm";
+import { MarketingButtonLink } from "@/components/MarketingButton";
 import RFCsTopBar from "@/components/RFCsTopBar";
 import { RFCsTopBarPrimaryAction } from "@/components/RFCsTopBarActions";
-import { MARKETING_SECONDARY_BUTTON_CLASS } from "@/lib/marketing-button-classes";
 
 function ListIcon() {
   return (
@@ -51,10 +50,10 @@ export default async function MarketingDocPage({
             <>
               <ConnectAgentButton variant="secondary" label="Connect agent" />
               {session && (
-                <Link href="/rfcs" className={MARKETING_SECONDARY_BUTTON_CLASS}>
+                <MarketingButtonLink href="/rfcs" variant="secondary">
                   <ListIcon />
                   View RFCs
-                </Link>
+                </MarketingButtonLink>
               )}
             </>
           }

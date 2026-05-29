@@ -1,16 +1,12 @@
-import Link from "next/link";
 import { auth } from "@/auth";
 import AccountDropdown from "@/components/AccountDropdown";
 import ConnectAgentButton from "@/components/ConnectAgentButton";
 import Dingbat from "@/components/Dingbat";
 import { GitHubSignInForm } from "@/components/GitHubSignInForm";
+import { MarketingButtonLink } from "@/components/MarketingButton";
 import MarketingPage from "@/components/MarketingPage";
 import { NewRfcPlusIcon } from "@/components/RFCsTopBarActions";
 import Tooltip from "@/components/Tooltip";
-import {
-  MARKETING_PRIMARY_BUTTON_CLASS,
-  MARKETING_SECONDARY_BUTTON_CLASS,
-} from "@/lib/marketing-button-classes";
 
 const ICON_CLASS = "w-4 h-4";
 
@@ -43,10 +39,10 @@ type LandingSession = {
 
 function LandingNewRfcLink() {
   return (
-    <Link href="/rfcs/new" className={MARKETING_PRIMARY_BUTTON_CLASS}>
+    <MarketingButtonLink href="/rfcs/new" variant="primary">
       <NewRfcPlusIcon />
       New RFC
-    </Link>
+    </MarketingButtonLink>
   );
 }
 
@@ -61,10 +57,10 @@ function LandingDesktopActions({ session }: { session: LandingSession }) {
       <ConnectAgentButton variant="secondary" label="Connect agent" />
       {session ? (
         <>
-          <Link href="/rfcs" className={MARKETING_SECONDARY_BUTTON_CLASS}>
+          <MarketingButtonLink href="/rfcs" variant="secondary">
             <ListIcon />
             View RFCs
-          </Link>
+          </MarketingButtonLink>
           <LandingNewRfcLink />
           <LandingAvatar session={session} />
         </>
@@ -90,10 +86,10 @@ function LandingMobileActions({ session }: { session: LandingSession }) {
       </div>
       <div className="flex flex-wrap items-center justify-start gap-2">
         {session && (
-          <Link href="/rfcs" className={MARKETING_SECONDARY_BUTTON_CLASS}>
+          <MarketingButtonLink href="/rfcs" variant="secondary">
             <ListIcon />
             View RFCs
-          </Link>
+          </MarketingButtonLink>
         )}
         <ConnectAgentButton variant="secondary" label="Connect agent" />
       </div>

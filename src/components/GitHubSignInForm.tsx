@@ -1,5 +1,5 @@
 import { signIn } from "@/auth";
-import { MARKETING_PRIMARY_BUTTON_CLASS } from "@/lib/marketing-button-classes";
+import { MarketingButton } from "@/components/MarketingButton";
 
 export function GitHubSignInForm({
   label = "Sign in/up with GitHub",
@@ -13,9 +13,9 @@ export function GitHubSignInForm({
         await signIn("github");
       }}
     >
-      <button type="submit" className={MARKETING_PRIMARY_BUTTON_CLASS}>
+      <MarketingButton type="submit" variant="primary">
         {label}
-      </button>
+      </MarketingButton>
     </form>
   );
 }

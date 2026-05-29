@@ -1,6 +1,5 @@
-import Link from "next/link";
 import ConnectAgentButton from "@/components/ConnectAgentButton";
-import { MARKETING_PRIMARY_BUTTON_CLASS } from "@/lib/marketing-button-classes";
+import { MarketingButtonLink } from "@/components/MarketingButton";
 
 /** Build the "Start an RFC" URL, prefilled with a repo when one is known so
  *  authoring in the same repo is one click. */
@@ -43,9 +42,9 @@ export function RFCsTopBarPrimaryAction({
   repo?: { owner: string; name: string } | null;
 }) {
   return (
-    <Link href={newRfcHref(repo)} className={MARKETING_PRIMARY_BUTTON_CLASS}>
+    <MarketingButtonLink href={newRfcHref(repo)} variant="primary">
       <NewRfcPlusIcon />
       New RFC
-    </Link>
+    </MarketingButtonLink>
   );
 }

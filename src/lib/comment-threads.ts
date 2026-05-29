@@ -5,6 +5,25 @@ export interface CommentThread {
   comments: Comment[];
 }
 
+export type ReplyTarget =
+  | { type: "thread"; line: number; threadId: number }
+  | { type: "newThread"; line: number };
+
+/** Reply UI scoped to one comment line (line number already known from props). */
+export type LineReplyTarget =
+  | { type: "thread"; threadId: number }
+  | { type: "newThread" };
+
+export function lineReplyTarget(
+  target: ReplyTarget | null,
+  lineNumber: number,
+): LineReplyTarget | null {
+  if (!target || target.line !== lineNumber) return null;
+  return target.type === "thread"
+    ? { type: "thread", threadId: target.threadId }
+    : { type: "newThread" };
+}
+
 /** Group a flat list of comments into threads based on `inReplyToId` chains. */
 export function groupIntoThreads(comments: Comment[]): CommentThread[] {
   const byId = new Map<number, Comment>();

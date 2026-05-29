@@ -2,6 +2,7 @@
 
 import { motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
+import { CommentDraftTextarea } from "@/components/CommentDraftTextarea";
 
 interface LineCommentBoxProps {
   lineNumber: number;
@@ -95,14 +96,11 @@ export function LineCommentBox({
       </div>
 
       <div className="px-3.5 pb-3 pt-0.5">
-        <textarea
+        <CommentDraftTextarea
           ref={textareaRef}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder="Add a comment…"
-          className="w-full resize-none rounded-sm border border-gray-20 bg-surface px-3 py-2 text-sm text-foreground placeholder-gray-40 transition-shadow focus:outline-none focus:border-cyan focus:ring-2 focus:ring-cyan/20"
-          rows={4}
-          // biome-ignore lint/a11y/noAutofocus: comment form opens in response to a user gesture (click on a line); focusing immediately matches expected behavior.
           autoFocus
           disabled={isSubmitting}
           onKeyDown={(e) => {

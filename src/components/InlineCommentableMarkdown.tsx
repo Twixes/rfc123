@@ -24,8 +24,8 @@ import {
   createRfcMarkdownComponents,
   PROSE_WRAPPER_CLASS,
 } from "@/components/rfc-pretty-markdown-components";
-import type { CommentThread } from "@/lib/comment-threads";
-import { groupIntoThreads } from "@/lib/comment-threads";
+import type { CommentThread, ReplyTarget } from "@/lib/comment-threads";
+import { groupIntoThreads, lineReplyTarget } from "@/lib/comment-threads";
 import type { Comment } from "@/lib/github";
 import { rehypeLineMarkers } from "@/lib/rehype-line-markers";
 
@@ -746,10 +746,6 @@ function LineNumbersColumn({
   );
 }
 
-type ReplyTarget =
-  | { type: "thread"; line: number; threadId: number }
-  | { type: "newThread"; line: number };
-
 interface InlineCommentableMarkdownProps {
   content: string;
   owner: string;
@@ -848,6 +844,9 @@ export function InlineCommentableMarkdown({
   }, [layoutCommentsByLine]);
   const threadsByLineRef = useRef(threadsByLine);
   threadsByLineRef.current = threadsByLine;
+  const layoutCommentsByLineRef = useRef(layoutCommentsByLine);
+  layoutCommentsByLineRef.current = layoutCommentsByLine;
+  const [sidebarEl, setSidebarEl] = useState<HTMLDivElement | null>(null);
 
   // Calculate line offsets after render using injected markers
   const recalcLinePositions = useCallback(() => {
@@ -1122,86 +1121,114 @@ export function InlineCommentableMarkdown({
     () => collapsedLines ?? defaultCollapsedLines(layoutCommentsByLine),
     [collapsedLines, layoutCommentsByLine],
   );
+  const resolvedCollapsedLinesRef = useRef(resolvedCollapsedLines);
+  resolvedCollapsedLinesRef.current = resolvedCollapsedLines;
 
-  // Calculate all comment box positions to prevent overlaps
-  useEffect(() => {
-    function recalcPositions() {
-      const positions = new Map<number, number>();
+  const recalcPositionsRafRef = useRef<number | null>(null);
+  const recalcPositions = useCallback(() => {
+    const positions = new Map<number, number>();
+    const replyLine = replyTargetRef.current?.line ?? null;
+    const collapsed = resolvedCollapsedLinesRef.current;
+    const layoutComments = layoutCommentsByLineRef.current;
+    const activeLine = activeLineIndexRef.current;
 
-      // Collect all boxes that need positioning (both existing comments and active form)
-      const boxesToPosition: Array<{
-        lineNum: number;
-        ref: HTMLDivElement | null;
-        isActive: boolean;
-      }> = [];
+    const boxesToPosition: Array<{
+      lineNum: number;
+      ref: HTMLDivElement | null;
+      isActive: boolean;
+    }> = [];
 
-      // Add all existing comment boxes
-      for (const ln of layoutCommentsByLine.keys()) {
-        boxesToPosition.push({
-          lineNum: ln,
-          ref: commentBoxRefs.current.get(ln) || null,
-          isActive: false,
-        });
-      }
-
-      // Add the active comment form if present
-      if (activeLineIndex !== null) {
-        boxesToPosition.push({
-          lineNum: activeLineIndex + 1,
-          ref: commentBoxRefs.current.get(-1) || null,
-          isActive: true,
-        });
-      }
-
-      // Sort by line number to process top-to-bottom
-      boxesToPosition.sort((a, b) => a.lineNum - b.lineNum);
-
-      let lastBottom = 0;
-      let maxBoxBottom = 0;
-
-      for (const { lineNum, ref, isActive } of boxesToPosition) {
-        const baseOffset = lineOffsetsRef.current.get(lineNum) || 0;
-        const adjustedOffset = Math.max(baseOffset, lastBottom);
-
-        // Store the calculated position
-        positions.set(isActive ? -1 : lineNum, adjustedOffset);
-
-        // Update lastBottom for the next iteration
-        let boxHeight: number;
-        if (ref) {
-          const headerEl = ref.firstElementChild as HTMLElement | null;
-          boxHeight = ref.offsetHeight;
-          if (!isActive) {
-            // Use known end-state height so we don't read mid-animation
-            if (resolvedCollapsedLines.has(lineNum)) {
-              // Collapsed: content height = 0, so box = header only
-              boxHeight = headerEl?.offsetHeight ?? boxHeight;
-            } else {
-              // Expanded: box = header + content
-              const contentEl = contentRefs.current.get(lineNum);
-              if (contentEl && headerEl) {
-                boxHeight = headerEl.offsetHeight + contentEl.offsetHeight;
-              }
-            }
-          }
-        } else {
-          boxHeight = 100; // Minimum estimated height
-        }
-
-        maxBoxBottom = Math.max(maxBoxBottom, adjustedOffset + boxHeight);
-        lastBottom = adjustedOffset + boxHeight + 8; // 8px gap between boxes
-      }
-
-      setCommentPositions(positions);
-      setMinContentHeight(maxBoxBottom);
+    for (const ln of layoutComments.keys()) {
+      boxesToPosition.push({
+        lineNum: ln,
+        ref: commentBoxRefs.current.get(ln) || null,
+        isActive: false,
+      });
     }
 
-    // Defer to rAF so layout reads happen after the browser paints.
-    // lineOffsets is accessed via ref so it's excluded from deps –
-    // removing it prevents a re-trigger when ELC boxes mount and shift layout.
-    const raf = requestAnimationFrame(() => recalcPositions());
-    return () => cancelAnimationFrame(raf);
-  }, [layoutCommentsByLine, activeLineIndex, resolvedCollapsedLines]);
+    if (activeLine !== null) {
+      boxesToPosition.push({
+        lineNum: activeLine + 1,
+        ref: commentBoxRefs.current.get(-1) || null,
+        isActive: true,
+      });
+    }
+
+    boxesToPosition.sort((a, b) => a.lineNum - b.lineNum);
+
+    let lastBottom = 0;
+    let maxBoxBottom = 0;
+
+    for (const { lineNum, ref, isActive } of boxesToPosition) {
+      const baseOffset = lineOffsetsRef.current.get(lineNum) || 0;
+      const adjustedOffset = Math.max(baseOffset, lastBottom);
+
+      positions.set(isActive ? -1 : lineNum, adjustedOffset);
+
+      let boxHeight: number;
+      if (ref) {
+        const headerEl = ref.firstElementChild as HTMLElement | null;
+        boxHeight = ref.offsetHeight;
+        if (!isActive) {
+          if (collapsed.has(lineNum)) {
+            boxHeight = headerEl?.offsetHeight ?? boxHeight;
+          } else if (replyLine !== lineNum) {
+            const contentEl = contentRefs.current.get(lineNum);
+            if (contentEl && headerEl) {
+              boxHeight = headerEl.offsetHeight + contentEl.offsetHeight;
+            }
+          }
+        }
+      } else {
+        boxHeight = 100;
+      }
+
+      maxBoxBottom = Math.max(maxBoxBottom, adjustedOffset + boxHeight);
+      lastBottom = adjustedOffset + boxHeight + 8;
+    }
+
+    setCommentPositions((prev) =>
+      mapsEqual(prev, positions) ? prev : positions,
+    );
+    setMinContentHeight((prev) =>
+      prev === maxBoxBottom ? prev : maxBoxBottom,
+    );
+  }, []);
+
+  const scheduleRecalcPositions = useCallback(() => {
+    if (recalcPositionsRafRef.current != null) return;
+    recalcPositionsRafRef.current = requestAnimationFrame(() => {
+      recalcPositionsRafRef.current = null;
+      recalcPositions();
+    });
+  }, [recalcPositions]);
+
+  // Re-run when comment layout structure changes (boxes added/removed, collapse, reply UI).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refs hold latest values; deps trigger recalc on structural state changes before RO may fire
+  useEffect(() => {
+    scheduleRecalcPositions();
+  }, [
+    scheduleRecalcPositions,
+    layoutCommentsByLine,
+    activeLineIndex,
+    resolvedCollapsedLines,
+    replyTarget,
+  ]);
+
+  // Re-run when sidebar content resizes (autosize textarea, collapse spring, reply form mount).
+  useEffect(() => {
+    if (!sidebarEl) return;
+    scheduleRecalcPositions();
+    const ro = new ResizeObserver(() => scheduleRecalcPositions());
+    ro.observe(sidebarEl);
+    return () => {
+      ro.disconnect();
+      if (recalcPositionsRafRef.current != null) {
+        cancelAnimationFrame(recalcPositionsRafRef.current);
+        recalcPositionsRafRef.current = null;
+      }
+    };
+  }, [sidebarEl, scheduleRecalcPositions]);
 
   // Helper to get the position for a specific line
   const getCommentPosition = (lineNumber: number): number => {
@@ -1474,6 +1501,7 @@ export function InlineCommentableMarkdown({
             getCommentPosition={getCommentPosition}
             commentBoxRefs={commentBoxRefs}
             contentRefs={contentRefs}
+            sidebarRef={setSidebarEl}
             onCommentMouseEnter={(lineIndex) =>
               hoverDispatchRef.current({
                 type: "enterComment",
@@ -1524,6 +1552,7 @@ interface CommentsSidebarProps {
   getCommentPosition: (lineNumber: number) => number;
   commentBoxRefs: React.MutableRefObject<Map<number, HTMLDivElement>>;
   contentRefs: React.MutableRefObject<Map<number, HTMLDivElement>>;
+  sidebarRef: (el: HTMLDivElement | null) => void;
   onCommentMouseEnter: (lineIndex: number) => void;
   onCommentMouseLeave: () => void;
 }
@@ -1552,11 +1581,12 @@ function CommentsSidebar({
   getCommentPosition,
   commentBoxRefs,
   contentRefs,
+  sidebarRef,
   onCommentMouseEnter,
   onCommentMouseLeave,
 }: CommentsSidebarProps) {
   return (
-    <div className="relative w-full lg:w-auto">
+    <div ref={sidebarRef} className="relative w-full lg:w-auto">
       {activeLineIndex !== null && (
         <LineCommentBox
           lineNumber={activeLineIndex + 1}
@@ -1589,15 +1619,7 @@ function CommentsSidebar({
             endLineNumber={lineRanges.get(lineNumber)}
             threads={lineThreads}
             position={getCommentPosition(lineNumber)}
-            replyingToThreadId={
-              replyTarget?.line === lineNumber && replyTarget.type === "thread"
-                ? replyTarget.threadId
-                : null
-            }
-            isStartingNewThread={
-              replyTarget?.line === lineNumber &&
-              replyTarget.type === "newThread"
-            }
+            replyTarget={lineReplyTarget(replyTarget, lineNumber)}
             replyInitialDraft={
               replyTarget?.line === lineNumber ? replyInitialDraft : ""
             }

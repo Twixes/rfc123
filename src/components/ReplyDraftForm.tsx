@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-
-const TEXTAREA_CLASS =
-  "w-full resize-none rounded-sm border border-gray-20 bg-surface px-3 py-2 text-sm text-foreground placeholder-gray-40 transition-shadow focus:outline-none focus:border-cyan focus:ring-2 focus:ring-cyan/20";
+import { CommentDraftTextarea } from "@/components/CommentDraftTextarea";
 
 interface ReplyDraftFormProps {
   initialDraft: string;
@@ -48,13 +46,11 @@ export function ReplyDraftForm({
 
   return (
     <>
-      <textarea
+      <CommentDraftTextarea
         ref={textareaRef}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         placeholder={placeholder}
-        className={TEXTAREA_CLASS}
-        rows={3}
         disabled={isSubmitting}
         onKeyDown={(e) => {
           if (e.key === "Escape") {

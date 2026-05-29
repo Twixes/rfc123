@@ -6,15 +6,14 @@ import { CommentMarkdown } from "@/components/CommentMarkdown";
 import { CommentPermalink } from "@/components/CommentPermalink";
 import { RelativeTime } from "@/components/RelativeTime";
 import { ReplyDraftForm } from "@/components/ReplyDraftForm";
-import type { CommentThread } from "@/lib/comment-threads";
+import type { CommentThread, LineReplyTarget } from "@/lib/comment-threads";
 
 interface ExistingLineCommentsProps {
   lineNumber: number;
   endLineNumber?: number;
   threads: CommentThread[];
   position: number;
-  replyingToThreadId: number | null;
-  isStartingNewThread: boolean;
+  replyTarget: LineReplyTarget | null;
   /** Seed when reply UI opens (e.g. quoted selection). Not updated per keystroke. */
   replyInitialDraft: string;
   isSubmitting: boolean;
@@ -44,8 +43,7 @@ export const ExistingLineComments = memo(function ExistingLineComments({
   endLineNumber,
   threads,
   position,
-  replyingToThreadId,
-  isStartingNewThread,
+  replyTarget,
   replyInitialDraft,
   isSubmitting,
   isCollapsed,
@@ -219,7 +217,8 @@ export const ExistingLineComments = memo(function ExistingLineComments({
                   </div>
                 ))}
               </div>
-              {replyingToThreadId === thread.id ? (
+              {replyTarget?.type === "thread" &&
+              replyTarget.threadId === thread.id ? (
                 <div className="px-3.5 pb-3 pt-1">
                   <ReplyDraftForm
                     key={`reply-${thread.id}`}
@@ -242,7 +241,7 @@ export const ExistingLineComments = memo(function ExistingLineComments({
                     Reply
                   </button>
                   {threadIndex === threads.length - 1 &&
-                    !isStartingNewThread && (
+                    replyTarget?.type !== "newThread" && (
                       <button
                         type="button"
                         onClick={onStartNewThread}
@@ -256,7 +255,7 @@ export const ExistingLineComments = memo(function ExistingLineComments({
             </div>
           ))}
 
-          {isStartingNewThread && (
+          {replyTarget?.type === "newThread" && (
             <div className="px-3.5 pb-3.5 pt-2 border-t border-dashed border-gray-20 mt-1">
               <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-50">
                 New thread

@@ -846,7 +846,7 @@ export function InlineCommentableMarkdown({
   threadsByLineRef.current = threadsByLine;
   const layoutCommentsByLineRef = useRef(layoutCommentsByLine);
   layoutCommentsByLineRef.current = layoutCommentsByLine;
-  const [sidebarEl, setSidebarEl] = useState<HTMLDivElement | null>(null);
+  const boxResizeObserverRef = useRef<ResizeObserver | null>(null);
 
   // Calculate line offsets after render using injected markers
   const recalcLinePositions = useCallback(() => {
@@ -1203,6 +1203,21 @@ export function InlineCommentableMarkdown({
     });
   }, [recalcPositions]);
 
+  const registerCommentBox = useCallback(
+    (lineNum: number, el: HTMLDivElement | null) => {
+      const prev = commentBoxRefs.current.get(lineNum);
+      const ro = boxResizeObserverRef.current;
+      if (prev && ro) ro.unobserve(prev);
+      if (el) {
+        commentBoxRefs.current.set(lineNum, el);
+        ro?.observe(el);
+      } else {
+        commentBoxRefs.current.delete(lineNum);
+      }
+    },
+    [],
+  );
+
   // Re-run when comment layout structure changes (boxes added/removed, collapse, reply UI).
   // biome-ignore lint/correctness/useExhaustiveDependencies: refs hold latest values; deps trigger recalc on structural state changes before RO may fire
   useEffect(() => {
@@ -1215,20 +1230,25 @@ export function InlineCommentableMarkdown({
     replyTarget,
   ]);
 
-  // Re-run when sidebar content resizes (autosize textarea, collapse spring, reply form mount).
+  // Absolutely positioned boxes don't resize the sidebar wrapper; observe each box instead.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reconnect observer when comment boxes mount/unmount
   useEffect(() => {
-    if (!sidebarEl) return;
-    scheduleRecalcPositions();
     const ro = new ResizeObserver(() => scheduleRecalcPositions());
-    ro.observe(sidebarEl);
+    boxResizeObserverRef.current = ro;
+    for (const el of commentBoxRefs.current.values()) {
+      ro.observe(el);
+    }
     return () => {
       ro.disconnect();
-      if (recalcPositionsRafRef.current != null) {
-        cancelAnimationFrame(recalcPositionsRafRef.current);
-        recalcPositionsRafRef.current = null;
-      }
+      boxResizeObserverRef.current = null;
     };
-  }, [sidebarEl, scheduleRecalcPositions]);
+  }, [
+    scheduleRecalcPositions,
+    layoutCommentsByLine,
+    activeLineIndex,
+    replyTarget,
+    resolvedCollapsedLines,
+  ]);
 
   // Helper to get the position for a specific line
   const getCommentPosition = (lineNumber: number): number => {
@@ -1499,9 +1519,8 @@ export function InlineCommentableMarkdown({
               });
             }}
             getCommentPosition={getCommentPosition}
-            commentBoxRefs={commentBoxRefs}
+            registerCommentBox={registerCommentBox}
             contentRefs={contentRefs}
-            sidebarRef={setSidebarEl}
             onCommentMouseEnter={(lineIndex) =>
               hoverDispatchRef.current({
                 type: "enterComment",
@@ -1550,9 +1569,8 @@ interface CommentsSidebarProps {
   onSubmitReply: (body: string) => void;
   onToggleCollapse: (lineNumber: number) => void;
   getCommentPosition: (lineNumber: number) => number;
-  commentBoxRefs: React.MutableRefObject<Map<number, HTMLDivElement>>;
+  registerCommentBox: (lineNum: number, el: HTMLDivElement | null) => void;
   contentRefs: React.MutableRefObject<Map<number, HTMLDivElement>>;
-  sidebarRef: (el: HTMLDivElement | null) => void;
   onCommentMouseEnter: (lineIndex: number) => void;
   onCommentMouseLeave: () => void;
 }
@@ -1579,14 +1597,13 @@ function CommentsSidebar({
   onSubmitReply,
   onToggleCollapse,
   getCommentPosition,
-  commentBoxRefs,
+  registerCommentBox,
   contentRefs,
-  sidebarRef,
   onCommentMouseEnter,
   onCommentMouseLeave,
 }: CommentsSidebarProps) {
   return (
-    <div ref={sidebarRef} className="relative w-full lg:w-auto">
+    <div className="relative w-full lg:w-auto">
       {activeLineIndex !== null && (
         <LineCommentBox
           lineNumber={activeLineIndex + 1}
@@ -1600,11 +1617,7 @@ function CommentsSidebar({
           }
           onClose={onCloseActiveComment}
           onSubmit={onSubmitActiveComment}
-          commentBoxRef={(el) => {
-            if (el) {
-              commentBoxRefs.current.set(-1, el);
-            }
-          }}
+          commentBoxRef={(el) => registerCommentBox(-1, el)}
           onMouseEnter={() => onCommentMouseEnter(activeLineIndex)}
           onMouseLeave={onCommentMouseLeave}
         />
@@ -1631,11 +1644,7 @@ function CommentsSidebar({
             onCancelReply={onCancelReply}
             onSubmitReply={onSubmitReply}
             onToggleCollapse={() => onToggleCollapse(lineNumber)}
-            commentBoxRef={(el) => {
-              if (el) {
-                commentBoxRefs.current.set(lineNumber, el);
-              }
-            }}
+            commentBoxRef={(el) => registerCommentBox(lineNumber, el)}
             onContentRef={(el) => {
               if (el) {
                 contentRefs.current.set(lineNumber, el);

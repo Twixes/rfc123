@@ -1,6 +1,7 @@
+// biome-ignore-all lint/a11y/noStaticElementInteractions: the box itself is the comment-thread anchor; inner buttons carry the interactive semantics
+// biome-ignore-all lint/performance/noImgElement: GitHub avatar URLs, served from a CDN; next/image's domain allowlist is heavier than the benefit here
 "use client";
 
-import { motion } from "motion/react";
 import { memo } from "react";
 import { CommentMarkdown } from "@/components/CommentMarkdown";
 import { CommentPermalink } from "@/components/CommentPermalink";
@@ -30,13 +31,6 @@ interface ExistingLineCommentsProps {
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
 }
-
-const SPRING = {
-  type: "spring" as const,
-  stiffness: 360,
-  damping: 36,
-  mass: 0.6,
-};
 
 export const ExistingLineComments = memo(function ExistingLineComments({
   lineNumber,
@@ -68,13 +62,11 @@ export const ExistingLineComments = memo(function ExistingLineComments({
     : String(lineNumber);
 
   return (
-    <motion.div
+    <div
       ref={commentBoxRef}
       data-comment-line={lineNumber}
-      className="group/note lg:absolute static w-full lg:w-[400px] mb-3 lg:mb-0 rounded-md border bg-surface"
-      initial={{ top: position }}
-      animate={{ top: position }}
-      transition={SPRING}
+      className="group/note lg:absolute static lg:top-0 w-full lg:w-[400px] mb-3 lg:mb-0 rounded-md border bg-surface"
+      style={{ transform: `translateY(${position}px)` }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
@@ -120,25 +112,21 @@ export const ExistingLineComments = memo(function ExistingLineComments({
           </svg>
         </button>
       ) : (
-        <div className="flex items-center justify-between py-2.5 pl-3.5 pr-2.5">
-          <button
-            type="button"
-            onClick={onToggleCollapse}
-            className="comment-line-badge inline-flex items-baseline gap-2 font-mono text-[10px] uppercase tracking-[0.12em] transition-opacity hover:opacity-70 cursor-pointer"
-          >
+        <button
+          type="button"
+          onClick={onToggleCollapse}
+          className="group/header flex w-full items-center justify-between py-2.5 pl-3.5 pr-2.5 text-left cursor-pointer rounded-md"
+          aria-label="Collapse thread"
+        >
+          <span className="comment-line-badge inline-flex items-baseline gap-2 font-mono text-[10px] uppercase tracking-[0.12em] transition-opacity group-hover/header:opacity-70">
             Line {lineLabel}
             {hasMultipleThreads && (
               <span className="text-gray-40 normal-case tracking-normal">
                 · {threads.length} threads
               </span>
             )}
-          </button>
-          <button
-            type="button"
-            onClick={onToggleCollapse}
-            className="rounded p-1 text-gray-40 transition-colors hover:bg-gray-5 hover:text-foreground cursor-pointer"
-            aria-label="Collapse thread"
-          >
+          </span>
+          <span className="rounded p-1 text-gray-40 transition-colors group-hover/header:bg-gray-5 group-hover/header:text-foreground">
             <svg
               className="h-3 w-3"
               fill="none"
@@ -153,19 +141,14 @@ export const ExistingLineComments = memo(function ExistingLineComments({
                 d="M5 15l7-7 7 7"
               />
             </svg>
-          </button>
-        </div>
+          </span>
+        </button>
       )}
 
-      <motion.div
-        initial={false}
-        animate={{
-          height: isCollapsed ? 0 : "auto",
-          opacity: isCollapsed ? 0 : 1,
-        }}
-        transition={SPRING}
-        className="overflow-hidden"
-      >
+      {/* Only mount thread bodies when expanded — react-markdown +
+          rehypeHighlight per comment is the dominant cost when many
+          comments load at once. */}
+      {!isCollapsed && (
         <div ref={onContentRef}>
           {threads.map((thread, threadIndex) => (
             <div key={thread.id}>
@@ -274,7 +257,7 @@ export const ExistingLineComments = memo(function ExistingLineComments({
             </div>
           )}
         </div>
-      </motion.div>
-    </motion.div>
+      )}
+    </div>
   );
 });

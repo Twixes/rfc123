@@ -28,6 +28,7 @@ import type { CommentThread, ReplyTarget } from "@/lib/comment-threads";
 import { groupIntoThreads, lineReplyTarget } from "@/lib/comment-threads";
 import type { Comment } from "@/lib/github";
 import { rehypeLineMarkers } from "@/lib/rehype-line-markers";
+import { usePerLineCommentHandlers } from "@/lib/use-per-line-comment-handlers";
 
 // Pretty-view plugins + line markers for inline comments.
 type PluginList = NonNullable<
@@ -58,6 +59,33 @@ function setsEqual<T>(a: Set<T>, b: Set<T>): boolean {
   if (a.size !== b.size) return false;
   for (const v of a) if (!b.has(v)) return false;
   return true;
+}
+
+/** Position-wise array equality using a custom element comparator. Returns
+ *  true iff `a` and `b` have the same length and `eq(a[i], b[i])` for all i.
+ *  Used to short-circuit React state updates when a recalc produced byte-
+ *  identical results, so downstream memos and effects don't rerun. */
+function arraysEqualBy<T>(
+  a: readonly T[],
+  b: readonly T[],
+  eq: (x: T, y: T) => boolean,
+): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (!eq(a[i], b[i])) return false;
+  return true;
+}
+
+function arrowPathEq(a: ArrowPath, b: ArrowPath): boolean {
+  return (
+    a.lineNumber === b.lineNumber &&
+    a.from.x === b.from.x &&
+    a.from.y === b.from.y &&
+    a.to.x === b.to.x &&
+    a.to.y === b.to.y &&
+    a.elbowX === b.elbowX &&
+    a.color === b.color &&
+    a.isDraft === b.isDraft
+  );
 }
 
 function groupCommentsByLine(comments: Comment[]): Map<number, Comment[]> {
@@ -237,8 +265,6 @@ function LineHoverController({
   activeLineIndex,
   commentsByLine,
   commentBoxRefs,
-  commentPositions: _commentPositions,
-  resolvedCollapsedLines: _resolvedCollapsedLines,
   markdownRef,
   containerEl,
   markdownColumn,
@@ -249,8 +275,6 @@ function LineHoverController({
   activeLineIndex: number | null;
   commentsByLine: Map<number, Comment[]>;
   commentBoxRefs: React.MutableRefObject<Map<number, HTMLDivElement>>;
-  commentPositions: Map<number, number>;
-  resolvedCollapsedLines: Set<number>;
   markdownRef: React.RefObject<HTMLDivElement | null>;
   containerEl: HTMLDivElement | null;
   markdownColumn: React.ReactNode;
@@ -431,7 +455,9 @@ function LineHoverController({
         };
       });
 
-    setArrowPaths(paths);
+    setArrowPaths((prev) =>
+      arraysEqualBy(prev, paths, arrowPathEq) ? prev : paths,
+    );
   }, [
     commentsByLine,
     activeLineIndex,
@@ -453,14 +479,25 @@ function LineHoverController({
   useEffect(() => {
     if (!containerEl) return;
     scheduleRecalcArrows();
-    const ro = new ResizeObserver(() => scheduleRecalcArrows());
+    // Width-only: height tracks `--min-content-height`, which recalcPositions
+    // updates on every box-layout pass; observing height re-enters
+    // recalcArrows mid-cascade and forces a layout flush per call. The
+    // commentPositions effect below retargets arrows once the cascade
+    // settles.
+    let lastWidth = containerEl.getBoundingClientRect().width;
+    const ro = new ResizeObserver((entries) => {
+      for (const e of entries) {
+        if (e.contentRect.width !== lastWidth) {
+          lastWidth = e.contentRect.width;
+          scheduleRecalcArrows();
+          return;
+        }
+      }
+    });
     ro.observe(containerEl);
-    const onScroll = () => scheduleRecalcArrows();
-    window.addEventListener("scroll", onScroll, true);
     const timer = setTimeout(() => scheduleRecalcArrows(), 350);
     return () => {
       ro.disconnect();
-      window.removeEventListener("scroll", onScroll, true);
       clearTimeout(timer);
       if (arrowsRafRef.current != null) {
         cancelAnimationFrame(arrowsRafRef.current);
@@ -571,7 +608,7 @@ interface LineNumbersColumnProps {
   onMouseLeaveLine: () => void;
 }
 
-function LineNumbersColumn({
+const LineNumbersColumn = memo(function LineNumbersColumn({
   lines,
   commentsByLine,
   lineOffsets,
@@ -744,7 +781,7 @@ function LineNumbersColumn({
       })}
     </div>
   );
-}
+});
 
 interface InlineCommentableMarkdownProps {
   content: string;
@@ -1230,10 +1267,13 @@ export function InlineCommentableMarkdown({
     replyTarget,
   ]);
 
-  // Absolutely positioned boxes don't resize the sidebar wrapper; observe each box instead.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reconnect observer when comment boxes mount/unmount
+  // Observer is created once; boxes attach/detach via `registerCommentBox`.
+  // Re-creating it on layout-state changes causes an initial-observation
+  // callback per box and saturates the thread on RFCs with many comments.
   useEffect(() => {
-    const ro = new ResizeObserver(() => scheduleRecalcPositions());
+    const ro = new ResizeObserver(() => {
+      scheduleRecalcPositions();
+    });
     boxResizeObserverRef.current = ro;
     for (const el of commentBoxRefs.current.values()) {
       ro.observe(el);
@@ -1242,13 +1282,7 @@ export function InlineCommentableMarkdown({
       ro.disconnect();
       boxResizeObserverRef.current = null;
     };
-  }, [
-    scheduleRecalcPositions,
-    layoutCommentsByLine,
-    activeLineIndex,
-    replyTarget,
-    resolvedCollapsedLines,
-  ]);
+  }, [scheduleRecalcPositions]);
 
   // Helper to get the position for a specific line
   const getCommentPosition = (lineNumber: number): number => {
@@ -1461,8 +1495,6 @@ export function InlineCommentableMarkdown({
         activeLineIndex={activeLineIndex}
         commentsByLine={layoutCommentsByLine}
         commentBoxRefs={commentBoxRefs}
-        commentPositions={commentPositions}
-        resolvedCollapsedLines={resolvedCollapsedLines}
         markdownRef={markdownRef}
         containerEl={containerEl}
         markdownColumn={markdownColumn}
@@ -1602,6 +1634,30 @@ function CommentsSidebar({
   onCommentMouseEnter,
   onCommentMouseLeave,
 }: CommentsSidebarProps) {
+  const getLineHandlers = usePerLineCommentHandlers({
+    registerCommentBox,
+    contentRefs,
+    onStartReply,
+    onStartNewThread,
+    onToggleCollapse,
+    onCommentMouseEnter,
+    onCommentMouseLeave,
+  });
+
+  // Active-line composer is keyed off the special index -1, so it doesn't
+  // need the per-line cache: LineCommentBox is mounted only when active and
+  // re-renders with the parent anyway.
+  const activeBoxCommentRef = (el: HTMLDivElement | null) =>
+    registerCommentBox(-1, el);
+  const activeBoxMouseEnter = () => {
+    if (activeLineIndex !== null) onCommentMouseEnter(activeLineIndex);
+  };
+
+  const sortedThreads = useMemo(
+    () => Array.from(threadsByLine.entries()).sort(([a], [b]) => a - b),
+    [threadsByLine],
+  );
+
   return (
     <div className="relative w-full lg:w-auto">
       {activeLineIndex !== null && (
@@ -1617,15 +1673,15 @@ function CommentsSidebar({
           }
           onClose={onCloseActiveComment}
           onSubmit={onSubmitActiveComment}
-          commentBoxRef={(el) => registerCommentBox(-1, el)}
-          onMouseEnter={() => onCommentMouseEnter(activeLineIndex)}
+          commentBoxRef={activeBoxCommentRef}
+          onMouseEnter={activeBoxMouseEnter}
           onMouseLeave={onCommentMouseLeave}
         />
       )}
 
-      {Array.from(threadsByLine.entries())
-        .sort(([a], [b]) => a - b)
-        .map(([lineNumber, lineThreads]) => (
+      {sortedThreads.map(([lineNumber, lineThreads]) => {
+        const h = getLineHandlers(lineNumber);
+        return (
           <ExistingLineComments
             key={lineNumber}
             lineNumber={lineNumber}
@@ -1639,23 +1695,18 @@ function CommentsSidebar({
             isSubmitting={isSubmitting}
             isCollapsed={resolvedCollapsedLines.has(lineNumber)}
             highlightedCommentId={highlightedCommentId}
-            onStartReply={(threadId) => onStartReply(lineNumber, threadId)}
-            onStartNewThread={() => onStartNewThread(lineNumber)}
+            onStartReply={h.onStartReply}
+            onStartNewThread={h.onStartNewThread}
             onCancelReply={onCancelReply}
             onSubmitReply={onSubmitReply}
-            onToggleCollapse={() => onToggleCollapse(lineNumber)}
-            commentBoxRef={(el) => registerCommentBox(lineNumber, el)}
-            onContentRef={(el) => {
-              if (el) {
-                contentRefs.current.set(lineNumber, el);
-              } else {
-                contentRefs.current.delete(lineNumber);
-              }
-            }}
-            onMouseEnter={() => onCommentMouseEnter(lineNumber - 1)}
-            onMouseLeave={onCommentMouseLeave}
+            onToggleCollapse={h.onToggleCollapse}
+            commentBoxRef={h.commentBoxRef}
+            onContentRef={h.onContentRef}
+            onMouseEnter={h.onMouseEnter}
+            onMouseLeave={h.onMouseLeave}
           />
-        ))}
+        );
+      })}
 
       {commentsByLine.size === 0 && activeLineIndex === null && (
         <div className="lg:absolute top-2 w-full lg:w-[400px] pl-3.5">

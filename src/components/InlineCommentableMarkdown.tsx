@@ -27,6 +27,12 @@ import {
 import type { CommentThread, ReplyTarget } from "@/lib/comment-threads";
 import { groupIntoThreads, lineReplyTarget } from "@/lib/comment-threads";
 import type { Comment } from "@/lib/github";
+import {
+  type ArrowPath,
+  type CascadeBox,
+  cascadeBoxes,
+  layoutArrows,
+} from "@/lib/inline-comment-layout";
 import { rehypeLineMarkers } from "@/lib/rehype-line-markers";
 import { usePerLineCommentHandlers } from "@/lib/use-per-line-comment-handlers";
 
@@ -250,21 +256,13 @@ function applyHoverToDom(
   }
 }
 
-type ArrowPath = {
-  lineNumber: number;
-  from: { x: number; y: number };
-  to: { x: number; y: number };
-  elbowX: number;
-  color: string;
-  isDraft: boolean;
-};
-
 function LineHoverController({
   dispatchRef,
   lineAlias,
   activeLineIndex,
   commentsByLine,
   commentBoxRefs,
+  commentPositions,
   markdownRef,
   containerEl,
   markdownColumn,
@@ -275,6 +273,10 @@ function LineHoverController({
   activeLineIndex: number | null;
   commentsByLine: Map<number, Comment[]>;
   commentBoxRefs: React.MutableRefObject<Map<number, HTMLDivElement>>;
+  /** Latest resolved Y for each comment box. Changes when a thread collapses,
+   *  expands, or otherwise resizes — used as an effect dependency so arrows
+   *  re-target to the new box positions. */
+  commentPositions: Map<number, number>;
   markdownRef: React.RefObject<HTMLDivElement | null>;
   containerEl: HTMLDivElement | null;
   markdownColumn: React.ReactNode;
@@ -337,12 +339,10 @@ function LineHoverController({
       return { width: rect.width, height: rect.height };
     });
 
-    const rawPaths: Array<{
+    const rawArrows: Array<{
       lineNumber: number;
       from: { x: number; y: number };
       to: { x: number; y: number };
-      vy1: number;
-      vy2: number;
       color: string;
       isDraft: boolean;
     }> = [];
@@ -383,20 +383,16 @@ function LineHoverController({
 
       const boxRect = boxRef.getBoundingClientRect();
       const targetRect = targetEl.getBoundingClientRect();
-      const from = {
-        x: boxRect.left - rect.left,
-        y: boxRect.top - rect.top + boxRect.height / 2,
-      };
-      const to = {
-        x: targetRect.right - rect.left,
-        y: targetRect.top - rect.top + 13,
-      };
-      rawPaths.push({
+      rawArrows.push({
         lineNumber: lineNum,
-        from,
-        to,
-        vy1: Math.min(from.y, to.y),
-        vy2: Math.max(from.y, to.y),
+        from: {
+          x: boxRect.left - rect.left,
+          y: boxRect.top - rect.top + boxRect.height / 2,
+        },
+        to: {
+          x: targetRect.right - rect.left,
+          y: targetRect.top - rect.top + 13,
+        },
         color,
         isDraft,
       });
@@ -419,41 +415,7 @@ function LineHoverController({
       );
     }
 
-    const OFFSET = 4;
-    const baseElbowX =
-      rawPaths.length > 0
-        ? rawPaths.reduce((s, p) => s + (p.from.x + p.to.x) / 2, 0) /
-          rawPaths.length
-        : 0;
-    const segments: Array<{ x: number; vy1: number; vy2: number }> = [];
-    const paths = rawPaths
-      .sort((a, b) => a.vy1 - b.vy1)
-      .map((p) => {
-        let offset = 0;
-        let elbowX: number;
-        for (;;) {
-          const tryX = Math.max(p.to.x, baseElbowX - offset);
-          const overlaps = segments.some(
-            (s) =>
-              Math.abs(s.x - tryX) < OFFSET &&
-              Math.min(p.vy2, s.vy2) > Math.max(p.vy1, s.vy1),
-          );
-          if (!overlaps) {
-            elbowX = tryX;
-            segments.push({ x: tryX, vy1: p.vy1, vy2: p.vy2 });
-            break;
-          }
-          offset += OFFSET;
-        }
-        return {
-          lineNumber: p.lineNumber,
-          from: p.from,
-          to: p.to,
-          elbowX,
-          color: p.color,
-          isDraft: p.isDraft,
-        };
-      });
+    const paths = layoutArrows(rawArrows);
 
     setArrowPaths((prev) =>
       arraysEqualBy(prev, paths, arrowPathEq) ? prev : paths,
@@ -504,6 +466,15 @@ function LineHoverController({
       }
     };
   }, [scheduleRecalcArrows, containerEl]);
+
+  // Retarget arrows once the cascade settles. `commentPositions` changes when
+  // a thread collapses/expands or a reply UI opens — the box's Y moves, so
+  // its arrow has to follow. The container ResizeObserver above is
+  // width-only and won't fire for height-only changes triggered by these.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: commentPositions is the trigger we want; recalcArrows reads box rects via refs
+  useEffect(() => {
+    scheduleRecalcArrows();
+  }, [scheduleRecalcArrows, commentPositions]);
 
   return (
     <>
@@ -797,6 +768,11 @@ interface InlineCommentableMarkdownProps {
     body: string,
     replyToCommentId?: number,
   ) => Promise<void>;
+  /** Hide the gutter buttons, the text-selection tooltip, and the
+   *  "click a line to comment" affordance. Existing threads stay clickable
+   *  for replies. Used by edit-mode preview, where the body is mid-edit and
+   *  there's nothing meaningful to start a new thread against. */
+  disableNewComments?: boolean;
 }
 
 export function InlineCommentableMarkdown({
@@ -809,6 +785,7 @@ export function InlineCommentableMarkdown({
   commentsLoading,
   highlightedCommentId,
   onCommentSubmit,
+  disableNewComments = false,
 }: InlineCommentableMarkdownProps) {
   const hoverDispatchRef = useRef<LineHoverDispatch>(() => {});
   const [activeLineIndex, setActiveLineIndex] = useState<number | null>(null);
@@ -1057,6 +1034,8 @@ export function InlineCommentableMarkdown({
   replyTargetRef.current = replyTarget;
   const lineRangesRef = useRef(lineRanges);
   lineRangesRef.current = lineRanges;
+  const disableNewCommentsRef = useRef(disableNewComments);
+  disableNewCommentsRef.current = disableNewComments;
 
   // Handle clicking on a line in the markdown content
   const handleLineClick = useCallback(
@@ -1122,6 +1101,7 @@ export function InlineCommentableMarkdown({
           });
         }
       } else {
+        if (disableNewCommentsRef.current) return;
         if (activeLineIndexRef.current === lineIndex) {
           setActiveLineIndex(null);
           setLineCommentInitialDraft("");
@@ -1163,73 +1143,67 @@ export function InlineCommentableMarkdown({
 
   const recalcPositionsRafRef = useRef<number | null>(null);
   const recalcPositions = useCallback(() => {
-    const positions = new Map<number, number>();
     const replyLine = replyTargetRef.current?.line ?? null;
     const collapsed = resolvedCollapsedLinesRef.current;
     const layoutComments = layoutCommentsByLineRef.current;
     const activeLine = activeLineIndexRef.current;
 
-    const boxesToPosition: Array<{
-      lineNum: number;
-      ref: HTMLDivElement | null;
-      isActive: boolean;
-    }> = [];
+    const boxes: CascadeBox[] = [];
+
+    const measureHeight = (
+      ref: HTMLDivElement | null,
+      lineNum: number,
+      isActive: boolean,
+    ): number => {
+      if (!ref) return 100;
+      const headerEl = ref.firstElementChild as HTMLElement | null;
+      let height = ref.offsetHeight;
+      if (!isActive) {
+        if (collapsed.has(lineNum)) {
+          height = headerEl?.offsetHeight ?? height;
+        } else if (replyLine !== lineNum) {
+          const contentEl = contentRefs.current.get(lineNum);
+          if (contentEl && headerEl) {
+            height = headerEl.offsetHeight + contentEl.offsetHeight;
+          }
+        }
+      }
+      return height;
+    };
 
     for (const ln of layoutComments.keys()) {
-      boxesToPosition.push({
-        lineNum: ln,
-        ref: commentBoxRefs.current.get(ln) || null,
-        isActive: false,
+      boxes.push({
+        key: ln,
+        sortLine: ln,
+        baseOffset: lineOffsetsRef.current.get(ln) ?? 0,
+        boxHeight: measureHeight(
+          commentBoxRefs.current.get(ln) ?? null,
+          ln,
+          false,
+        ),
       });
     }
 
     if (activeLine !== null) {
-      boxesToPosition.push({
-        lineNum: activeLine + 1,
-        ref: commentBoxRefs.current.get(-1) || null,
-        isActive: true,
+      const activeLine1Based = activeLine + 1;
+      boxes.push({
+        key: -1,
+        sortLine: activeLine1Based,
+        baseOffset: lineOffsetsRef.current.get(activeLine1Based) ?? 0,
+        boxHeight: measureHeight(
+          commentBoxRefs.current.get(-1) ?? null,
+          activeLine1Based,
+          true,
+        ),
       });
     }
 
-    boxesToPosition.sort((a, b) => a.lineNum - b.lineNum);
-
-    let lastBottom = 0;
-    let maxBoxBottom = 0;
-
-    for (const { lineNum, ref, isActive } of boxesToPosition) {
-      const baseOffset = lineOffsetsRef.current.get(lineNum) || 0;
-      const adjustedOffset = Math.max(baseOffset, lastBottom);
-
-      positions.set(isActive ? -1 : lineNum, adjustedOffset);
-
-      let boxHeight: number;
-      if (ref) {
-        const headerEl = ref.firstElementChild as HTMLElement | null;
-        boxHeight = ref.offsetHeight;
-        if (!isActive) {
-          if (collapsed.has(lineNum)) {
-            boxHeight = headerEl?.offsetHeight ?? boxHeight;
-          } else if (replyLine !== lineNum) {
-            const contentEl = contentRefs.current.get(lineNum);
-            if (contentEl && headerEl) {
-              boxHeight = headerEl.offsetHeight + contentEl.offsetHeight;
-            }
-          }
-        }
-      } else {
-        boxHeight = 100;
-      }
-
-      maxBoxBottom = Math.max(maxBoxBottom, adjustedOffset + boxHeight);
-      lastBottom = adjustedOffset + boxHeight + 8;
-    }
+    const { positions, maxBottom } = cascadeBoxes(boxes);
 
     setCommentPositions((prev) =>
       mapsEqual(prev, positions) ? prev : positions,
     );
-    setMinContentHeight((prev) =>
-      prev === maxBoxBottom ? prev : maxBoxBottom,
-    );
+    setMinContentHeight((prev) => (prev === maxBottom ? prev : maxBottom));
   }, []);
 
   const scheduleRecalcPositions = useCallback(() => {
@@ -1284,13 +1258,13 @@ export function InlineCommentableMarkdown({
     };
   }, [scheduleRecalcPositions]);
 
-  // Helper to get the position for a specific line
   const getCommentPosition = (lineNumber: number): number => {
-    return commentPositions.get(lineNumber) || lineOffsets.get(lineNumber) || 0;
+    return commentPositions.get(lineNumber) ?? lineOffsets.get(lineNumber) ?? 0;
   };
 
   // Handle mouse down to start selection tracking
   function handleMouseDown() {
+    if (disableNewComments) return;
     isSelectingRef.current = true;
     if (tooltipRef.current) {
       tooltipRef.current.style.display = "none";
@@ -1299,6 +1273,7 @@ export function InlineCommentableMarkdown({
 
   // Handle mouse move during selection to update tooltip
   function handleMouseMove(e: React.MouseEvent<HTMLDivElement>) {
+    if (disableNewComments) return;
     if (!isSelectingRef.current || !tooltipRef.current) return;
 
     const selection = window.getSelection();
@@ -1381,7 +1356,7 @@ export function InlineCommentableMarkdown({
           setReplyTarget({ type: "newThread", line: lineNumber });
         }
         setReplyInitialDraft(`> ${selectedText}\n`);
-      } else {
+      } else if (!disableNewComments) {
         setActiveLineIndex(lineIndex);
         setLineCommentInitialDraft(`> ${selectedText}\n`);
       }
@@ -1454,19 +1429,25 @@ export function InlineCommentableMarkdown({
   );
 
   const markdownColumn = (
-    <div className="relative flex gap-2 sm:gap-4 -ml-2 sm:-ml-4 min-w-0 h-fit">
-      <LineNumbersColumn
-        lines={lines}
-        commentsByLine={commentsByLine}
-        lineOffsets={lineOffsets}
-        linesWithMarkers={linesWithMarkers}
-        lineRanges={lineRanges}
-        resolvedCollapsedLines={resolvedCollapsedLines}
-        lineRefs={lineRefs}
-        onLineClick={handleLineClick}
-        onMouseEnterLine={handleMouseEnterLine}
-        onMouseLeaveLine={handleMouseLeaveLine}
-      />
+    <div
+      className={`relative flex min-w-0 h-fit ${
+        disableNewComments ? "" : "gap-2 sm:gap-4 -ml-2 sm:-ml-4"
+      }`}
+    >
+      {!disableNewComments && (
+        <LineNumbersColumn
+          lines={lines}
+          commentsByLine={commentsByLine}
+          lineOffsets={lineOffsets}
+          linesWithMarkers={linesWithMarkers}
+          lineRanges={lineRanges}
+          resolvedCollapsedLines={resolvedCollapsedLines}
+          lineRefs={lineRefs}
+          onLineClick={handleLineClick}
+          onMouseEnterLine={handleMouseEnterLine}
+          onMouseLeaveLine={handleMouseLeaveLine}
+        />
+      )}
       <div
         ref={markdownRef}
         className={`${PROSE_WRAPPER_CLASS} flex-1 min-w-0 overflow-x-auto relative`}
@@ -1495,6 +1476,7 @@ export function InlineCommentableMarkdown({
         activeLineIndex={activeLineIndex}
         commentsByLine={layoutCommentsByLine}
         commentBoxRefs={commentBoxRefs}
+        commentPositions={commentPositions}
         markdownRef={markdownRef}
         containerEl={containerEl}
         markdownColumn={markdownColumn}
@@ -1513,6 +1495,7 @@ export function InlineCommentableMarkdown({
             highlightedCommentId={highlightedCommentId}
             commentsByLine={layoutCommentsByLine}
             commentsLoading={commentsLoading}
+            hideEmptyHint={disableNewComments}
             onCloseActiveComment={() => {
               setActiveLineIndex(null);
               setLineCommentInitialDraft("");
@@ -1593,6 +1576,9 @@ interface CommentsSidebarProps {
   highlightedCommentId?: number | null;
   commentsByLine: Map<number, Comment[]>;
   commentsLoading?: boolean;
+  /** Suppress the "Click any line to leave a note" empty-state hint when
+   *  new-thread creation is disabled. Existing-thread state is unaffected. */
+  hideEmptyHint?: boolean;
   onCloseActiveComment: () => void;
   onSubmitActiveComment: (body: string) => void;
   onStartReply: (lineNumber: number, threadId: number) => void;
@@ -1621,6 +1607,7 @@ function CommentsSidebar({
   highlightedCommentId,
   commentsByLine,
   commentsLoading,
+  hideEmptyHint = false,
   onCloseActiveComment,
   onSubmitActiveComment,
   onStartReply,
@@ -1667,8 +1654,8 @@ function CommentsSidebar({
           initialDraft={lineCommentInitialDraft}
           isSubmitting={isSubmitting}
           position={
-            commentPositions.get(-1) ||
-            lineOffsets.get(activeLineIndex + 1) ||
+            commentPositions.get(-1) ??
+            lineOffsets.get(activeLineIndex + 1) ??
             0
           }
           onClose={onCloseActiveComment}
@@ -1708,23 +1695,25 @@ function CommentsSidebar({
         );
       })}
 
-      {commentsByLine.size === 0 && activeLineIndex === null && (
-        <div className="lg:absolute top-2 w-full lg:w-[400px] pl-3.5">
-          {commentsLoading ? (
-            <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-40">
-              Loading notes…
-            </p>
-          ) : (
-            <p className="text-xs text-gray-50">
-              <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-40">
-                Margin
-              </span>
-              <span className="mx-2 text-gray-30">·</span>
-              Click any line, or select text, to leave a note.
-            </p>
-          )}
-        </div>
-      )}
+      {commentsByLine.size === 0 &&
+        activeLineIndex === null &&
+        !hideEmptyHint && (
+          <div className="lg:absolute top-2 w-full lg:w-[400px] pl-3.5">
+            {commentsLoading ? (
+              <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-40">
+                Loading notes…
+              </p>
+            ) : (
+              <p className="text-xs text-gray-50">
+                <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-gray-40">
+                  Margin
+                </span>
+                <span className="mx-2 text-gray-30">·</span>
+                Click any line, or select text, to leave a note.
+              </p>
+            )}
+          </div>
+        )}
     </div>
   );
 }

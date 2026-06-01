@@ -96,14 +96,21 @@ export function GeneralCommentsSection({
                 transition={{ type: "spring", stiffness: 400, damping: 35 }}
               >
                 <div className="mb-3 flex items-center gap-2">
-                  <img
-                    src={comment.userAvatar}
-                    alt={comment.user}
-                    className="h-6 w-6 rounded-full border border-gray-20"
-                  />
-                  <span className="text-sm font-medium text-foreground">
-                    {comment.user}
-                  </span>
+                  <a
+                    href={`https://github.com/${encodeURIComponent(comment.user)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group/author flex items-center gap-2"
+                  >
+                    <img
+                      src={comment.userAvatar}
+                      alt={comment.user}
+                      className="h-6 w-6 rounded-full border border-gray-20"
+                    />
+                    <span className="text-sm font-medium text-foreground group-hover/author:underline underline-offset-2">
+                      {comment.user}
+                    </span>
+                  </a>
                   <span className="text-gray-30">·</span>
                   <span className="text-xs text-gray-50">
                     <RelativeTime date={comment.createdAt} />

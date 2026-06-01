@@ -82,44 +82,58 @@ export function GeneralCommentsSection({
               hidden: {},
             }}
           >
-            {comments.map((comment) => (
-              <motion.li
-                key={comment.id}
-                id={`comment-${comment.id}`}
-                className={`py-6 transition-colors duration-700 ${
-                  highlightedCommentId === comment.id ? "bg-cyan/10" : ""
-                }`}
-                variants={{
-                  visible: { opacity: 1, y: 0 },
-                  hidden: { opacity: 0, y: 8 },
-                }}
-                transition={{ type: "spring", stiffness: 400, damping: 35 }}
-              >
-                <div className="mb-3 flex items-center gap-2">
-                  <a
-                    href={`https://github.com/${encodeURIComponent(comment.user)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="group/author flex items-center gap-2"
-                  >
-                    <img
-                      src={comment.userAvatar}
-                      alt={comment.user}
-                      className="h-6 w-6 rounded-full border border-gray-20"
-                    />
-                    <span className="text-sm font-medium text-foreground group-hover/author:underline underline-offset-2">
-                      {comment.user}
-                    </span>
-                  </a>
-                  <span className="text-gray-30">·</span>
-                  <span className="text-xs text-gray-50">
-                    <RelativeTime date={comment.createdAt} />
+            {comments.map((comment) => {
+              const isBot = comment.user.endsWith("[bot]");
+              const authorContent = (
+                <>
+                  <img
+                    src={comment.userAvatar}
+                    alt={comment.user}
+                    className="h-6 w-6 rounded-full border border-gray-20"
+                  />
+                  <span className="text-sm font-medium text-foreground group-hover/author:underline underline-offset-2">
+                    {comment.user}
                   </span>
-                  <CommentPermalink commentId={comment.id} />
-                </div>
-                <CommentMarkdown content={comment.body} />
-              </motion.li>
-            ))}
+                </>
+              );
+              return (
+                <motion.li
+                  key={comment.id}
+                  id={`comment-${comment.id}`}
+                  className={`py-6 transition-colors duration-700 ${
+                    highlightedCommentId === comment.id ? "bg-cyan/10" : ""
+                  }`}
+                  variants={{
+                    visible: { opacity: 1, y: 0 },
+                    hidden: { opacity: 0, y: 8 },
+                  }}
+                  transition={{ type: "spring", stiffness: 400, damping: 35 }}
+                >
+                  <div className="mb-3 flex items-center gap-2">
+                    {isBot ? (
+                      <span className="flex items-center gap-2 cursor-default">
+                        {authorContent}
+                      </span>
+                    ) : (
+                      <a
+                        href={`https://github.com/${encodeURIComponent(comment.user)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="group/author flex items-center gap-2"
+                      >
+                        {authorContent}
+                      </a>
+                    )}
+                    <span className="text-gray-30">·</span>
+                    <span className="text-xs text-gray-50">
+                      <RelativeTime date={comment.createdAt} />
+                    </span>
+                    <CommentPermalink commentId={comment.id} />
+                  </div>
+                  <CommentMarkdown content={comment.body} />
+                </motion.li>
+              );
+            })}
           </motion.ul>
         )
       )}

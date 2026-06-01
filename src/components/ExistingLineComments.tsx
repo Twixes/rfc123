@@ -173,48 +173,62 @@ export const ExistingLineComments = memo(function ExistingLineComments({
                 <div className="border-t border-dashed border-gray-20 mx-3.5 my-3" />
               )}
               <div className="space-y-3.5 px-3.5 pb-2 pt-0.5">
-                {thread.comments.map((comment, commentIndex) => (
-                  <div
-                    key={comment.id}
-                    id={`comment-${comment.id}`}
-                    className={`relative rounded transition-colors duration-700 ${
-                      highlightedCommentId === comment.id
-                        ? "bg-cyan/10 -mx-1.5 px-1.5 py-1"
-                        : ""
-                    }`}
-                  >
-                    {commentIndex > 0 && (
-                      <span
-                        aria-hidden
-                        className="absolute -top-2 left-2 h-2 w-px bg-gray-20"
+                {thread.comments.map((comment, commentIndex) => {
+                  const isBot = comment.user.endsWith("[bot]");
+                  const authorContent = (
+                    <>
+                      <img
+                        src={comment.userAvatar}
+                        alt={comment.user}
+                        className="h-4 w-4 rounded-full border border-gray-20"
                       />
-                    )}
-                    <div className="mb-1.5 flex items-center gap-2">
-                      <a
-                        href={`https://github.com/${encodeURIComponent(comment.user)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="group/author flex items-center gap-2"
-                      >
-                        <img
-                          src={comment.userAvatar}
-                          alt={comment.user}
-                          className="h-4 w-4 rounded-full border border-gray-20"
+                      <span className="text-xs font-medium text-foreground group-hover/author:underline underline-offset-2">
+                        {comment.user}
+                      </span>
+                    </>
+                  );
+                  return (
+                    <div
+                      key={comment.id}
+                      id={`comment-${comment.id}`}
+                      className={`relative rounded transition-colors duration-700 ${
+                        highlightedCommentId === comment.id
+                          ? "bg-cyan/10 -mx-1.5 px-1.5 py-1"
+                          : ""
+                      }`}
+                    >
+                      {commentIndex > 0 && (
+                        <span
+                          aria-hidden
+                          className="absolute -top-2 left-2 h-2 w-px bg-gray-20"
                         />
-                        <span className="text-xs font-medium text-foreground group-hover/author:underline underline-offset-2">
-                          {comment.user}
-                        </span>
-                      </a>
-                      <span className="text-gray-30">·</span>
-                      <RelativeTime
-                        date={comment.createdAt}
-                        className="text-[11px] text-gray-50"
-                      />
-                      <CommentPermalink commentId={comment.id} />
+                      )}
+                      <div className="mb-1.5 flex items-center gap-2">
+                        {isBot ? (
+                          <span className="flex items-center gap-2 cursor-default">
+                            {authorContent}
+                          </span>
+                        ) : (
+                          <a
+                            href={`https://github.com/${encodeURIComponent(comment.user)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="group/author flex items-center gap-2"
+                          >
+                            {authorContent}
+                          </a>
+                        )}
+                        <span className="text-gray-30">·</span>
+                        <RelativeTime
+                          date={comment.createdAt}
+                          className="text-[11px] text-gray-50"
+                        />
+                        <CommentPermalink commentId={comment.id} />
+                      </div>
+                      <CommentMarkdown content={comment.body} />
                     </div>
-                    <CommentMarkdown content={comment.body} />
-                  </div>
-                ))}
+                  );
+                })}
               </div>
               {replyTarget?.type === "thread" &&
               replyTarget.threadId === thread.id ? (

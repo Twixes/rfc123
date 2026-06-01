@@ -56,6 +56,7 @@ export const ExistingLineComments = memo(function ExistingLineComments({
   const totalCommentCount = allComments.length;
   const firstComment = threads[0]?.comments[0];
   const hasMultipleThreads = threads.length > 1;
+  const isOutdated = allComments.some((c) => c.outdated);
   const isRange = endLineNumber != null && endLineNumber > lineNumber;
   const lineLabel = isRange
     ? `${lineNumber}–${endLineNumber}`
@@ -79,6 +80,14 @@ export const ExistingLineComments = memo(function ExistingLineComments({
           <span className="comment-line-badge shrink-0 font-mono text-[10px] uppercase tracking-[0.12em] transition-opacity">
             L{lineLabel}
           </span>
+          {isOutdated && (
+            <span
+              title="The line this comment was anchored to no longer exists in the diff."
+              className="shrink-0 rounded-sm bg-gray-10 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-70"
+            >
+              Outdated
+            </span>
+          )}
           <span className="min-w-0 flex-1 truncate text-xs text-gray-70">
             <span className="font-medium text-foreground">
               {firstComment?.user}
@@ -123,6 +132,14 @@ export const ExistingLineComments = memo(function ExistingLineComments({
             {hasMultipleThreads && (
               <span className="text-gray-40 normal-case tracking-normal">
                 · {threads.length} threads
+              </span>
+            )}
+            {isOutdated && (
+              <span
+                title="The line this comment was anchored to no longer exists in the diff."
+                className="rounded-sm bg-gray-10 px-1.5 py-0.5 text-gray-70"
+              >
+                Outdated
               </span>
             )}
           </span>
@@ -194,14 +211,6 @@ export const ExistingLineComments = memo(function ExistingLineComments({
                         className="text-[11px] text-gray-50"
                       />
                       <CommentPermalink commentId={comment.id} />
-                      {comment.outdated && (
-                        <span
-                          title="The line this comment was anchored to no longer exists in the diff."
-                          className="ml-auto rounded-sm bg-gray-10 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-70"
-                        >
-                          Outdated
-                        </span>
-                      )}
                     </div>
                     <CommentMarkdown content={comment.body} />
                   </div>

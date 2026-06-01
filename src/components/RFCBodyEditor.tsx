@@ -1,11 +1,16 @@
 "use client";
 
-import { type ReactNode, useState } from "react";
+import type { ReactCodeMirrorRef } from "@uiw/react-codemirror";
+import { type ReactNode, type Ref, useState } from "react";
 import { RFCMarkdownEditor } from "@/components/RFCMarkdownEditor";
 import {
   type RfcMarkdownAssets,
   RfcPrettyMarkdown,
 } from "@/components/RfcPrettyMarkdown";
+
+export function EmptyPreviewHint() {
+  return <p className="text-sm text-gray-50">Nothing to preview yet.</p>;
+}
 
 export type RFCBodyEditorMode = "write" | "preview";
 
@@ -25,6 +30,11 @@ interface RFCBodyEditorProps {
   previewSlot?: ReactNode;
   /** Repo context for image proxies in preview (Pretty-parity rendering). */
   previewAssets?: RfcMarkdownAssets;
+  /** Forwarded to RFCMarkdownEditor — gives the parent a handle on the
+   *  underlying CodeMirror view. */
+  editorRef?: Ref<ReactCodeMirrorRef>;
+  /** Forwarded to RFCMarkdownEditor — fires on every CodeMirror update. */
+  onEditorUpdate?: () => void;
 }
 
 export function RFCBodyEditor({
@@ -35,6 +45,8 @@ export function RFCBodyEditor({
   onModeChange,
   previewSlot,
   previewAssets,
+  editorRef,
+  onEditorUpdate,
 }: RFCBodyEditorProps) {
   const [internalTab, setInternalTab] = useState<RFCBodyEditorMode>("write");
   const isControlled = mode !== undefined;
@@ -51,11 +63,7 @@ export function RFCBodyEditor({
   const showHeader = !!headerSlot || showInternalTabs;
 
   return (
-    <div
-      className={`border border-gray-20 rounded-md bg-surface focus-within:border-gray-30 transition-colors ${
-        activeTab === "preview" ? "overflow-hidden" : ""
-      }`}
-    >
+    <div className="border border-gray-20 rounded-md bg-surface focus-within:border-gray-30 transition-colors overflow-hidden">
       {showHeader && (
         <div className="flex items-center gap-3 px-5 sm:px-6 pt-5 py-4 border-b border-gray-20">
           {headerSlot ? (
@@ -96,6 +104,8 @@ export function RFCBodyEditor({
           value={body}
           onChange={onBodyChange}
           className="rfc-markdown-editor"
+          editorRef={editorRef}
+          onEditorUpdate={onEditorUpdate}
         />
       ) : (
         <div className="p-5 sm:p-6 min-h-96">
@@ -103,7 +113,7 @@ export function RFCBodyEditor({
             (body.trim() ? (
               <RfcPrettyMarkdown content={body} assets={previewAssets} />
             ) : (
-              <p className="text-sm text-gray-50">Nothing to preview yet.</p>
+              <EmptyPreviewHint />
             ))}
         </div>
       )}

@@ -164,7 +164,7 @@ export const ExistingLineComments = memo(function ExistingLineComments({
                       highlightedCommentId === comment.id
                         ? "bg-cyan/10 -mx-1.5 px-1.5 py-1"
                         : ""
-                    } ${comment.outdated ? "opacity-60" : ""}`}
+                    }`}
                   >
                     {commentIndex > 0 && (
                       <span

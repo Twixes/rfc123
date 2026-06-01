@@ -1,16 +1,18 @@
 "use client";
 
+import type { ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import posthog from "posthog-js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Checkbox from "@/components/Checkbox";
 import { DiscussWithAgentButton } from "@/components/DiscussWithAgentButton";
 import type { ReviewerItem } from "@/components/EditableReviewers";
+import { EditModeInlineComments } from "@/components/EditModeInlineComments";
 import { GeneralCommentsSection } from "@/components/GeneralCommentsSection";
 import { InlineCommentableMarkdown } from "@/components/InlineCommentableMarkdown";
 import { PencilIcon } from "@/components/icons/PencilIcon";
 import { MarkdownRawView } from "@/components/MarkdownRawView";
 import { RelativeTime } from "@/components/RelativeTime";
-import { RFCBodyEditor } from "@/components/RFCBodyEditor";
+import { EmptyPreviewHint, RFCBodyEditor } from "@/components/RFCBodyEditor";
 import RFCDetailLoadingSkeleton from "@/components/RFCDetailLoadingSkeleton";
 import { RFCMetadataHeader } from "@/components/RFCMetadataHeader";
 import RFCsTopBar from "@/components/RFCsTopBar";
@@ -25,7 +27,12 @@ import {
 } from "@/components/RfcPrettyMarkdown";
 import Tooltip from "@/components/Tooltip";
 import type { Comment, RFCDetail, RfcStateAction } from "@/lib/github";
-import { type LineDiffEntry, lineDiff } from "@/lib/line-diff";
+import {
+  type LineDiffEntry,
+  lineDiff,
+  mapOriginalLines,
+} from "@/lib/line-diff";
+import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { useRfcDraft } from "@/lib/use-rfc-draft";
 import { ViewModeToggle } from "./ViewModeToggle";
 
@@ -731,6 +738,13 @@ export default function RFCDetailClient({
           <BodyEditMode
             body={editingBody}
             originalBody={rfc.markdownContent}
+            owner={owner}
+            repo={repo}
+            markdownFilePath={rfc.markdownFilePath}
+            headRef={rfc.headSha}
+            lineComments={lineComments}
+            highlightedCommentId={highlightedCommentId}
+            onCommentSubmit={handleInlineComment}
             previewAssets={
               editPreviewAssets ?? {
                 owner,
@@ -793,8 +807,22 @@ export default function RFCDetailClient({
 interface BodyEditModeProps {
   body: string;
   /** The unedited version of the body – used as the "before" side of the diff
-   *  view when the user toggles Preview → Diff. */
+   *  view when the user toggles Preview → Diff, and as the original-line
+   *  reference for inline-comment anchoring. */
   originalBody: string;
+  owner: string;
+  repo: string;
+  markdownFilePath: string | null;
+  headRef: string;
+  /** Inline comments to display next to the editor — anchored to lines in
+   *  `originalBody`. The component remaps them to the current buffer. */
+  lineComments: Comment[];
+  highlightedCommentId: number | null;
+  onCommentSubmit: (
+    line: number,
+    body: string,
+    replyToCommentId?: number,
+  ) => Promise<void>;
   previewAssets: RfcMarkdownAssets;
   onBodyChange: (next: string) => void;
   /** Page-level Write/Preview toggle drives the editor – RFCBodyEditor hides
@@ -816,6 +844,13 @@ interface BodyEditModeProps {
 function BodyEditMode({
   body,
   originalBody,
+  owner,
+  repo,
+  markdownFilePath,
+  headRef,
+  lineComments,
+  highlightedCommentId,
+  onCommentSubmit,
   previewAssets,
   onBodyChange,
   mode,
@@ -830,20 +865,69 @@ function BodyEditMode({
   saveError,
 }: BodyEditModeProps) {
   const [showDiff, setShowDiff] = useState(false);
+
+  const editorRef = useRef<ReactCodeMirrorRef>(null);
+  const writeContainerRef = useRef<HTMLDivElement>(null);
+  const [editTick, setEditTick] = useState(0);
+  const bumpEditTick = useCallback(() => setEditTick((t) => t + 1), []);
+
+  // Line-mapping (and lineDiff) is O(n*m), so we delay it until the user stops
+  // typing for 200ms. The editor itself still receives the live `body`; only
+  // inline-comment anchor positions and the diff view lag, which is fine — a
+  // brief misalignment is far less disruptive than a keystroke stutter on a
+  // long RFC.
+  const debouncedBody = useDebouncedValue(body, 200);
+
   const diffEntries = useMemo(
     () =>
-      mode === "preview" && showDiff ? lineDiff(originalBody, body) : null,
-    [mode, showDiff, originalBody, body],
+      mode === "preview" && showDiff
+        ? lineDiff(originalBody, debouncedBody)
+        : null,
+    [mode, showDiff, originalBody, debouncedBody],
   );
+
+  // Single LCS pass shared by the Write-tab sidebar and the Preview-tab remap.
+  const lineMapping = useMemo(
+    () => mapOriginalLines(originalBody, debouncedBody),
+    [originalBody, debouncedBody],
+  );
+  const previewRemappedComments = useMemo(() => {
+    if (mode !== "preview" || showDiff) return [];
+    const out: Comment[] = [];
+    for (const c of lineComments) {
+      if (!c.line) continue;
+      const mapped = lineMapping.get(c.line);
+      if (mapped == null) continue;
+      out.push({ ...c, line: mapped });
+    }
+    return out;
+  }, [lineComments, lineMapping, mode, showDiff]);
+
+  // Replies in Preview tab arrive with the *buffer-remapped* line (the only
+  // line the child knows about). The reply is always against an existing
+  // comment, so we look up the original line via `replyToCommentId` and pass
+  // that to the parent — keeps optimistic state anchored to the same line the
+  // persisted thread will resolve to.
+  const onPreviewCommentSubmit = useCallback(
+    (line: number, replyBody: string, replyToCommentId?: number) => {
+      let originalLine = line;
+      if (replyToCommentId != null) {
+        const source = lineComments.find((c) => c.id === replyToCommentId);
+        if (source?.line) originalLine = source.line;
+      }
+      return onCommentSubmit(originalLine, replyBody, replyToCommentId);
+    },
+    [lineComments, onCommentSubmit],
+  );
+
+  const showWriteSidebar = mode === "write" && !!markdownFilePath;
+  const showPreviewInline =
+    mode === "preview" && !showDiff && !!markdownFilePath;
   const previewSlot =
     mode === "preview" ? (
       showDiff ? (
         <DiffView entries={diffEntries ?? []} assets={previewAssets} />
-      ) : body.trim() ? (
-        <RfcPrettyMarkdown content={body} assets={previewAssets} />
-      ) : (
-        <p className="text-sm text-gray-50">Nothing to preview yet.</p>
-      )
+      ) : null
     ) : undefined;
 
   return (
@@ -872,14 +956,53 @@ function BodyEditMode({
             </div>
           </div>
         )}
-        <RFCBodyEditor
-          body={body}
-          onBodyChange={onBodyChange}
-          mode={mode}
-          onModeChange={onModeChange}
-          previewSlot={previewSlot}
-          previewAssets={previewAssets}
-        />
+        {showPreviewInline ? (
+          body.trim() ? (
+            <InlineCommentableMarkdown
+              content={body}
+              owner={owner}
+              repo={repo}
+              markdownFilePath={markdownFilePath}
+              headRef={headRef}
+              comments={previewRemappedComments}
+              highlightedCommentId={highlightedCommentId}
+              onCommentSubmit={onPreviewCommentSubmit}
+              disableNewComments
+            />
+          ) : (
+            <EmptyPreviewHint />
+          )
+        ) : (
+          <div
+            ref={writeContainerRef}
+            className="relative grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-8 lg:gap-12"
+          >
+            <div className="min-w-0">
+              <RFCBodyEditor
+                body={body}
+                onBodyChange={onBodyChange}
+                mode={mode}
+                onModeChange={onModeChange}
+                previewSlot={previewSlot}
+                previewAssets={previewAssets}
+                editorRef={editorRef}
+                onEditorUpdate={bumpEditTick}
+              />
+            </div>
+            {showWriteSidebar && (
+              <EditModeInlineComments
+                originalToCurrentLine={lineMapping}
+                comments={lineComments}
+                editorRef={editorRef}
+                containerRef={writeContainerRef}
+                editTick={editTick}
+                isSubmitting={false}
+                highlightedCommentId={highlightedCommentId}
+                onCommentSubmit={onCommentSubmit}
+              />
+            )}
+          </div>
+        )}
         {saveError && !conflict && (
           <div className="rounded-sm border border-magenta bg-magenta-light px-3 py-2 text-sm text-foreground">
             {saveError}

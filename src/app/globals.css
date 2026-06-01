@@ -235,6 +235,16 @@ pre code.hljs {
     box-shadow 0.15s !important;
 }
 
+/* Direct CSS hover fallback so edit-mode boxes (which don't run the JS-driven
+   line-hover machinery) still get the magenta border on pointer-over. The
+   JS-injected hover rule for read mode sets the same vars with !important,
+   so the two paths agree where they overlap. */
+[data-comment-line]:hover:not([data-comment-draft]) {
+  --comment-border-color: var(--magenta);
+  --comment-box-shadow:
+    0 1px 0 0 rgba(0, 0, 0, 0.02), 0 8px 24px -12px rgba(114, 30, 60, 0.18);
+}
+
 [data-comment-line][data-comment-draft] {
   --comment-border-color: color-mix(in srgb, var(--cyan) 70%, transparent);
   --comment-box-shadow:

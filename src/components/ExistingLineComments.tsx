@@ -56,6 +56,7 @@ export const ExistingLineComments = memo(function ExistingLineComments({
   const totalCommentCount = allComments.length;
   const firstComment = threads[0]?.comments[0];
   const hasMultipleThreads = threads.length > 1;
+  const isOutdated = allComments.some((c) => c.outdated);
   const isRange = endLineNumber != null && endLineNumber > lineNumber;
   const lineLabel = isRange
     ? `${lineNumber}–${endLineNumber}`
@@ -79,6 +80,14 @@ export const ExistingLineComments = memo(function ExistingLineComments({
           <span className="comment-line-badge shrink-0 font-mono text-[10px] uppercase tracking-[0.12em] transition-opacity">
             L{lineLabel}
           </span>
+          {isOutdated && (
+            <span
+              title="The line this comment was anchored to no longer exists in the diff."
+              className="shrink-0 rounded-sm bg-gray-10 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-70"
+            >
+              Outdated
+            </span>
+          )}
           <span className="min-w-0 flex-1 truncate text-xs text-gray-70">
             <span className="font-medium text-foreground">
               {firstComment?.user}
@@ -125,6 +134,14 @@ export const ExistingLineComments = memo(function ExistingLineComments({
                 · {threads.length} threads
               </span>
             )}
+            {isOutdated && (
+              <span
+                title="The line this comment was anchored to no longer exists in the diff."
+                className="rounded-sm bg-gray-10 px-1.5 py-0.5 text-gray-70"
+              >
+                Outdated
+              </span>
+            )}
           </span>
           <span className="rounded p-1 text-gray-40 transition-colors group-hover/header:bg-gray-5 group-hover/header:text-foreground">
             <svg
@@ -156,49 +173,62 @@ export const ExistingLineComments = memo(function ExistingLineComments({
                 <div className="border-t border-dashed border-gray-20 mx-3.5 my-3" />
               )}
               <div className="space-y-3.5 px-3.5 pb-2 pt-0.5">
-                {thread.comments.map((comment, commentIndex) => (
-                  <div
-                    key={comment.id}
-                    id={`comment-${comment.id}`}
-                    className={`relative rounded transition-colors duration-700 ${
-                      highlightedCommentId === comment.id
-                        ? "bg-cyan/10 -mx-1.5 px-1.5 py-1"
-                        : ""
-                    } ${comment.outdated ? "opacity-60" : ""}`}
-                  >
-                    {commentIndex > 0 && (
-                      <span
-                        aria-hidden
-                        className="absolute -top-2 left-2 h-2 w-px bg-gray-20"
-                      />
-                    )}
-                    <div className="mb-1.5 flex items-center gap-2">
+                {thread.comments.map((comment, commentIndex) => {
+                  const isBot = comment.user.endsWith("[bot]");
+                  const authorContent = (
+                    <>
                       <img
                         src={comment.userAvatar}
                         alt={comment.user}
                         className="h-4 w-4 rounded-full border border-gray-20"
                       />
-                      <span className="text-xs font-medium text-foreground">
+                      <span className="text-xs font-medium text-foreground group-hover/author:underline underline-offset-2">
                         {comment.user}
                       </span>
-                      <span className="text-gray-30">·</span>
-                      <RelativeTime
-                        date={comment.createdAt}
-                        className="text-[11px] text-gray-50"
-                      />
-                      <CommentPermalink commentId={comment.id} />
-                      {comment.outdated && (
+                    </>
+                  );
+                  return (
+                    <div
+                      key={comment.id}
+                      id={`comment-${comment.id}`}
+                      className={`relative rounded transition-colors duration-700 ${
+                        highlightedCommentId === comment.id
+                          ? "bg-cyan/10 -mx-1.5 px-1.5 py-1"
+                          : ""
+                      }`}
+                    >
+                      {commentIndex > 0 && (
                         <span
-                          title="The line this comment was anchored to no longer exists in the diff."
-                          className="ml-auto rounded-sm bg-gray-10 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-gray-70"
-                        >
-                          Outdated
-                        </span>
+                          aria-hidden
+                          className="absolute -top-2 left-2 h-2 w-px bg-gray-20"
+                        />
                       )}
+                      <div className="mb-1.5 flex items-center gap-2">
+                        {isBot ? (
+                          <span className="flex items-center gap-2 cursor-default">
+                            {authorContent}
+                          </span>
+                        ) : (
+                          <a
+                            href={`https://github.com/${encodeURIComponent(comment.user)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="group/author flex items-center gap-2"
+                          >
+                            {authorContent}
+                          </a>
+                        )}
+                        <span className="text-gray-30">·</span>
+                        <RelativeTime
+                          date={comment.createdAt}
+                          className="text-[11px] text-gray-50"
+                        />
+                        <CommentPermalink commentId={comment.id} />
+                      </div>
+                      <CommentMarkdown content={comment.body} />
                     </div>
-                    <CommentMarkdown content={comment.body} />
-                  </div>
-                ))}
+                  );
+                })}
               </div>
               {replyTarget?.type === "thread" &&
               replyTarget.threadId === thread.id ? (

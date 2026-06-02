@@ -129,7 +129,7 @@ export function collapseRuns(chunks: ReadonlyArray<DiffChunk>): DiffChunk[] {
   return out;
 }
 
-function buildDiffDecorations(
+export function buildDiffDecorations(
   original: string,
   current: string,
 ): DecorationSet {

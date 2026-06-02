@@ -962,11 +962,8 @@ function BodyEditMode({
   const debouncedBody = useDebouncedValue(body, 200);
 
   const diffEntries = useMemo(
-    () =>
-      mode === "preview" && showDiff
-        ? lineDiff(originalBody, debouncedBody)
-        : null,
-    [mode, showDiff, originalBody, debouncedBody],
+    () => (showDiff ? lineDiff(originalBody, debouncedBody) : null),
+    [showDiff, originalBody, debouncedBody],
   );
 
   // Single LCS pass shared by the Write-tab sidebar and the Preview-tab remap.
@@ -1003,14 +1000,16 @@ function BodyEditMode({
     [lineComments, onCommentSubmit],
   );
 
-  const showWriteSidebar = mode === "write" && !!markdownFilePath;
+  const showWriteSidebar = mode === "write" && !showDiff && !!markdownFilePath;
   const showPreviewInline =
     mode === "preview" && !showDiff && !!markdownFilePath;
   const previewSlot =
-    mode === "preview" ? (
-      showDiff ? (
-        <DiffView entries={diffEntries ?? []} assets={previewAssets} />
-      ) : null
+    mode === "preview" && showDiff ? (
+      <DiffView entries={diffEntries ?? []} assets={previewAssets} />
+    ) : undefined;
+  const writeSlot =
+    mode === "write" && showDiff ? (
+      <MonoDiffView entries={diffEntries ?? []} />
     ) : undefined;
 
   return (
@@ -1068,6 +1067,7 @@ function BodyEditMode({
                 mode={mode}
                 onModeChange={onModeChange}
                 previewSlot={previewSlot}
+                writeSlot={writeSlot}
                 previewAssets={previewAssets}
                 editorRef={editorRef}
                 onEditorUpdate={bumpEditTick}
@@ -1102,7 +1102,6 @@ function BodyEditMode({
         onSave={onSave}
         showDiff={showDiff}
         onShowDiffChange={setShowDiff}
-        showDiffVisible={mode === "preview"}
       />
     </>
   );
@@ -1117,8 +1116,6 @@ interface EditCommitBarProps {
   onSave: () => void;
   showDiff: boolean;
   onShowDiffChange: (next: boolean) => void;
-  /** Diff toggle only applies in Preview; hide it in Write. */
-  showDiffVisible: boolean;
 }
 
 /** Fixed commit message + save control for RFC body edit mode. */
@@ -1131,7 +1128,6 @@ function EditCommitBar({
   onSave,
   showDiff,
   onShowDiffChange,
-  showDiffVisible,
 }: EditCommitBarProps) {
   return (
     <section
@@ -1139,14 +1135,12 @@ function EditCommitBar({
       aria-label="Commit changes"
     >
       <div className="mx-auto flex max-w-360 items-center gap-3 px-4 py-3 sm:gap-4 sm:px-8 sm:py-3.5">
-        {showDiffVisible && (
-          <Checkbox
-            checked={showDiff}
-            onChange={onShowDiffChange}
-            label="Show diff"
-            className="shrink-0"
-          />
-        )}
+        <Checkbox
+          checked={showDiff}
+          onChange={onShowDiffChange}
+          label="Show diff"
+          className="shrink-0"
+        />
         <input
           type="text"
           value={commitMessage}
@@ -1371,6 +1365,100 @@ function DiffView({ entries, assets }: DiffViewProps) {
               {isAdded ? "Added" : "Removed"}
             </span>
             <RfcPrettyMarkdown content={block.text} assets={assets} />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+interface MonoDiffViewProps {
+  entries: LineDiffEntry[];
+}
+
+/** Monospace, git-style line diff used inside the Write tab. Mirrors the
+ *  CodeMirror editor's font + line height so toggling Show diff feels like a
+ *  read-only view of the same buffer with +/- gutters and before/after line
+ *  numbers. */
+function MonoDiffView({ entries }: MonoDiffViewProps) {
+  if (entries.length === 0) {
+    return (
+      <p className="text-sm text-gray-50 px-6 py-5">No diff to show yet.</p>
+    );
+  }
+  if (entries.every((e) => e.kind === "context")) {
+    return (
+      <p className="text-sm text-gray-50 px-6 py-5">
+        No changes. Your version matches the saved revision.
+      </p>
+    );
+  }
+  let beforeLine = 0;
+  let afterLine = 0;
+  const rows = entries.map((entry) => {
+    if (entry.kind === "context") {
+      beforeLine++;
+      afterLine++;
+      return {
+        kind: entry.kind,
+        text: entry.text,
+        before: beforeLine,
+        after: afterLine,
+      };
+    }
+    if (entry.kind === "removed") {
+      beforeLine++;
+      return {
+        kind: entry.kind,
+        text: entry.text,
+        before: beforeLine,
+        after: null,
+      };
+    }
+    afterLine++;
+    return {
+      kind: entry.kind,
+      text: entry.text,
+      before: null,
+      after: afterLine,
+    };
+  });
+  return (
+    <div className="font-mono text-sm leading-relaxed text-gray-90 py-5">
+      {rows.map((row, idx) => {
+        const bg =
+          row.kind === "added"
+            ? "bg-green-50"
+            : row.kind === "removed"
+              ? "bg-red-50"
+              : "";
+        const accent =
+          row.kind === "added"
+            ? "text-green-700"
+            : row.kind === "removed"
+              ? "text-red-700"
+              : "text-gray-40";
+        const symbol =
+          row.kind === "added" ? "+" : row.kind === "removed" ? "-" : " ";
+        return (
+          <div
+            // biome-ignore lint/suspicious/noArrayIndexKey: diff rows have no stable identity; the list re-renders on every edit
+            key={idx}
+            className={`flex whitespace-pre-wrap break-words ${bg}`}
+          >
+            <span className="select-none w-8 shrink-0 pr-1 text-right text-xs text-gray-40 tabular-nums leading-relaxed">
+              {row.before ?? ""}
+            </span>
+            <span className="select-none w-8 shrink-0 pr-2 text-right text-xs text-gray-40 tabular-nums leading-relaxed">
+              {row.after ?? ""}
+            </span>
+            <span
+              className={`select-none w-4 shrink-0 text-center ${accent}`}
+              aria-hidden
+            >
+              {symbol}
+            </span>
+            <span className="flex-1 min-w-0 pr-6">{row.text || " "}</span>
           </div>
         );
       })}

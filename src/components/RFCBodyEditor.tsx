@@ -28,6 +28,9 @@ interface RFCBodyEditorProps {
   onModeChange?: (next: RFCBodyEditorMode) => void;
   /** Replaces the built-in pretty preview. Used by edit mode for diff view. */
   previewSlot?: ReactNode;
+  /** Replaces the built-in markdown editor in the Write tab. Used by edit
+   *  mode to swap in a monospace diff view against the saved revision. */
+  writeSlot?: ReactNode;
   /** Repo context for image proxies in preview (Pretty-parity rendering). */
   previewAssets?: RfcMarkdownAssets;
   /** Forwarded to RFCMarkdownEditor — gives the parent a handle on the
@@ -44,6 +47,7 @@ export function RFCBodyEditor({
   mode,
   onModeChange,
   previewSlot,
+  writeSlot,
   previewAssets,
   editorRef,
   onEditorUpdate,
@@ -100,13 +104,15 @@ export function RFCBodyEditor({
         </div>
       )}
       {activeTab === "write" ? (
-        <RFCMarkdownEditor
-          value={body}
-          onChange={onBodyChange}
-          className="rfc-markdown-editor"
-          editorRef={editorRef}
-          onEditorUpdate={onEditorUpdate}
-        />
+        (writeSlot ?? (
+          <RFCMarkdownEditor
+            value={body}
+            onChange={onBodyChange}
+            className="rfc-markdown-editor"
+            editorRef={editorRef}
+            onEditorUpdate={onEditorUpdate}
+          />
+        ))
       ) : (
         <div className="p-5 sm:p-6 min-h-96">
           {previewSlot ??

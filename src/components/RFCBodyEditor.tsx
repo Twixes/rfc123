@@ -31,6 +31,8 @@ interface RFCBodyEditorProps {
   /** When set, the Write-tab editor overlays a word-level diff against this
    *  baseline (added ranges in green, removed text as strikethrough widgets). */
   diffAgainst?: string;
+  /** Soft-wrap the Write-tab editor. Default true. */
+  wordWrap?: boolean;
   /** Repo context for image proxies in preview (Pretty-parity rendering). */
   previewAssets?: RfcMarkdownAssets;
   /** Forwarded to RFCMarkdownEditor — gives the parent a handle on the
@@ -48,6 +50,7 @@ export function RFCBodyEditor({
   onModeChange,
   previewSlot,
   diffAgainst,
+  wordWrap,
   previewAssets,
   editorRef,
   onEditorUpdate,
@@ -111,6 +114,7 @@ export function RFCBodyEditor({
           editorRef={editorRef}
           onEditorUpdate={onEditorUpdate}
           diffAgainst={diffAgainst}
+          wordWrap={wordWrap}
         />
       ) : (
         <div className="p-5 sm:p-6 min-h-96">

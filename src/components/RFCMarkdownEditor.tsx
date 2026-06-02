@@ -34,6 +34,9 @@ interface RFCMarkdownEditorProps {
    *  and the current buffer. Added/changed ranges get a green mark; removed
    *  text appears as inline strikethrough widgets. */
   diffAgainst?: string;
+  /** Soft-wrap long lines. Default true. Turn off when editing wide content
+   *  like Markdown tables that should stay on one line. */
+  wordWrap?: boolean;
 }
 
 export function RFCMarkdownEditor({
@@ -43,18 +46,18 @@ export function RFCMarkdownEditor({
   editorRef,
   onEditorUpdate,
   diffAgainst,
+  wordWrap = true,
 }: RFCMarkdownEditorProps) {
   const extensions = useMemo(() => {
     const base = [
       markdown({ base: markdownLanguage }),
       syntaxHighlighting(markdownEmphasisHighlight, { fallback: false }),
-      EditorView.lineWrapping,
       markdownLinkClicks(),
       EditorView.theme({
         "&": { backgroundColor: "transparent" },
         "&.cm-focused": { outline: "none" },
         ".cm-scroller": {
-          overflow: "visible",
+          overflow: wordWrap ? "visible" : "auto",
           fontFamily: MONO_FONT,
         },
         ".cm-content": {
@@ -86,6 +89,9 @@ export function RFCMarkdownEditor({
         },
       }),
     ];
+    if (wordWrap) {
+      base.push(EditorView.lineWrapping);
+    }
     if (onEditorUpdate) {
       // Selection-only updates don't change line geometry, so they don't need
       // to wake measurement consumers. docChanged covers typing; geometryChanged
@@ -102,7 +108,7 @@ export function RFCMarkdownEditor({
       base.push(diffHighlight(diffAgainst));
     }
     return base;
-  }, [onEditorUpdate, diffAgainst]);
+  }, [onEditorUpdate, diffAgainst, wordWrap]);
 
   return (
     <CodeMirror

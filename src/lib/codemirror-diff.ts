@@ -53,6 +53,82 @@ export function commonAffixes(
   return { prefix, suffix };
 }
 
+type DiffChunk = { added?: boolean; removed?: boolean; value: string };
+
+/** Longest common chunk that an edit storm is allowed to swallow before
+ *  the storm is forced to end. Anything longer is treated as real shared
+ *  structure (multiple words the user kept on purpose). */
+const MAX_ABSORBABLE_COMMON = 24;
+
+function isHardBoundary(text: string): boolean {
+  // Paragraph breaks and sentence-ending punctuation followed by whitespace
+  // mark semantic divides we don't want to swallow even if they're short —
+  // collapsing across them would smear two unrelated rewrites together.
+  return text.includes("\n\n") || /[.!?]\s/.test(text);
+}
+
+/**
+ * Coalesce dense alternating add/remove runs from `diffWordsWithSpace`
+ * into one removed + one added pair. Without this, rewriting a paragraph
+ * where the user happens to keep "the", "and", or just spaces produces a
+ * red/green word salad. With this, the whole run renders as one widget
+ * (old text, strikethrough) followed by one green span (new text).
+ *
+ * Long common chunks (> MAX_ABSORBABLE_COMMON) and chunks that contain a
+ * sentence-ending or paragraph break always split runs.
+ */
+export function collapseRuns(chunks: ReadonlyArray<DiffChunk>): DiffChunk[] {
+  // Precompute the last index that contains an edit. Lets the inner loop
+  // tell in O(1) whether a common chunk it's considering absorbing has
+  // any more edits ahead — otherwise it's a trailing context chunk and
+  // should be emitted as-is rather than swallowed into the widget.
+  let lastEditIdx = -1;
+  for (let j = chunks.length - 1; j >= 0; j--) {
+    if (chunks[j].added || chunks[j].removed) {
+      lastEditIdx = j;
+      break;
+    }
+  }
+
+  const out: DiffChunk[] = [];
+  let i = 0;
+  while (i < chunks.length) {
+    const chunk = chunks[i];
+    if (!chunk.added && !chunk.removed) {
+      out.push(chunk);
+      i++;
+      continue;
+    }
+    let removed = "";
+    let added = "";
+    while (i < chunks.length) {
+      const c = chunks[i];
+      if (c.added) {
+        added += c.value;
+        i++;
+      } else if (c.removed) {
+        removed += c.value;
+        i++;
+      } else {
+        const moreEditsAhead = i < lastEditIdx;
+        if (
+          !moreEditsAhead ||
+          c.value.length > MAX_ABSORBABLE_COMMON ||
+          isHardBoundary(c.value)
+        ) {
+          break;
+        }
+        removed += c.value;
+        added += c.value;
+        i++;
+      }
+    }
+    if (removed) out.push({ removed: true, value: removed });
+    if (added) out.push({ added: true, value: added });
+  }
+  return out;
+}
+
 function buildDiffDecorations(
   original: string,
   current: string,
@@ -64,7 +140,7 @@ function buildDiffDecorations(
   const currentMid = current.slice(prefix, current.length - suffix);
   if (originalMid === "" && currentMid === "") return Decoration.none;
 
-  const chunks = diffWordsWithSpace(originalMid, currentMid);
+  const chunks = collapseRuns(diffWordsWithSpace(originalMid, currentMid));
   const ranges: ReturnType<typeof addedMark.range>[] = [];
   let pos = prefix;
   let pendingRemoved = "";
@@ -105,12 +181,11 @@ const DEBOUNCE_MS = 200;
  * removed text appears in place as inline strikethrough widgets so the
  * user can keep editing while seeing what changed.
  *
- * Why word-level instead of sentence-level: jsdiff's sentence tokenizer
- * requires `[.!?]` followed by whitespace to break a sentence, so a
- * half-typed token like "dddd" glues onto the next real sentence into one
- * giant token. The diff then reports the whole "dddd + next sentence" as
- * added and the original sentence as removed — even though only "dddd"
- * actually changed. Word tokens don't have this failure mode.
+ * The raw word diff is run through `collapseRuns` so that paragraph
+ * rewrites — which would otherwise render as alternating red/green word
+ * fragments — show up as a single widget + single green span. Hard
+ * boundaries (sentence ends, paragraph breaks) and long common stretches
+ * still split runs.
  *
  * Recompute is debounced and skips the common character prefix/suffix, so
  * typing in a large RFC doesn't run a full-doc diff per keystroke.

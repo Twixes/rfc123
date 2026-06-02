@@ -956,6 +956,7 @@ function BodyEditMode({
   saveError,
 }: BodyEditModeProps) {
   const [showDiff, setShowDiff] = useState(false);
+  const [wordWrap, setWordWrap] = useState(true);
 
   const editorRef = useRef<ReactCodeMirrorRef>(null);
   const writeContainerRef = useRef<HTMLDivElement>(null);
@@ -1077,6 +1078,7 @@ function BodyEditMode({
                 onModeChange={onModeChange}
                 previewSlot={previewSlot}
                 diffAgainst={writeDiffAgainst}
+                wordWrap={wordWrap}
                 previewAssets={previewAssets}
                 editorRef={editorRef}
                 onEditorUpdate={bumpEditTick}
@@ -1111,6 +1113,8 @@ function BodyEditMode({
         onSave={onSave}
         showDiff={showDiff}
         onShowDiffChange={setShowDiff}
+        wordWrap={wordWrap}
+        onWordWrapChange={setWordWrap}
       />
     </>
   );
@@ -1125,6 +1129,8 @@ interface EditCommitBarProps {
   onSave: () => void;
   showDiff: boolean;
   onShowDiffChange: (next: boolean) => void;
+  wordWrap: boolean;
+  onWordWrapChange: (next: boolean) => void;
 }
 
 /** Fixed commit message + save control for RFC body edit mode. */
@@ -1137,6 +1143,8 @@ function EditCommitBar({
   onSave,
   showDiff,
   onShowDiffChange,
+  wordWrap,
+  onWordWrapChange,
 }: EditCommitBarProps) {
   return (
     <section
@@ -1148,6 +1156,12 @@ function EditCommitBar({
           checked={showDiff}
           onChange={onShowDiffChange}
           label="Show diff"
+          className="shrink-0"
+        />
+        <Checkbox
+          checked={wordWrap}
+          onChange={onWordWrapChange}
+          label="Wrap"
           className="shrink-0"
         />
         <input

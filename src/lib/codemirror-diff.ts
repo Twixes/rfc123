@@ -6,7 +6,7 @@ import {
   type ViewUpdate,
   WidgetType,
 } from "@codemirror/view";
-import { diffSentences } from "diff";
+import { diffWordsWithSpace } from "diff";
 
 class RemovedTextWidget extends WidgetType {
   constructor(readonly text: string) {
@@ -64,7 +64,7 @@ function buildDiffDecorations(
   const currentMid = current.slice(prefix, current.length - suffix);
   if (originalMid === "" && currentMid === "") return Decoration.none;
 
-  const chunks = diffSentences(originalMid, currentMid);
+  const chunks = diffWordsWithSpace(originalMid, currentMid);
   const ranges: ReturnType<typeof addedMark.range>[] = [];
   let pos = prefix;
   let pendingRemoved = "";
@@ -100,10 +100,17 @@ function buildDiffDecorations(
 const DEBOUNCE_MS = 200;
 
 /**
- * CodeMirror extension that overlays a sentence-level diff between
- * `original` and the live document. Added/changed sentences get a green
- * mark; removed sentences appear in place as inline strikethrough widgets
- * so the user can keep editing while seeing what changed.
+ * CodeMirror extension that overlays a word-level diff between `original`
+ * and the live document. Added/changed word ranges get a green mark;
+ * removed text appears in place as inline strikethrough widgets so the
+ * user can keep editing while seeing what changed.
+ *
+ * Why word-level instead of sentence-level: jsdiff's sentence tokenizer
+ * requires `[.!?]` followed by whitespace to break a sentence, so a
+ * half-typed token like "dddd" glues onto the next real sentence into one
+ * giant token. The diff then reports the whole "dddd + next sentence" as
+ * added and the original sentence as removed — even though only "dddd"
+ * actually changed. Word tokens don't have this failure mode.
  *
  * Recompute is debounced and skips the common character prefix/suffix, so
  * typing in a large RFC doesn't run a full-doc diff per keystroke.

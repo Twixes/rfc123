@@ -4,8 +4,9 @@ import { motion } from "motion/react";
 import { CommentBox } from "@/components/CommentBox";
 import { CommentMarkdown } from "@/components/CommentMarkdown";
 import { CommentPermalink } from "@/components/CommentPermalink";
+import { CommentReactionsBar } from "@/components/CommentReactions";
 import { RelativeTime } from "@/components/RelativeTime";
-import type { Comment } from "@/lib/github";
+import type { Comment, ReactionContent } from "@/lib/github";
 
 interface GeneralCommentsSectionProps {
   owner: string;
@@ -15,6 +16,7 @@ interface GeneralCommentsSectionProps {
   prNumber: number;
   highlightedCommentId?: number | null;
   onCommentPosted?: (comment: string) => void;
+  onToggleReaction?: (commentId: number, content: ReactionContent) => void;
 }
 
 export function GeneralCommentsSection({
@@ -25,6 +27,7 @@ export function GeneralCommentsSection({
   prNumber,
   highlightedCommentId,
   onCommentPosted,
+  onToggleReaction,
 }: GeneralCommentsSectionProps) {
   return (
     <section className="mt-16">
@@ -131,6 +134,13 @@ export function GeneralCommentsSection({
                     <CommentPermalink commentId={comment.id} />
                   </div>
                   <CommentMarkdown content={comment.body} />
+                  <CommentReactionsBar
+                    reactions={comment.reactions}
+                    disabled={!onToggleReaction || !comment.nodeId}
+                    onToggle={(content) =>
+                      onToggleReaction?.(comment.id, content)
+                    }
+                  />
                 </motion.li>
               );
             })}

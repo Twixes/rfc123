@@ -5,9 +5,11 @@
 import { memo } from "react";
 import { CommentMarkdown } from "@/components/CommentMarkdown";
 import { CommentPermalink } from "@/components/CommentPermalink";
+import { CommentReactionsBar } from "@/components/CommentReactions";
 import { RelativeTime } from "@/components/RelativeTime";
 import { ReplyDraftForm } from "@/components/ReplyDraftForm";
 import type { CommentThread, LineReplyTarget } from "@/lib/comment-threads";
+import type { ReactionContent } from "@/lib/github";
 
 interface ExistingLineCommentsProps {
   lineNumber: number;
@@ -25,6 +27,8 @@ interface ExistingLineCommentsProps {
   onCancelReply: () => void;
   onSubmitReply: (body: string) => void;
   onToggleCollapse: () => void;
+  /** Toggle a reaction on a specific comment. */
+  onToggleReaction?: (commentId: number, content: ReactionContent) => void;
   commentBoxRef: (el: HTMLDivElement | null) => void;
   /** Ref to the expandable content block; used to measure final height before animation */
   onContentRef?: (el: HTMLDivElement | null) => void;
@@ -47,6 +51,7 @@ export const ExistingLineComments = memo(function ExistingLineComments({
   onCancelReply,
   onSubmitReply,
   onToggleCollapse,
+  onToggleReaction,
   commentBoxRef,
   onContentRef,
   onMouseEnter,
@@ -226,6 +231,13 @@ export const ExistingLineComments = memo(function ExistingLineComments({
                         <CommentPermalink commentId={comment.id} />
                       </div>
                       <CommentMarkdown content={comment.body} />
+                      <CommentReactionsBar
+                        reactions={comment.reactions}
+                        disabled={!onToggleReaction || !comment.nodeId}
+                        onToggle={(content) =>
+                          onToggleReaction?.(comment.id, content)
+                        }
+                      />
                     </div>
                   );
                 })}

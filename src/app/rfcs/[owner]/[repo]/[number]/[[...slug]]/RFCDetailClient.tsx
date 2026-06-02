@@ -26,7 +26,13 @@ import {
   RfcPrettyMarkdown,
 } from "@/components/RfcPrettyMarkdown";
 import Tooltip from "@/components/Tooltip";
-import type { Comment, RFCDetail, RfcStateAction } from "@/lib/github";
+import type {
+  Comment,
+  CommentReactions,
+  ReactionContent,
+  RFCDetail,
+  RfcStateAction,
+} from "@/lib/github";
 import {
   type LineDiffEntry,
   lineDiff,
@@ -286,6 +292,78 @@ export default function RFCDetailClient({
         prev.filter((c) => c.id !== optimisticComment.id),
       );
       alert("Failed to post comment");
+    }
+  }
+
+  function toggleViewerReaction(
+    reactions: CommentReactions | undefined,
+    content: ReactionContent,
+    add: boolean,
+  ): CommentReactions {
+    const next: CommentReactions = {
+      counts: { ...(reactions?.counts ?? {}) },
+      viewer: [...(reactions?.viewer ?? [])],
+    };
+    const current = next.counts[content] ?? 0;
+    if (add) {
+      next.counts[content] = current + 1;
+      if (!next.viewer.includes(content)) next.viewer.push(content);
+    } else {
+      const dec = Math.max(0, current - 1);
+      if (dec === 0) delete next.counts[content];
+      else next.counts[content] = dec;
+      next.viewer = next.viewer.filter((c) => c !== content);
+    }
+    return next;
+  }
+
+  async function handleToggleReaction(
+    commentId: number,
+    content: ReactionContent,
+  ) {
+    // Find the latest authoritative comment (server-fetched, not optimistic).
+    const target = comments.find((c) => c.id === commentId);
+    if (!target?.nodeId) return;
+    const previousReactions = target.reactions;
+    const hasReaction = previousReactions?.viewer.includes(content) ?? false;
+    const method = hasReaction ? "DELETE" : "POST";
+
+    // Optimistic update.
+    setComments((prev) =>
+      prev.map((c) =>
+        c.id === commentId
+          ? {
+              ...c,
+              reactions: toggleViewerReaction(
+                c.reactions,
+                content,
+                !hasReaction,
+              ),
+            }
+          : c,
+      ),
+    );
+
+    try {
+      const res = await fetch(`/api/rfcs/${prNumber}/reactions`, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ commentNodeId: target.nodeId, content }),
+      });
+      if (!res.ok) throw new Error("Failed to update reaction");
+      const data = (await res.json()) as { reactions: CommentReactions };
+      setComments((prev) =>
+        prev.map((c) =>
+          c.id === commentId ? { ...c, reactions: data.reactions } : c,
+        ),
+      );
+    } catch (error) {
+      console.error("Error toggling reaction:", error);
+      setComments((prev) =>
+        prev.map((c) =>
+          c.id === commentId ? { ...c, reactions: previousReactions } : c,
+        ),
+      );
     }
   }
 
@@ -745,6 +823,7 @@ export default function RFCDetailClient({
             lineComments={lineComments}
             highlightedCommentId={highlightedCommentId}
             onCommentSubmit={handleInlineComment}
+            onToggleReaction={handleToggleReaction}
             previewAssets={
               editPreviewAssets ?? {
                 owner,
@@ -785,6 +864,7 @@ export default function RFCDetailClient({
             commentsLoading={commentsLoading}
             highlightedCommentId={highlightedCommentId}
             onCommentSubmit={handleInlineComment}
+            onToggleReaction={handleToggleReaction}
           />
         ) : (
           <MarkdownRawView content={rfc.markdownContent} />
@@ -799,6 +879,7 @@ export default function RFCDetailClient({
         prNumber={rfc.number}
         highlightedCommentId={highlightedCommentId}
         onCommentPosted={handleGeneralComment}
+        onToggleReaction={handleToggleReaction}
       />
     </div>
   );
@@ -823,6 +904,7 @@ interface BodyEditModeProps {
     body: string,
     replyToCommentId?: number,
   ) => Promise<void>;
+  onToggleReaction: (commentId: number, content: ReactionContent) => void;
   previewAssets: RfcMarkdownAssets;
   onBodyChange: (next: string) => void;
   /** Page-level Write/Preview toggle drives the editor – RFCBodyEditor hides
@@ -851,6 +933,7 @@ function BodyEditMode({
   lineComments,
   highlightedCommentId,
   onCommentSubmit,
+  onToggleReaction,
   previewAssets,
   onBodyChange,
   mode,
@@ -967,6 +1050,7 @@ function BodyEditMode({
               comments={previewRemappedComments}
               highlightedCommentId={highlightedCommentId}
               onCommentSubmit={onPreviewCommentSubmit}
+              onToggleReaction={onToggleReaction}
               disableNewComments
             />
           ) : (

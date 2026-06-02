@@ -196,8 +196,21 @@ export function parseDecisionBlocks(body: string): DecisionBlock[] {
   return out;
 }
 
+// Types + runtime constants live in `./reactions` so client components can
+// import them without dragging server-only modules (posthog-node, octokit)
+// into the browser bundle. Re-exported here for ergonomic access.
+export type {
+  CommentReactions,
+  ReactionContent,
+} from "./reactions";
+export { REACTION_CONTENTS } from "./reactions";
+
+import type { CommentReactions } from "./reactions";
+
 export interface Comment {
   id: number;
+  /** GraphQL global node ID. Used to add/remove reactions via GraphQL. */
+  nodeId?: string;
   user: string;
   userAvatar: string;
   body: string;
@@ -211,6 +224,7 @@ export interface Comment {
    *  dims these and tags them as "Outdated". General (non-inline) comments
    *  are never outdated. */
   outdated?: boolean;
+  reactions?: CommentReactions;
 }
 
 export type { CommentThread } from "./comment-threads";

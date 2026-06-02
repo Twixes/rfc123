@@ -26,7 +26,7 @@ import {
 } from "@/components/rfc-pretty-markdown-components";
 import type { CommentThread, ReplyTarget } from "@/lib/comment-threads";
 import { groupIntoThreads, lineReplyTarget } from "@/lib/comment-threads";
-import type { Comment } from "@/lib/github";
+import type { Comment, ReactionContent } from "@/lib/github";
 import {
   type ArrowPath,
   type CascadeBox,
@@ -768,6 +768,9 @@ interface InlineCommentableMarkdownProps {
     body: string,
     replyToCommentId?: number,
   ) => Promise<void>;
+  /** Toggle a reaction on a comment. Omitted when reactions should be
+   *  read-only (e.g. preview / unauthenticated render path). */
+  onToggleReaction?: (commentId: number, content: ReactionContent) => void;
   /** Hide the gutter buttons, the text-selection tooltip, and the
    *  "click a line to comment" affordance. Existing threads stay clickable
    *  for replies. Used by edit-mode preview, where the body is mid-edit and
@@ -785,6 +788,7 @@ export function InlineCommentableMarkdown({
   commentsLoading,
   highlightedCommentId,
   onCommentSubmit,
+  onToggleReaction,
   disableNewComments = false,
 }: InlineCommentableMarkdownProps) {
   const hoverDispatchRef = useRef<LineHoverDispatch>(() => {});
@@ -1496,6 +1500,7 @@ export function InlineCommentableMarkdown({
             commentsByLine={layoutCommentsByLine}
             commentsLoading={commentsLoading}
             hideEmptyHint={disableNewComments}
+            onToggleReaction={onToggleReaction}
             onCloseActiveComment={() => {
               setActiveLineIndex(null);
               setLineCommentInitialDraft("");
@@ -1579,6 +1584,7 @@ interface CommentsSidebarProps {
   /** Suppress the "Click any line to leave a note" empty-state hint when
    *  new-thread creation is disabled. Existing-thread state is unaffected. */
   hideEmptyHint?: boolean;
+  onToggleReaction?: (commentId: number, content: ReactionContent) => void;
   onCloseActiveComment: () => void;
   onSubmitActiveComment: (body: string) => void;
   onStartReply: (lineNumber: number, threadId: number) => void;
@@ -1608,6 +1614,7 @@ function CommentsSidebar({
   commentsByLine,
   commentsLoading,
   hideEmptyHint = false,
+  onToggleReaction,
   onCloseActiveComment,
   onSubmitActiveComment,
   onStartReply,
@@ -1687,6 +1694,7 @@ function CommentsSidebar({
             onCancelReply={onCancelReply}
             onSubmitReply={onSubmitReply}
             onToggleCollapse={h.onToggleCollapse}
+            onToggleReaction={onToggleReaction}
             commentBoxRef={h.commentBoxRef}
             onContentRef={h.onContentRef}
             onMouseEnter={h.onMouseEnter}

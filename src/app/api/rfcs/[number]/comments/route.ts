@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import type { Comment } from "@/lib/github";
 import { getOctokit } from "@/lib/github";
+import { fetchReactionsForCommentNodes } from "@/lib/reactions";
 
 export async function GET(
   request: Request,
@@ -50,6 +51,7 @@ export async function GET(
     const comments: Comment[] = [
       ...reviewComments.map((c) => ({
         id: c.id,
+        nodeId: c.node_id,
         user: c.user?.login || "unknown",
         userAvatar: c.user?.avatar_url || "",
         body: c.body || "",
@@ -64,6 +66,7 @@ export async function GET(
       })),
       ...issueComments.map((c) => ({
         id: c.id,
+        nodeId: c.node_id,
         user: c.user?.login || "unknown",
         userAvatar: c.user?.avatar_url || "",
         body: c.body || "",
@@ -76,6 +79,25 @@ export async function GET(
       (a, b) =>
         new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
     );
+
+    // Enrich with reactions in a single GraphQL call. Counts come from
+    // `reactors.totalCount`; `viewerHasReacted` tells us which kinds the
+    // current user has applied, so we can render toggle state correctly.
+    try {
+      const nodeIds = comments
+        .map((c) => c.nodeId)
+        .filter((id): id is string => !!id);
+      const reactionMap = await fetchReactionsForCommentNodes(octokit, nodeIds);
+      for (const comment of comments) {
+        if (!comment.nodeId) continue;
+        const reactions = reactionMap.get(comment.nodeId);
+        if (reactions) comment.reactions = reactions;
+      }
+    } catch (e) {
+      // Don't fail the whole comments fetch over a reactions hiccup – the UI
+      // degrades to "no reactions" and a refresh will retry.
+      console.error("Failed to load reaction groups:", e);
+    }
 
     return NextResponse.json(comments);
   } catch (error) {

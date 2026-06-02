@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  Fragment,
+  type ReactNode,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -51,7 +53,7 @@ const listFormatter = new Intl.ListFormat("en", {
   type: "conjunction",
 });
 
-function buildReactorTooltip(chip: ReactionChip): string {
+function buildReactorTooltip(chip: ReactionChip): ReactNode {
   const label = REACTION_LABEL[chip.content];
   if (chip.users.length === 0) {
     return `${chip.count} reacted with ${label}`;
@@ -61,7 +63,22 @@ function buildReactorTooltip(chip: ReactionChip): string {
     remainder > 0
       ? [...chip.users, `${remainder} other${remainder === 1 ? "" : "s"}`]
       : chip.users;
-  return `${listFormatter.format(items)} reacted with ${label}`;
+  const parts = listFormatter.formatToParts(items).map((part, i) =>
+    part.type === "element" ? (
+      // biome-ignore lint/suspicious/noArrayIndexKey: formatToParts order is stable for a given input
+      <strong key={i} className="font-semibold">
+        {part.value}
+      </strong>
+    ) : (
+      // biome-ignore lint/suspicious/noArrayIndexKey: same
+      <Fragment key={i}>{part.value}</Fragment>
+    ),
+  );
+  return (
+    <>
+      {parts} reacted with {label}
+    </>
+  );
 }
 
 /** Approximate dimensions; only used to pick above vs. below and to clamp the

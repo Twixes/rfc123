@@ -298,8 +298,8 @@ pre code.hljs {
 }
 
 /* CodeMirror diff overlay used by RFCMarkdownEditor when `diffAgainst` is
-   set. Added/changed character ranges are tinted green; removed text is
-   re-inserted as an inline, non-editable widget with strikethrough. */
+   set. Added/changed sentences are tinted green; removed sentences are
+   re-inserted as inline, non-editable widgets with strikethrough. */
 .cm-diff-added {
   background-color: rgb(220 252 231); /* tailwind green-100 */
   border-radius: 2px;

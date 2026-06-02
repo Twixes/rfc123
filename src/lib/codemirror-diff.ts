@@ -6,7 +6,7 @@ import {
   type ViewUpdate,
   WidgetType,
 } from "@codemirror/view";
-import { diffWordsWithSpace } from "diff";
+import { diffSentences } from "diff";
 
 class RemovedTextWidget extends WidgetType {
   constructor(readonly text: string) {
@@ -34,7 +34,7 @@ function buildDiffDecorations(
 ): DecorationSet {
   if (original === current) return Decoration.none;
 
-  const chunks = diffWordsWithSpace(original, current);
+  const chunks = diffSentences(original, current);
   const ranges: ReturnType<typeof addedMark.range>[] = [];
   let pos = 0;
   let pendingRemoved = "";
@@ -68,10 +68,10 @@ function buildDiffDecorations(
 }
 
 /**
- * CodeMirror extension that overlays a word-level diff between `original`
- * and the live document. Added/changed character ranges get a green mark;
- * removed text appears in place as an inline strikethrough widget so the
- * user can keep editing while seeing what changed.
+ * CodeMirror extension that overlays a sentence-level diff between
+ * `original` and the live document. Added/changed sentences get a green
+ * mark; removed sentences appear in place as inline strikethrough widgets
+ * so the user can keep editing while seeing what changed.
  */
 export function diffHighlight(original: string) {
   return ViewPlugin.fromClass(

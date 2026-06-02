@@ -173,7 +173,7 @@ function buildDiffDecorations(
   return Decoration.set(ranges, true);
 }
 
-const DEBOUNCE_MS = 200;
+const DEBOUNCE_MS = 500;
 
 /**
  * CodeMirror extension that overlays a word-level diff between `original`

@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import Tooltip from "@/components/Tooltip";
 import {
   type CommentReactions,
   REACTION_CONTENTS,
@@ -28,6 +29,8 @@ interface ReactionChip {
   content: ReactionContent;
   count: number;
   viewer: boolean;
+  /** Subset of reactor logins we have on hand (may be fewer than `count`). */
+  users: string[];
 }
 
 function buildReactionList(reactions?: CommentReactions): ReactionChip[] {
@@ -39,7 +42,26 @@ function buildReactionList(reactions?: CommentReactions): ReactionChip[] {
     content,
     count: reactions.counts[content] ?? 0,
     viewer: viewerSet.has(content),
+    users: reactions.users?.[content] ?? [],
   }));
+}
+
+const listFormatter = new Intl.ListFormat("en", {
+  style: "long",
+  type: "conjunction",
+});
+
+function buildReactorTooltip(chip: ReactionChip): string {
+  const label = REACTION_LABEL[chip.content];
+  if (chip.users.length === 0) {
+    return `${chip.count} reacted with ${label}`;
+  }
+  const remainder = Math.max(0, chip.count - chip.users.length);
+  const items =
+    remainder > 0
+      ? [...chip.users, `${remainder} other${remainder === 1 ? "" : "s"}`]
+      : chip.users;
+  return `${listFormatter.format(items)} reacted with ${label}`;
 }
 
 /** Approximate dimensions; only used to pick above vs. below and to clamp the
@@ -141,27 +163,27 @@ export function CommentReactionsBar({
   return (
     <div className="mt-2 flex flex-wrap items-center gap-1">
       {chips.map((chip) => (
-        <button
-          key={chip.content}
-          type="button"
-          disabled={disabled}
-          onClick={() => handleChipClick(chip.content)}
-          aria-label={`${chip.viewer ? "Remove" : "Add"} ${REACTION_LABEL[chip.content]} reaction`}
-          aria-pressed={chip.viewer}
-          title={REACTION_LABEL[chip.content]}
-          className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[11px] leading-none transition-colors ${
-            disabled ? "cursor-default" : "cursor-pointer"
-          } ${
-            chip.viewer
-              ? "border-cyan/40 bg-cyan-light text-cyan"
-              : "border-gray-20 bg-surface text-gray-70 hover:border-gray-30 hover:bg-gray-5"
-          }`}
-        >
-          <span className="text-[13px] leading-none">
-            {REACTION_EMOJI[chip.content]}
-          </span>
-          <span className="font-mono tabular-nums">{chip.count}</span>
-        </button>
+        <Tooltip key={chip.content} content={buildReactorTooltip(chip)}>
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => handleChipClick(chip.content)}
+            aria-label={`${chip.viewer ? "Remove" : "Add"} ${REACTION_LABEL[chip.content]} reaction`}
+            aria-pressed={chip.viewer}
+            className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[11px] leading-none transition-colors ${
+              disabled ? "cursor-default" : "cursor-pointer"
+            } ${
+              chip.viewer
+                ? "border-cyan/40 bg-cyan-light text-cyan"
+                : "border-gray-20 bg-surface text-gray-70 hover:border-gray-30 hover:bg-gray-5"
+            }`}
+          >
+            <span className="text-[13px] leading-none">
+              {REACTION_EMOJI[chip.content]}
+            </span>
+            <span className="font-mono tabular-nums">{chip.count}</span>
+          </button>
+        </Tooltip>
       ))}
       {!disabled && (
         <button

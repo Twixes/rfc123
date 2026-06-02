@@ -33,7 +33,11 @@ export interface CommentReactions {
   counts: Partial<Record<ReactionContent, number>>;
   /** Reaction kinds the viewer has already applied (toggle target). */
   viewer: ReactionContent[];
+  /** Up to `REACTORS_PER_GROUP` reactor logins per kind; full count is in `counts`. */
+  users: Partial<Record<ReactionContent, string[]>>;
 }
+
+export const REACTORS_PER_GROUP = 10;
 
 /** Canonical display emoji for each GitHub reaction kind. */
 export const REACTION_EMOJI: Record<ReactionContent, string> = {
@@ -63,7 +67,10 @@ export const REACTION_LABEL: Record<ReactionContent, string> = {
 interface ReactionGroupNode {
   content: string;
   viewerHasReacted: boolean;
-  reactors: { totalCount: number };
+  reactors: {
+    totalCount: number;
+    nodes?: Array<{ login?: string | null } | null> | null;
+  };
 }
 
 /** Convert a GraphQL `reactionGroups` array into our flat `CommentReactions`. */
@@ -72,15 +79,20 @@ export function reactionGroupsToCommentReactions(
 ): CommentReactions {
   const counts: Partial<Record<ReactionContent, number>> = {};
   const viewer: ReactionContent[] = [];
-  if (!groups) return { counts, viewer };
+  const users: Partial<Record<ReactionContent, string[]>> = {};
+  if (!groups) return { counts, viewer, users };
   for (const group of groups) {
     if (!REACTION_CONTENTS.includes(group.content as ReactionContent)) continue;
     const content = group.content as ReactionContent;
     const total = group.reactors?.totalCount ?? 0;
     if (total > 0) counts[content] = total;
     if (group.viewerHasReacted) viewer.push(content);
+    const logins = (group.reactors?.nodes ?? []).flatMap((n) =>
+      n?.login ? [n.login] : [],
+    );
+    if (logins.length > 0) users[content] = logins;
   }
-  return { counts, viewer };
+  return { counts, viewer, users };
 }
 
 /** GraphQL fragment used by both bulk-fetch and single-comment refresh. */
@@ -88,7 +100,10 @@ export const REACTION_GROUPS_FRAGMENT = `
   reactionGroups {
     content
     viewerHasReacted
-    reactors(first: 0) { totalCount }
+    reactors(first: ${REACTORS_PER_GROUP}) {
+      totalCount
+      nodes { ... on Actor { login } }
+    }
   }
 `;
 

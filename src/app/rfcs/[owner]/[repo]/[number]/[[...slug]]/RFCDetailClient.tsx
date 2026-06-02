@@ -303,16 +303,24 @@ export default function RFCDetailClient({
     const next: CommentReactions = {
       counts: { ...(reactions?.counts ?? {}) },
       viewer: [...(reactions?.viewer ?? [])],
+      users: { ...(reactions?.users ?? {}) },
     };
     const current = next.counts[content] ?? 0;
+    const currentUsers = next.users[content] ?? [];
     if (add) {
       next.counts[content] = current + 1;
       if (!next.viewer.includes(content)) next.viewer.push(content);
+      if (!currentUsers.includes(currentUser)) {
+        next.users[content] = [...currentUsers, currentUser];
+      }
     } else {
       const dec = Math.max(0, current - 1);
       if (dec === 0) delete next.counts[content];
       else next.counts[content] = dec;
       next.viewer = next.viewer.filter((c) => c !== content);
+      const filtered = currentUsers.filter((u) => u !== currentUser);
+      if (filtered.length === 0) delete next.users[content];
+      else next.users[content] = filtered;
     }
     return next;
   }

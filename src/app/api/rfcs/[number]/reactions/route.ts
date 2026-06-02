@@ -7,7 +7,10 @@ import {
   REACTION_CONTENTS,
   type ReactionContent,
 } from "@/lib/github";
-import { reactionGroupsToCommentReactions } from "@/lib/reactions";
+import {
+  REACTION_GROUPS_FRAGMENT,
+  reactionGroupsToCommentReactions,
+} from "@/lib/reactions";
 
 /**
  * Toggle a reaction on a comment. Both review (inline) comments and issue
@@ -41,20 +44,15 @@ async function readSession() {
   return accessToken ?? null;
 }
 
-const REACTION_FRAGMENT = `
-  reactionGroups {
-    content
-    viewerHasReacted
-    reactors(first: 0) { totalCount }
-  }
-`;
-
 interface MutationResp {
   subject: {
     reactionGroups: Array<{
       content: string;
       viewerHasReacted: boolean;
-      reactors: { totalCount: number };
+      reactors: {
+        totalCount: number;
+        nodes?: Array<{ login?: string | null } | null> | null;
+      };
     }>;
   };
 }
@@ -82,7 +80,7 @@ export async function POST(request: NextRequest) {
         addReaction(input: $input) {
           subject {
             ... on Reactable {
-              ${REACTION_FRAGMENT}
+              ${REACTION_GROUPS_FRAGMENT}
             }
           }
         }
@@ -123,7 +121,7 @@ export async function DELETE(request: NextRequest) {
         removeReaction(input: $input) {
           subject {
             ... on Reactable {
-              ${REACTION_FRAGMENT}
+              ${REACTION_GROUPS_FRAGMENT}
             }
           }
         }

@@ -28,15 +28,45 @@ class RemovedTextWidget extends WidgetType {
 
 const addedMark = Decoration.mark({ class: "cm-diff-added" });
 
+/**
+ * Find the length of the common character prefix and suffix shared by two
+ * strings. Used to shrink the diff input — for an RFC where the user is
+ * editing one paragraph of a thousand-line doc, the trimmed middle is tiny.
+ */
+export function commonAffixes(
+  a: string,
+  b: string,
+): { prefix: number; suffix: number } {
+  const minLen = Math.min(a.length, b.length);
+  let prefix = 0;
+  while (prefix < minLen && a.charCodeAt(prefix) === b.charCodeAt(prefix)) {
+    prefix++;
+  }
+  let suffix = 0;
+  const maxSuffix = Math.min(a.length - prefix, b.length - prefix);
+  while (
+    suffix < maxSuffix &&
+    a.charCodeAt(a.length - 1 - suffix) === b.charCodeAt(b.length - 1 - suffix)
+  ) {
+    suffix++;
+  }
+  return { prefix, suffix };
+}
+
 function buildDiffDecorations(
   original: string,
   current: string,
 ): DecorationSet {
   if (original === current) return Decoration.none;
 
-  const chunks = diffSentences(original, current);
+  const { prefix, suffix } = commonAffixes(original, current);
+  const originalMid = original.slice(prefix, original.length - suffix);
+  const currentMid = current.slice(prefix, current.length - suffix);
+  if (originalMid === "" && currentMid === "") return Decoration.none;
+
+  const chunks = diffSentences(originalMid, currentMid);
   const ranges: ReturnType<typeof addedMark.range>[] = [];
-  let pos = 0;
+  let pos = prefix;
   let pendingRemoved = "";
 
   const flushPendingRemoved = () => {
@@ -67,29 +97,53 @@ function buildDiffDecorations(
   return Decoration.set(ranges, true);
 }
 
+const DEBOUNCE_MS = 200;
+
 /**
  * CodeMirror extension that overlays a sentence-level diff between
  * `original` and the live document. Added/changed sentences get a green
  * mark; removed sentences appear in place as inline strikethrough widgets
  * so the user can keep editing while seeing what changed.
+ *
+ * Recompute is debounced and skips the common character prefix/suffix, so
+ * typing in a large RFC doesn't run a full-doc diff per keystroke.
  */
 export function diffHighlight(original: string) {
   return ViewPlugin.fromClass(
     class {
-      decorations: DecorationSet;
+      decorations: DecorationSet = Decoration.none;
+      private timer: ReturnType<typeof setTimeout> | null = null;
+      private readonly view: EditorView;
+
       constructor(view: EditorView) {
-        this.decorations = buildDiffDecorations(
-          original,
-          view.state.doc.toString(),
-        );
+        this.view = view;
+        this.scheduleRecompute(0);
       }
+
       update(update: ViewUpdate) {
-        if (update.docChanged) {
+        if (update.docChanged) this.scheduleRecompute(DEBOUNCE_MS);
+      }
+
+      destroy() {
+        if (this.timer) {
+          clearTimeout(this.timer);
+          this.timer = null;
+        }
+      }
+
+      private scheduleRecompute(delay: number) {
+        if (this.timer) clearTimeout(this.timer);
+        this.timer = setTimeout(() => {
+          this.timer = null;
           this.decorations = buildDiffDecorations(
             original,
-            update.view.state.doc.toString(),
+            this.view.state.doc.toString(),
           );
-        }
+          // Nudge the view to re-read `decorations`. An empty transaction
+          // does not re-enter our update branch (docChanged is false), so
+          // this can't loop.
+          this.view.dispatch({});
+        }, delay);
       }
     },
     {

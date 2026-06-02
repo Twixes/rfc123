@@ -296,3 +296,21 @@ pre code.hljs {
     padding: 1.5rem;
   }
 }
+
+/* CodeMirror diff overlay used by RFCMarkdownEditor when `diffAgainst` is
+   set. Added/changed character ranges are tinted green; removed text is
+   re-inserted as an inline, non-editable widget with strikethrough. */
+.cm-diff-added {
+  background-color: rgb(220 252 231); /* tailwind green-100 */
+  border-radius: 2px;
+}
+.cm-diff-removed {
+  background-color: rgb(254 226 226); /* tailwind red-100 */
+  color: rgb(153 27 27); /* tailwind red-800 */
+  text-decoration: line-through;
+  text-decoration-color: rgba(248, 113, 113, 0.7);
+  border-radius: 2px;
+  padding: 0 2px;
+  margin: 0 1px;
+  white-space: pre-wrap;
+}

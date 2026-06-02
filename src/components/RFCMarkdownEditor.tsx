@@ -6,6 +6,7 @@ import { EditorView } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import CodeMirror, { type ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import { type Ref, useMemo } from "react";
+import { diffHighlight } from "@/lib/codemirror-diff";
 import { markdownLinkClicks } from "@/lib/codemirror-markdown-links";
 
 const MONO_FONT =
@@ -29,6 +30,10 @@ interface RFCMarkdownEditorProps {
   /** Called once per CodeMirror update; consumers use it to re-measure line
    *  positions when the doc, viewport, or geometry changes. */
   onEditorUpdate?: () => void;
+  /** When set, the editor overlays a word-level diff between `diffAgainst`
+   *  and the current buffer. Added/changed ranges get a green mark; removed
+   *  text appears as inline strikethrough widgets. */
+  diffAgainst?: string;
 }
 
 export function RFCMarkdownEditor({
@@ -37,6 +42,7 @@ export function RFCMarkdownEditor({
   className,
   editorRef,
   onEditorUpdate,
+  diffAgainst,
 }: RFCMarkdownEditorProps) {
   const extensions = useMemo(() => {
     const base = [
@@ -92,8 +98,11 @@ export function RFCMarkdownEditor({
         }),
       );
     }
+    if (diffAgainst !== undefined) {
+      base.push(diffHighlight(diffAgainst));
+    }
     return base;
-  }, [onEditorUpdate]);
+  }, [onEditorUpdate, diffAgainst]);
 
   return (
     <CodeMirror

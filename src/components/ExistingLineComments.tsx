@@ -1,4 +1,5 @@
 // biome-ignore-all lint/a11y/noStaticElementInteractions: the box itself is the comment-thread anchor; inner buttons carry the interactive semantics
+// biome-ignore-all lint/a11y/useKeyWithClickEvents: border-only click is a mouse-affordance; keyboard users have the header button
 // biome-ignore-all lint/performance/noImgElement: GitHub avatar URLs, served from a CDN; next/image's domain allowlist is heavier than the benefit here
 "use client";
 
@@ -75,6 +76,9 @@ export const ExistingLineComments = memo(function ExistingLineComments({
       style={{ transform: `translateY(${position}px)` }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onToggleCollapse();
+      }}
     >
       {isCollapsed ? (
         <button

@@ -1246,6 +1246,110 @@ function buildMarkdownMissingAttempts(
   return attempts;
 }
 
+export interface RFCCommit {
+  sha: string;
+  message: string;
+  /** First line of the commit message – cheap to render as a label. */
+  summary: string;
+  author: string | null;
+  authorAvatar: string | null;
+  authoredDate: string;
+}
+
+export interface RFCCommitHistory {
+  /** PR base commit (the merge target's head at the moment the PR diverged –
+   *  GitHub-side `pr.base.sha`). Used as the "before PR" side of a diff. */
+  base: { sha: string; ref: string; label: string };
+  /** PR commits, oldest first. Last entry is the PR's current HEAD. */
+  commits: RFCCommit[];
+}
+
+/**
+ * List the PR's own commits plus its base ref, in oldest→newest order. Used by
+ * the View-mode commit-range picker so readers can diff any two iterations.
+ *
+ * The PR commits endpoint is paginated (max 250 in a single response on
+ * `pulls.listCommits`). For RFCs that's overwhelmingly fine – an RFC with
+ * hundreds of commits is the exception, and we cap the page count cheaply.
+ */
+export async function listRFCCommits(
+  accessToken: string,
+  owner: string,
+  repo: string,
+  prNumber: number,
+): Promise<RFCCommitHistory> {
+  const octokit = await getOctokit(accessToken);
+  const [{ data: pr }, commits] = await Promise.all([
+    octokit.rest.pulls.get({ owner, repo, pull_number: prNumber }),
+    octokit.paginate(octokit.rest.pulls.listCommits, {
+      owner,
+      repo,
+      pull_number: prNumber,
+      per_page: 100,
+    }),
+  ]);
+  return {
+    base: {
+      sha: pr.base.sha,
+      ref: pr.base.ref,
+      label: `${pr.base.ref} (PR base)`,
+    },
+    commits: commits.map((c) => {
+      const message = c.commit.message ?? "";
+      return {
+        sha: c.sha,
+        message,
+        summary: message.split("\n", 1)[0] || c.sha.slice(0, 7),
+        author: c.author?.login ?? c.commit.author?.name ?? null,
+        authorAvatar: c.author?.avatar_url ?? null,
+        authoredDate:
+          c.commit.author?.date ??
+          c.commit.committer?.date ??
+          new Date(0).toISOString(),
+      };
+    }),
+  };
+}
+
+/**
+ * Fetch a single file from `repo` at `ref` and return its decoded UTF-8 text.
+ * Used by the View-mode diff picker to load each side of a commit-range diff.
+ * Returns `null` when the file does not exist at that ref (e.g. it was added in
+ * a later commit), which the caller surfaces as "no content at this commit".
+ */
+export async function getRFCContentAt(
+  accessToken: string,
+  owner: string,
+  repo: string,
+  ref: string,
+  path: string,
+): Promise<string | null> {
+  const octokit = await getOctokit(accessToken);
+  try {
+    const { data } = await octokit.rest.repos.getContent({
+      owner,
+      repo,
+      path,
+      ref,
+    });
+    if (Array.isArray(data) || data.type !== "file" || !("content" in data)) {
+      return null;
+    }
+    return Buffer.from(data.content, "base64").toString("utf-8");
+  } catch (e) {
+    const status = (e as { status?: number }).status;
+    if (status === 404) return null;
+    captureServerException(e as Error, undefined, {
+      function: "getRFCContentAt",
+      owner,
+      repo,
+      ref,
+      path,
+    });
+    throw e;
+  }
+}
+
 export async function getRFCDetail(
   accessToken: string,
   owner: string,

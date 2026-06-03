@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { auth } from "@/auth";
 import { getCurrentUser, getRFCTitle } from "@/lib/github";
 import RFCDetailClient from "./RFCDetailClient";
@@ -58,12 +59,14 @@ export default async function RFCPage({ params }: PageProps) {
   );
 
   return (
-    <RFCDetailClient
-      owner={owner}
-      repo={repo}
-      prNumber={Number(number)}
-      currentUser={currentUser.login}
-      currentUserAvatar={currentUser.avatarUrl}
-    />
+    <Suspense fallback={null}>
+      <RFCDetailClient
+        owner={owner}
+        repo={repo}
+        prNumber={Number(number)}
+        currentUser={currentUser.login}
+        currentUserAvatar={currentUser.avatarUrl}
+      />
+    </Suspense>
   );
 }

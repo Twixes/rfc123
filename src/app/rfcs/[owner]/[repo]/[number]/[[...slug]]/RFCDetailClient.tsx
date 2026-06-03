@@ -1,9 +1,14 @@
 "use client";
 
 import type { ReactCodeMirrorRef } from "@uiw/react-codemirror";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import posthog from "posthog-js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Checkbox from "@/components/Checkbox";
+import {
+  CommitRangePicker,
+  type DiffRange,
+} from "@/components/CommitRangePicker";
 import { DiscussWithAgentButton } from "@/components/DiscussWithAgentButton";
 import type { ReviewerItem } from "@/components/EditableReviewers";
 import { EditModeInlineComments } from "@/components/EditModeInlineComments";
@@ -20,12 +25,11 @@ import {
   RFCsTopBarPrimaryAction,
   RFCsTopBarSecondaryActions,
 } from "@/components/RFCsTopBarActions";
+import { RfcMonoDiffView, RfcPrettyDiffView } from "@/components/RfcDiffView";
 import { RfcMarkdownMissing } from "@/components/RfcMarkdownMissing";
-import {
-  type RfcMarkdownAssets,
-  RfcPrettyMarkdown,
-} from "@/components/RfcPrettyMarkdown";
+import type { RfcMarkdownAssets } from "@/components/RfcPrettyMarkdown";
 import Tooltip from "@/components/Tooltip";
+import { DIFF_PARAM, formatDiffRange, parseDiffRange } from "@/lib/diff-range";
 import type {
   Comment,
   CommentReactions,
@@ -33,11 +37,7 @@ import type {
   RFCDetail,
   RfcStateAction,
 } from "@/lib/github";
-import {
-  type LineDiffEntry,
-  lineDiff,
-  mapOriginalLines,
-} from "@/lib/line-diff";
+import { lineDiff, mapOriginalLines } from "@/lib/line-diff";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { useRfcDraft } from "@/lib/use-rfc-draft";
 import { ViewModeToggle } from "./ViewModeToggle";
@@ -62,6 +62,12 @@ interface RFCDetailClientProps {
   currentUser: string;
   currentUserAvatar: string;
 }
+
+type DiffState =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "ready"; base: string | null; compare: string | null }
+  | { kind: "error"; message: string };
 
 export default function RFCDetailClient({
   owner,
@@ -100,6 +106,30 @@ export default function RFCDetailClient({
   const [savingBody, setSavingBody] = useState(false);
   const [bodyConflict, setBodyConflict] = useState(false);
   const [bodySaveError, setBodySaveError] = useState<string | null>(null);
+  // Diff range lives in `?diff=<baseSha>...<compareSha>` so the current
+  // comparison is shareable / back-forward navigable. The URL is the source of
+  // truth – we derive the range from it and writes go via `setDiffRange`.
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const diffRange = useMemo(
+    () => parseDiffRange(searchParams.get(DIFF_PARAM)),
+    [searchParams],
+  );
+  const setDiffRange = useCallback(
+    (next: DiffRange | null) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (next) params.set(DIFF_PARAM, formatDiffRange(next));
+      else params.delete(DIFF_PARAM);
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [router, pathname, searchParams],
+  );
+  /** HEAD content is seeded from `rfc.markdownContent` so the common
+   *  "previous → HEAD" compare only fetches the base side. */
+  const diffContentCache = useRef<Map<string, string | null>>(new Map());
+  const [diffState, setDiffState] = useState<DiffState>({ kind: "idle" });
 
   const isAuthor = !!rfc && currentUser === rfc.author;
   const canEditBody = isAuthor && !!rfc && rfc.status === "open";
@@ -125,6 +155,11 @@ export default function RFCDetailClient({
       markdownFilePath: rfc.markdownFilePath,
     };
   }, [owner, repo, rfc?.headSha, rfc?.markdownFilePath]);
+
+  const viewDiffEntries = useMemo(() => {
+    if (diffState.kind !== "ready") return null;
+    return lineDiff(diffState.base ?? "", diffState.compare ?? "");
+  }, [diffState]);
 
   const {
     pendingDraft: pendingBodyDraft,
@@ -187,6 +222,56 @@ export default function RFCDetailClient({
   useEffect(() => {
     loadRFC();
   }, [loadRFC]);
+
+  useEffect(() => {
+    if (rfc?.headSha && typeof rfc.markdownContent === "string") {
+      diffContentCache.current.set(rfc.headSha, rfc.markdownContent);
+    }
+  }, [rfc?.headSha, rfc?.markdownContent]);
+
+  // Out-of-order responses (user flips Base while a previous request is in
+  // flight) are dropped with a cancellation token.
+  useEffect(() => {
+    if (!diffRange || !rfc?.markdownFilePath) {
+      setDiffState({ kind: "idle" });
+      return;
+    }
+    let cancelled = false;
+    const cache = diffContentCache.current;
+    const path = rfc.markdownFilePath;
+
+    async function fetchSide(sha: string): Promise<string | null> {
+      if (cache.has(sha)) return cache.get(sha) ?? null;
+      const res = await fetch(
+        `/api/rfcs/${prNumber}/content-at?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}&sha=${encodeURIComponent(sha)}&path=${encodeURIComponent(path)}`,
+      );
+      if (res.status === 404) {
+        cache.set(sha, null);
+        return null;
+      }
+      if (!res.ok) throw new Error("Failed to fetch content");
+      const data = (await res.json()) as { content: string };
+      cache.set(sha, data.content);
+      return data.content;
+    }
+
+    setDiffState({ kind: "loading" });
+    Promise.all([fetchSide(diffRange.baseSha), fetchSide(diffRange.compareSha)])
+      .then(([base, compare]) => {
+        if (cancelled) return;
+        setDiffState({ kind: "ready", base, compare });
+      })
+      .catch((e: Error) => {
+        if (cancelled) return;
+        setDiffState({
+          kind: "error",
+          message: e.message || "Failed to load diff",
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [diffRange, rfc?.markdownFilePath, owner, repo, prNumber]);
 
   // Scroll to and highlight the comment referenced in the URL hash
   useEffect(() => {
@@ -464,6 +549,7 @@ export default function RFCDetailClient({
     setCommitMessage("");
     setBodyConflict(false);
     setBodySaveError(null);
+    setDiffRange(null);
   }
 
   function exitBodyEdit(opts: { clearDraft?: boolean } = {}) {
@@ -479,6 +565,7 @@ export default function RFCDetailClient({
     setCommitMessage("");
     setBodyConflict(false);
     setBodySaveError(null);
+    setDiffRange(null);
     acceptBodyDraft();
   }
 
@@ -786,14 +873,23 @@ export default function RFCDetailClient({
         }
         bylineActions={
           editingBody == null && rfc.markdownFilePath ? (
-            <ViewModeToggle
-              value={viewMode}
-              onChange={setViewMode}
-              options={[
-                { value: "pretty", label: "Pretty" },
-                { value: "raw", label: "Raw" },
-              ]}
-            />
+            <div className="flex items-center gap-2">
+              <CommitRangePicker
+                owner={owner}
+                repo={repo}
+                prNumber={rfc.number}
+                range={diffRange}
+                onRangeChange={setDiffRange}
+              />
+              <ViewModeToggle
+                value={viewMode}
+                onChange={setViewMode}
+                options={[
+                  { value: "pretty", label: "Pretty" },
+                  { value: "raw", label: "Raw" },
+                ]}
+              />
+            </div>
           ) : editingBody != null ? (
             <ViewModeToggle
               value={editTab}
@@ -861,6 +957,31 @@ export default function RFCDetailClient({
             }
             githubUrl={rfc.url}
           />
+        ) : diffRange ? (
+          diffState.kind === "error" ? (
+            <div className="rounded-sm border border-magenta bg-magenta-light px-3 py-2 text-sm text-foreground">
+              {diffState.message}
+            </div>
+          ) : !viewDiffEntries ? (
+            <p className="text-sm text-gray-50">
+              Loading diff between {diffRange.baseSha.slice(0, 7)} and{" "}
+              {diffRange.compareSha.slice(0, 7)}…
+            </p>
+          ) : viewMode === "pretty" ? (
+            <RfcPrettyDiffView
+              entries={viewDiffEntries}
+              assets={{
+                owner,
+                repo,
+                // Image proxy points at the "compare" commit so relative
+                // `![](./img.png)` references resolve against that tree.
+                headRef: diffRange.compareSha,
+                markdownFilePath: rfc.markdownFilePath,
+              }}
+            />
+          ) : (
+            <RfcMonoDiffView entries={viewDiffEntries} />
+          )
         ) : viewMode === "pretty" ? (
           <InlineCommentableMarkdown
             content={rfc.markdownContent}
@@ -1017,7 +1138,11 @@ function BodyEditMode({
     mode === "preview" && !showDiff && !!markdownFilePath;
   const previewSlot =
     mode === "preview" && showDiff ? (
-      <DiffView entries={diffEntries ?? []} assets={previewAssets} />
+      <RfcPrettyDiffView
+        entries={diffEntries ?? []}
+        assets={previewAssets}
+        noChangesMessage="No changes. Your version matches the saved revision."
+      />
     ) : undefined;
   const writeDiffAgainst =
     mode === "write" && showDiff ? originalBody : undefined;
@@ -1322,75 +1447,6 @@ function BodyDraftRestoreBanner({
           Discard
         </button>
       </div>
-    </div>
-  );
-}
-
-interface DiffViewProps {
-  entries: LineDiffEntry[];
-  assets: RfcMarkdownAssets;
-}
-
-/** Renders a block-level diff over the rendered markdown. Consecutive lines
- *  of the same kind are grouped and rendered like the Pretty view, with red +
- *  strikethrough for removed blocks and a green hairline for added blocks. */
-function DiffView({ entries, assets }: DiffViewProps) {
-  if (entries.length === 0) {
-    return <p className="text-sm text-gray-50">No diff to show yet.</p>;
-  }
-  if (entries.every((e) => e.kind === "context")) {
-    return (
-      <p className="text-sm text-gray-50">
-        No changes. Your version matches the saved revision.
-      </p>
-    );
-  }
-  // Coalesce consecutive same-kind entries so each markdown block stays
-  // intact when handed to react-markdown.
-  const blocks: { kind: LineDiffEntry["kind"]; text: string }[] = [];
-  for (const entry of entries) {
-    const last = blocks[blocks.length - 1];
-    if (last && last.kind === entry.kind) {
-      last.text += `\n${entry.text}`;
-    } else {
-      blocks.push({ kind: entry.kind, text: entry.text });
-    }
-  }
-
-  return (
-    <div className="space-y-2">
-      {blocks.map((block, idx) => {
-        if (block.kind === "context") {
-          return (
-            // biome-ignore lint/suspicious/noArrayIndexKey: diff blocks have no stable identity; the list re-renders on every edit
-            <div key={idx}>
-              <RfcPrettyMarkdown content={block.text} assets={assets} />
-            </div>
-          );
-        }
-        const isAdded = block.kind === "added";
-        return (
-          <div
-            // biome-ignore lint/suspicious/noArrayIndexKey: diff blocks have no stable identity; the list re-renders on every edit
-            key={idx}
-            className={`relative rounded-sm pl-3 pr-2 py-1 before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-0.5 ${
-              isAdded
-                ? "bg-green-50 before:bg-green-400"
-                : "bg-red-50 line-through decoration-red-400/70 [&_*]:decoration-red-400/70 before:bg-red-400"
-            }`}
-          >
-            <span
-              aria-hidden
-              className={`absolute right-2 top-1 font-mono text-[10px] uppercase tracking-[0.12em] no-underline ${
-                isAdded ? "text-green-700" : "text-red-700"
-              }`}
-            >
-              {isAdded ? "Added" : "Removed"}
-            </span>
-            <RfcPrettyMarkdown content={block.text} assets={assets} />
-          </div>
-        );
-      })}
     </div>
   );
 }

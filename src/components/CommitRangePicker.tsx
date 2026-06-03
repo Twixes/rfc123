@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import type { DiffRange } from "@/lib/diff-range";
+import { type DiffRange, shortSha } from "@/lib/diff-range";
 import type { RFCCommitHistory } from "@/lib/github";
 import { RelativeTime } from "./RelativeTime";
 
@@ -33,25 +33,25 @@ type LoadState =
   | { kind: "error"; message: string };
 
 function buildEntries(history: RFCCommitHistory): PickerEntry[] {
-  const commits = [...history.commits].reverse().map<PickerEntry>((c, i) => ({
-    sha: c.sha,
-    label: c.summary || c.sha.slice(0, 7),
-    sublabel: i === 0 ? "Latest" : c.sha.slice(0, 7),
-    authoredDate: c.authoredDate,
-    isBase: false,
-  }));
+  const commits = [...history.commits].reverse().map<PickerEntry>((c, i) => {
+    const sha = shortSha(c.sha);
+    return {
+      sha,
+      label: c.summary || sha,
+      sublabel: i === 0 ? "Latest" : sha,
+      authoredDate: c.authoredDate,
+      isBase: false,
+    };
+  });
+  const baseSha = shortSha(history.base.sha);
   commits.push({
-    sha: history.base.sha,
+    sha: baseSha,
     label: history.base.label,
-    sublabel: history.base.sha.slice(0, 7),
+    sublabel: baseSha,
     authoredDate: null,
     isBase: true,
   });
   return commits;
-}
-
-function shortSha(sha: string): string {
-  return sha.slice(0, 7);
 }
 
 export function CommitRangePicker({
@@ -199,20 +199,28 @@ export function CommitRangePicker({
           >
             <div
               id={labelId}
-              className="flex items-center justify-between gap-2 border-b border-gray-20 px-3 py-2"
+              className="grid grid-cols-[1fr_auto_auto] items-center gap-x-3 border-b border-gray-20 px-3 py-2"
             >
-              <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-gray-70">
-                Compare versions
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-[11px] font-medium uppercase tracking-[0.1em] text-gray-70">
+                  Compare versions
+                </span>
+                {isActive && (
+                  <button
+                    type="button"
+                    onClick={reset}
+                    className="text-[11px] text-gray-50 hover:text-foreground transition-colors cursor-pointer"
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
+              <span className="text-center w-16 text-[10px] font-medium uppercase tracking-[0.1em] text-gray-50">
+                Base
               </span>
-              {isActive && (
-                <button
-                  type="button"
-                  onClick={reset}
-                  className="text-[11px] text-gray-50 hover:text-foreground transition-colors cursor-pointer"
-                >
-                  Reset
-                </button>
-              )}
+              <span className="text-center w-16 text-[10px] font-medium uppercase tracking-[0.1em] text-gray-50">
+                Compare
+              </span>
             </div>
 
             {state.kind === "loading" && <CommitListSkeleton />}
@@ -223,11 +231,6 @@ export function CommitRangePicker({
             )}
             {state.kind === "ready" && (
               <>
-                <div className="grid grid-cols-[1fr_auto_auto] items-center gap-x-3 border-b border-gray-20 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.1em] text-gray-50">
-                  <span>Commit</span>
-                  <span className="text-center w-10">Base</span>
-                  <span className="text-center w-10">Compare</span>
-                </div>
                 <ul className="max-h-72 overflow-y-auto">
                   {entries.map((e) => {
                     const isBase = draftBase === e.sha;
@@ -253,7 +256,7 @@ export function CommitRangePicker({
                             )}
                           </div>
                         </div>
-                        <label className="w-10 flex justify-center cursor-pointer">
+                        <label className="w-16 flex justify-center cursor-pointer">
                           <input
                             type="radio"
                             name={`${labelId}-base`}
@@ -263,7 +266,7 @@ export function CommitRangePicker({
                             aria-label={`Use ${e.label} as base`}
                           />
                         </label>
-                        <label className="w-10 flex justify-center cursor-pointer">
+                        <label className="w-16 flex justify-center cursor-pointer">
                           <input
                             type="radio"
                             name={`${labelId}-compare`}
@@ -321,11 +324,6 @@ export function CommitRangePicker({
 function CommitListSkeleton() {
   return (
     <>
-      <div className="grid grid-cols-[1fr_auto_auto] items-center gap-x-3 border-b border-gray-20 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.1em] text-gray-50">
-        <span>Commit</span>
-        <span className="text-center w-10">Base</span>
-        <span className="text-center w-10">Compare</span>
-      </div>
       <ul className="max-h-72 overflow-y-auto" aria-busy>
         {[72, 58, 64, 50].map((labelWidth, i) => (
           <li
@@ -340,10 +338,10 @@ function CommitListSkeleton() {
               />
               <div className="h-2.5 w-24 animate-pulse rounded bg-gray-10" />
             </div>
-            <div className="w-10 flex justify-center">
+            <div className="w-16 flex justify-center">
               <div className="h-3 w-3 animate-pulse rounded-full bg-gray-20" />
             </div>
-            <div className="w-10 flex justify-center">
+            <div className="w-16 flex justify-center">
               <div className="h-3 w-3 animate-pulse rounded-full bg-gray-20" />
             </div>
           </li>

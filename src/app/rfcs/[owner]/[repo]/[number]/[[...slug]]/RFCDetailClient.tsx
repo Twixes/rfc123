@@ -29,7 +29,12 @@ import { RfcMonoDiffView, RfcPrettyDiffView } from "@/components/RfcDiffView";
 import { RfcMarkdownMissing } from "@/components/RfcMarkdownMissing";
 import type { RfcMarkdownAssets } from "@/components/RfcPrettyMarkdown";
 import Tooltip from "@/components/Tooltip";
-import { DIFF_PARAM, formatDiffRange, parseDiffRange } from "@/lib/diff-range";
+import {
+  DIFF_PARAM,
+  formatDiffRange,
+  parseDiffRange,
+  shortSha,
+} from "@/lib/diff-range";
 import type {
   Comment,
   CommentReactions,
@@ -225,7 +230,8 @@ export default function RFCDetailClient({
 
   useEffect(() => {
     if (rfc?.headSha && typeof rfc.markdownContent === "string") {
-      diffContentCache.current.set(rfc.headSha, rfc.markdownContent);
+      // Cache keys come from the picker / URL, which use short SHAs.
+      diffContentCache.current.set(shortSha(rfc.headSha), rfc.markdownContent);
     }
   }, [rfc?.headSha, rfc?.markdownContent]);
 
@@ -964,8 +970,8 @@ export default function RFCDetailClient({
             </div>
           ) : !viewDiffEntries ? (
             <p className="text-sm text-gray-50">
-              Loading diff between {diffRange.baseSha.slice(0, 7)} and{" "}
-              {diffRange.compareSha.slice(0, 7)}…
+              Loading diff between {shortSha(diffRange.baseSha)} and{" "}
+              {shortSha(diffRange.compareSha)}…
             </p>
           ) : viewMode === "pretty" ? (
             <RfcPrettyDiffView

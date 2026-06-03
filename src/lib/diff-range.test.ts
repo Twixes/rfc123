@@ -36,8 +36,14 @@ describe("parseDiffRange", () => {
 });
 
 describe("formatDiffRange", () => {
-  it("round-trips with parseDiffRange", () => {
+  it("round-trips short SHAs through parseDiffRange", () => {
     const range = { baseSha: "abc1234", compareSha: "def5678" };
     expect(parseDiffRange(formatDiffRange(range))).toEqual(range);
+  });
+
+  it("truncates full SHAs to 7 chars so URLs stay readable", () => {
+    expect(
+      formatDiffRange({ baseSha: "a".repeat(40), compareSha: "b".repeat(40) }),
+    ).toBe("aaaaaaa...bbbbbbb");
   });
 });

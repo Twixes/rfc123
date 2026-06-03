@@ -65,9 +65,15 @@ export function CommitRangePicker({
   const [state, setState] = useState<LoadState>({ kind: "idle" });
   const rootRef = useRef<HTMLDivElement>(null);
   const labelId = useId();
+  // Guards the lazy fetch: we want it to run once on first open, not every
+  // time `open` flips back to true. Can't read `state.kind` from deps and
+  // mutate it in the effect body — the cleanup would fire on the resulting
+  // re-render and discard the in-flight response.
+  const fetchStartedRef = useRef(false);
 
   useEffect(() => {
-    if (!open || state.kind !== "idle") return;
+    if (!open || fetchStartedRef.current) return;
+    fetchStartedRef.current = true;
     let cancelled = false;
     setState({ kind: "loading" });
     fetch(
@@ -83,12 +89,13 @@ export function CommitRangePicker({
       })
       .catch((e: Error) => {
         if (cancelled) return;
+        fetchStartedRef.current = false; // allow retry on next open
         setState({ kind: "error", message: e.message });
       });
     return () => {
       cancelled = true;
     };
-  }, [open, state.kind, owner, repo, prNumber]);
+  }, [open, owner, repo, prNumber]);
 
   useEffect(() => {
     if (!open) return;
@@ -208,11 +215,7 @@ export function CommitRangePicker({
               )}
             </div>
 
-            {state.kind === "loading" && (
-              <div className="px-3 py-6 text-sm text-gray-50">
-                Loading commits…
-              </div>
-            )}
+            {state.kind === "loading" && <CommitListSkeleton />}
             {state.kind === "error" && (
               <div className="px-3 py-6 text-sm text-magenta">
                 {state.message || "Failed to load commits."}
@@ -312,5 +315,44 @@ export function CommitRangePicker({
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+function CommitListSkeleton() {
+  return (
+    <>
+      <div className="grid grid-cols-[1fr_auto_auto] items-center gap-x-3 border-b border-gray-20 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.1em] text-gray-50">
+        <span>Commit</span>
+        <span className="text-center w-10">Base</span>
+        <span className="text-center w-10">Compare</span>
+      </div>
+      <ul className="max-h-72 overflow-y-auto" aria-busy>
+        {[72, 58, 64, 50].map((labelWidth, i) => (
+          <li
+            // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton rows
+            key={i}
+            className="grid grid-cols-[1fr_auto_auto] items-center gap-x-3 px-3 py-2 border-b border-gray-10 last:border-b-0"
+          >
+            <div className="min-w-0 space-y-1.5">
+              <div
+                className="h-3.5 animate-pulse rounded bg-gray-20"
+                style={{ width: `${labelWidth}%` }}
+              />
+              <div className="h-2.5 w-24 animate-pulse rounded bg-gray-10" />
+            </div>
+            <div className="w-10 flex justify-center">
+              <div className="h-3 w-3 animate-pulse rounded-full bg-gray-20" />
+            </div>
+            <div className="w-10 flex justify-center">
+              <div className="h-3 w-3 animate-pulse rounded-full bg-gray-20" />
+            </div>
+          </li>
+        ))}
+      </ul>
+      <div className="flex items-center justify-between gap-2 border-t border-gray-20 px-3 py-2">
+        <div className="h-3 w-32 animate-pulse rounded bg-gray-10" />
+        <div className="h-7 w-20 animate-pulse rounded-md bg-gray-10" />
+      </div>
+    </>
   );
 }

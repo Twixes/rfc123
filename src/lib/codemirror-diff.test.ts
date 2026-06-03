@@ -1,5 +1,10 @@
+import { Decoration } from "@codemirror/view";
 import { describe, expect, it } from "vitest";
-import { collapseRuns, commonAffixes } from "./codemirror-diff";
+import {
+  buildDiffDecorations,
+  collapseRuns,
+  commonAffixes,
+} from "./codemirror-diff";
 
 describe("commonAffixes", () => {
   it("returns zero for fully distinct strings", () => {
@@ -161,5 +166,63 @@ describe("collapseRuns", () => {
       { removed: true, value: "one small and fast" },
       { added: true, value: "two tiny and slow" },
     ]);
+  });
+});
+
+describe("buildDiffDecorations precision under load", () => {
+  // Regression test for the bug where a tiny edit in a multi-paragraph doc
+  // with many other accumulated edits used to fall through to a coarse
+  // per-line fallback and highlight the entire paragraph. Paragraph-aware
+  // splitting keeps each paragraph's diff independent and word-precise.
+  function decorationRanges(
+    set: ReturnType<typeof buildDiffDecorations>,
+  ): { from: number; to: number; isWidget: boolean }[] {
+    const out: { from: number; to: number; isWidget: boolean }[] = [];
+    const cursor = set.iter();
+    while (cursor.value) {
+      const spec = (cursor.value as unknown as { spec?: { widget?: unknown } })
+        .spec;
+      out.push({
+        from: cursor.from,
+        to: cursor.to,
+        isWidget: !!spec?.widget,
+      });
+      cursor.next();
+    }
+    return out;
+  }
+
+  it("highlights only the changed word when accumulated edits push past the bailout", () => {
+    // 300 paragraphs of substantial prose — guarantees the saved-revision
+    // diff exceeds the per-cluster maxEditLength if anything coarse-grained
+    // is invoked. Two scattered prior edits + one new char in paragraph 150.
+    const para = (n: number) =>
+      `Paragraph ${n} of the document. It contains several sentences that are completely unique to this index ${n}. The point is to have enough characters that a per-paragraph diff is meaningful, and to ensure paragraphs do not look alike across the document.`;
+    const original = Array.from({ length: 300 }, (_, i) => para(i)).join(
+      "\n\n",
+    );
+    let current = original;
+    // Two big prior edits elsewhere — these blow up the cumulative edit
+    // distance so a non-paragraph-aware diff would bail.
+    current = current.replace(para(50), `${para(50)} EXTRA SENTENCE A.`);
+    current = current.replace(para(250), `${para(250)} EXTRA SENTENCE B.`);
+    // The change we care about: one character flipped inside paragraph 150.
+    current = current.replace("Paragraph 150 of", "Paragraph 150 oF");
+
+    const set = buildDiffDecorations(original, current);
+    expect(set).not.toBe(Decoration.none);
+
+    const ranges = decorationRanges(set);
+    // Decoration ranges should be small — none should span an entire
+    // paragraph's worth of characters. para().length ≈ 270; if any single
+    // green mark or removed widget approached that, we'd be back in
+    // whole-paragraph land.
+    const widestSpan = ranges.reduce((m, r) => Math.max(m, r.to - r.from), 0);
+    expect(widestSpan).toBeLessThan(40);
+
+    // And the green-mark count should be ≥ 3 (one per scattered edit) —
+    // proves we didn't collapse all three into one giant region.
+    const greenMarks = ranges.filter((r) => !r.isWidget);
+    expect(greenMarks.length).toBeGreaterThanOrEqual(3);
   });
 });

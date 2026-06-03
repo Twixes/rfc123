@@ -6,7 +6,7 @@ import {
   type ViewUpdate,
   WidgetType,
 } from "@codemirror/view";
-import { diffLines, diffWordsWithSpace } from "diff";
+import { diffArrays, diffWordsWithSpace } from "diff";
 
 class RemovedTextWidget extends WidgetType {
   constructor(readonly text: string) {
@@ -130,11 +130,101 @@ export function collapseRuns(chunks: ReadonlyArray<DiffChunk>): DiffChunk[] {
 }
 
 /** Bail out of jsdiff's O(n·d) word-level Myers once the edit distance gets
- *  this big. On bailout we fall back first to `diffLines` (paragraph-granular)
- *  and then to a single removed + single added "whole region rewritten" chunk.
- *  Tuned to keep small/medium edits on the precise word path while bounding
- *  worst-case time on full-doc rewrites of large RFCs. */
+ *  this big. Used as a safety net per paragraph cluster (see
+ *  `diffByParagraph`) so pathological single-paragraph rewrites can't pin
+ *  the editor. */
 const MAX_EDIT_LENGTH = 1500;
+
+/** Split by `\n\n` while preserving the separator on every token but the
+ *  last, so `tokens.join("") === input`. That invariant keeps decoration
+ *  positions byte-accurate after the paragraph-level diff round-trips. */
+function splitParagraphs(s: string): string[] {
+  if (s === "") return [];
+  const parts = s.split("\n\n");
+  const out: string[] = [];
+  for (let i = 0; i < parts.length - 1; i++) {
+    out.push(`${parts[i]}\n\n`);
+  }
+  out.push(parts[parts.length - 1]);
+  return out;
+}
+
+/** Word-level diff with the maxEditLength safety net. On bailout (a single
+ *  paragraph rewritten past 1500 edits) emit one removed + one added — at
+ *  paragraph scope this is the right visual story anyway. */
+function wordDiffBounded(a: string, b: string): DiffChunk[] {
+  const chunks = diffWordsWithSpace(a, b, {
+    maxEditLength: MAX_EDIT_LENGTH,
+  }) as DiffChunk[] | undefined;
+  if (chunks != null) return chunks;
+  const out: DiffChunk[] = [];
+  if (a) out.push({ removed: true, value: a });
+  if (b) out.push({ added: true, value: b });
+  return out;
+}
+
+/**
+ * Paragraph-aware diff. Splits both sides by `\n\n` and runs `diffArrays`
+ * on the paragraph token arrays first. Unchanged paragraph runs cost
+ * nothing — they're emitted verbatim as one common chunk. Each
+ * removed+added paragraph cluster is then handed to `wordDiffBounded` so
+ * we only pay word-level Myers on the paragraphs the user actually
+ * rewrote, not the whole doc. Crucially, single-character changes inside
+ * one paragraph stay precise even when the user has accumulated lots of
+ * other edits elsewhere — each paragraph is diffed independently.
+ */
+function diffByParagraph(original: string, current: string): DiffChunk[] {
+  if (original === "") {
+    return current === "" ? [] : [{ added: true, value: current }];
+  }
+  if (current === "") return [{ removed: true, value: original }];
+
+  const origParas = splitParagraphs(original);
+  const currParas = splitParagraphs(current);
+
+  // Single-paragraph on both sides — no benefit from paragraph splitting.
+  if (origParas.length <= 1 && currParas.length <= 1) {
+    return wordDiffBounded(original, current);
+  }
+
+  const arrChunks = diffArrays(origParas, currParas) as Array<{
+    added?: boolean;
+    removed?: boolean;
+    value: string[];
+  }>;
+
+  const out: DiffChunk[] = [];
+  for (let i = 0; i < arrChunks.length; i++) {
+    const c = arrChunks[i];
+    if (!c.added && !c.removed) {
+      const joined = c.value.join("");
+      if (joined) out.push({ value: joined });
+      continue;
+    }
+    let removedJoined = "";
+    let addedJoined = "";
+    if (c.removed) {
+      removedJoined = c.value.join("");
+      const next = arrChunks[i + 1];
+      if (next?.added) {
+        addedJoined = next.value.join("");
+        i++;
+      }
+    } else {
+      addedJoined = c.value.join("");
+    }
+
+    if (removedJoined && addedJoined) {
+      for (const wc of wordDiffBounded(removedJoined, addedJoined))
+        out.push(wc);
+    } else if (removedJoined) {
+      out.push({ removed: true, value: removedJoined });
+    } else if (addedJoined) {
+      out.push({ added: true, value: addedJoined });
+    }
+  }
+  return out;
+}
 
 export function buildDiffDecorations(
   original: string,
@@ -147,32 +237,7 @@ export function buildDiffDecorations(
   const currentMid = current.slice(prefix, current.length - suffix);
   if (originalMid === "" && currentMid === "") return Decoration.none;
 
-  // jsdiff returns `undefined` when `maxEditLength` is exceeded — that's our
-  // signal that the precise word diff is too expensive (whole-doc rewrite of
-  // a large RFC). Fall back to a coarser representation.
-  const wordChunks = diffWordsWithSpace(originalMid, currentMid, {
-    maxEditLength: MAX_EDIT_LENGTH,
-  }) as DiffChunk[] | undefined;
-
-  let rawChunks: DiffChunk[];
-  if (wordChunks != null) {
-    rawChunks = wordChunks;
-  } else {
-    const lineChunks = diffLines(originalMid, currentMid, {
-      maxEditLength: MAX_EDIT_LENGTH,
-    }) as DiffChunk[] | undefined;
-    if (lineChunks != null) {
-      rawChunks = lineChunks;
-    } else {
-      // Pure bailout: render the entire region as one removed + one added
-      // chunk. Correct visual answer for "the whole region got rewritten".
-      rawChunks = [];
-      if (originalMid) rawChunks.push({ removed: true, value: originalMid });
-      if (currentMid) rawChunks.push({ added: true, value: currentMid });
-    }
-  }
-
-  const chunks = collapseRuns(rawChunks);
+  const chunks = collapseRuns(diffByParagraph(originalMid, currentMid));
   const ranges: ReturnType<typeof addedMark.range>[] = [];
   let pos = prefix;
   let pendingRemoved = "";

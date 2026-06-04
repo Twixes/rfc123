@@ -4,6 +4,10 @@ import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { RFCSearchResponseItem } from "@/app/api/rfcs/search/route";
+import {
+  AnonymousSignInButton,
+  AnonymousSignInCTA,
+} from "@/components/AnonymousSignInCTA";
 import { RelativeTime } from "@/components/RelativeTime";
 import RepoSelector from "@/components/RepoSelector";
 import RFCListSkeleton from "@/components/RFCListSkeleton";
@@ -40,15 +44,37 @@ interface RFCsPageClientProps {
   /** Null on transient GH error – we degrade by treating every RFC as
    *  someone else's. */
   viewerLogin: string | null;
+  /** When set, the list is locked to this single repo: the picker is hidden,
+   *  fetches always include the repo filter, and the topbar logo points home
+   *  instead of back to /rfcs. Used by /rfcs/[owner]/[repo]. */
+  repoLock?: { owner: string; name: string };
+  /** Public render path – hides the "New RFC" CTA everywhere and swaps the
+   *  user dropdown for a sign-in link. */
+  isAnonymous?: boolean;
 }
 
 export default function RFCsPageClient({
   session,
   viewerLogin,
+  repoLock,
+  isAnonymous = false,
 }: RFCsPageClientProps) {
+  // When locked, the initial selectedRepo is synthesized from `repoLock` so
+  // the very first fetch (and all subsequent ones) hits /api/rfcs?owner=&repo=
+  // and the topbar's repo context renders correctly.
+  const lockedRepoOption: RepoOption | null = repoLock
+    ? {
+        owner: repoLock.owner,
+        name: repoLock.name,
+        fullName: `${repoLock.owner}/${repoLock.name}`,
+        canPush: false,
+      }
+    : null;
   const [rfcs, setRfcs] = useState<RFC[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedRepo, setSelectedRepo] = useState<RepoOption | null>(null);
+  const [selectedRepo, setSelectedRepo] = useState<RepoOption | null>(
+    lockedRepoOption,
+  );
   const rfcsAbortControllerRef = useRef<AbortController | null>(null);
   const [selectedStatuses, setSelectedStatuses] = useState<Set<RFC["status"]>>(
     new Set(["open"]),
@@ -213,7 +239,7 @@ export default function RFCsPageClient({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: mount-only initial load
   useEffect(() => {
-    loadRFCs();
+    loadRFCs(lockedRepoOption);
   }, []);
 
   useEffect(() => {
@@ -396,11 +422,25 @@ export default function RFCsPageClient({
   return (
     <div className="mx-auto min-h-screen max-w-216 px-4 sm:px-8 py-6 sm:py-12">
       <RFCsTopBar
-        user={session?.user ?? null}
+        user={isAnonymous ? null : (session?.user ?? null)}
         homeHref="/"
-        secondaryActions={<RFCsTopBarSecondaryActions />}
-        primaryActions={<RFCsTopBarPrimaryAction repo={selectedRepo} />}
+        secondaryActions={isAnonymous ? null : <RFCsTopBarSecondaryActions />}
+        primaryActions={
+          isAnonymous ? (
+            <AnonymousSignInButton />
+          ) : (
+            <RFCsTopBarPrimaryAction repo={selectedRepo} />
+          )
+        }
       />
+
+      {isAnonymous && (
+        <div className="mb-3">
+          <AnonymousSignInCTA
+            message={`You're reading these RFCs publicly – the same way ${repoLock?.owner ?? "their"} team members see them. Sign up with GitHub to comment, react, or start one of your own.`}
+          />
+        </div>
+      )}
 
       {missingScopes.length > 0 && (
         <div className="mb-6 border border-magenta/30 bg-magenta-light rounded-md px-4 py-3 text-sm text-foreground flex flex-wrap items-center gap-x-3 gap-y-1.5">
@@ -455,7 +495,25 @@ export default function RFCsPageClient({
 
           <div className="h-5 w-px bg-gray-20" />
 
-          {repoSelectorElement}
+          {repoLock ? (
+            // Locked-repo mode: the picker is gone, so surface the current
+            // repo as a static pill in the same slot so users see what
+            // they're filtered to.
+            <span className="inline-flex items-center gap-1.5 rounded-sm border border-gray-30 bg-gray-5 px-2 py-1 font-mono text-xs text-foreground cursor-default">
+              <svg
+                aria-hidden
+                viewBox="0 0 16 16"
+                className="h-3.5 w-3.5 text-gray-50"
+                fill="currentColor"
+              >
+                <title>Repo</title>
+                <path d="M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.66 1.75.75.75 0 0 1-.99 1.124A2.5 2.5 0 0 1 2 11.5v-9zm10.5-1V9h-8c-.356 0-.694.074-1 .208V2.5a1 1 0 0 1 1-1h8z" />
+              </svg>
+              {repoLock.owner}/{repoLock.name}
+            </span>
+          ) : (
+            repoSelectorElement
+          )}
 
           <div className="relative" ref={authorDropdownRef}>
             <button
@@ -586,7 +644,7 @@ export default function RFCsPageClient({
       {isLoading ? (
         <RFCListSkeleton />
       ) : rfcs && rfcs.length === 0 ? (
-        <EmptyRFCsState selectedRepo={selectedRepo} />
+        <EmptyRFCsState selectedRepo={selectedRepo} isAnonymous={isAnonymous} />
       ) : searchQuery.trim().length > 0 && filteredCount === 0 ? (
         <NoSearchResults
           query={searchQuery}
@@ -634,28 +692,38 @@ export default function RFCsPageClient({
   );
 }
 
-function EmptyRFCsState({ selectedRepo }: { selectedRepo: RepoOption | null }) {
+function EmptyRFCsState({
+  selectedRepo,
+  isAnonymous,
+}: {
+  selectedRepo: RepoOption | null;
+  isAnonymous: boolean;
+}) {
   const headline = selectedRepo
     ? `No RFCs in ${selectedRepo.owner}/${selectedRepo.name} yet`
     : "No RFCs across your RFC repos yet";
-  const subtext = selectedRepo
-    ? "Start one here, or pick a different repo from the dropdown above."
-    : "Start one in any of your RFC repos, or use the dropdown above to add a legacy RFCs repo.";
+  const subtext = isAnonymous
+    ? "Check back later – or sign in with GitHub to start one of your own."
+    : selectedRepo
+      ? "Start one here, or pick a different repo from the dropdown above."
+      : "Start one in any of your RFC repos, or use the dropdown above to add a legacy RFCs repo.";
   return (
     <div className="mt-2 rounded-md border border-dashed border-gray-20 bg-surface px-6 py-10 text-center">
       <h2 className="text-2xl font-serif font-normal text-foreground">
         {headline}
       </h2>
       <p className="mx-auto mt-2 max-w-md text-sm text-gray-70">{subtext}</p>
-      <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
-        <Link
-          href={newRfcHref(selectedRepo)}
-          className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-surface transition-all hover:opacity-80 cursor-pointer flex items-center gap-1.5"
-        >
-          <NewRfcPlusIcon />
-          Start an RFC
-        </Link>
-      </div>
+      {!isAnonymous && (
+        <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+          <Link
+            href={newRfcHref(selectedRepo)}
+            className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-surface transition-all hover:opacity-80 cursor-pointer flex items-center gap-1.5"
+          >
+            <NewRfcPlusIcon />
+            Start an RFC
+          </Link>
+        </div>
+      )}
     </div>
   );
 }

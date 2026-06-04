@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import type { Comment } from "@/lib/github";
 import { getOctokit } from "@/lib/github";
+import { getReadToken } from "@/lib/public-access";
 import { fetchReactionsForCommentNodes } from "@/lib/reactions";
 
 export async function GET(
@@ -10,11 +11,6 @@ export async function GET(
 ) {
   const session = await auth();
   const { number } = await params;
-
-  if (!(session as { accessToken?: string })?.accessToken) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   const { searchParams } = new URL(request.url);
   const owner = searchParams.get("owner");
   const repo = searchParams.get("repo");
@@ -26,10 +22,13 @@ export async function GET(
     );
   }
 
+  const readToken = await getReadToken(session, owner, repo);
+  if (!readToken) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    const octokit = await getOctokit(
-      (session as unknown as { accessToken: string }).accessToken,
-    );
+    const octokit = await getOctokit(readToken);
 
     // Paginate so PRs with >30 inline comments don't drop later ones –
     // missing parents would also break reply-threading in groupIntoThreads.

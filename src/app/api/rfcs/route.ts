@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { auth, getAccessToken } from "@/auth";
 import {
   createRFC,
   getCurrentUser,
@@ -10,43 +10,44 @@ import {
   loadRfcConfig,
 } from "@/lib/github";
 import { getPostHogServer } from "@/lib/posthog-server";
+import { getReadToken } from "@/lib/public-access";
 import { slugify } from "@/lib/slugify";
 
 export async function GET(request: Request) {
   const session = await auth();
-
-  if (!(session as { accessToken?: string })?.accessToken) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   const { searchParams } = new URL(request.url);
   const owner = searchParams.get("owner");
   const repo = searchParams.get("repo");
+  const sessionToken = getAccessToken(session);
+
+  if (!sessionToken && !(owner && repo)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   try {
-    const accessToken = (session as unknown as { accessToken: string })
-      .accessToken;
-    const [currentUserLogin, scopes] = await Promise.all([
-      getCurrentUserLogin(accessToken),
-      getGrantedScopes(accessToken),
+    const [readToken, currentUserLogin, hasReadOrg] = await Promise.all([
+      sessionToken ??
+        (owner && repo ? getReadToken(session, owner, repo) : null),
+      sessionToken ? getCurrentUserLogin(sessionToken) : "",
+      sessionToken
+        ? getGrantedScopes(sessionToken).then((s) => s.includes("read:org"))
+        : false,
     ]);
-    const hasReadOrg = scopes.includes("read:org");
-    // Sentinel header the client reads to decide whether to render the
-    // "please re-auth for full features" banner. We still return RFCs in
-    // the degraded mode – direct review requests work; team-requested ones
-    // are silently dropped until the user signs back in with `read:org`.
-    const headers = hasReadOrg
-      ? undefined
-      : { "X-RFC123-Missing-Scopes": "read:org" };
+    if (!readToken) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const headers =
+      sessionToken && !hasReadOrg
+        ? { "X-RFC123-Missing-Scopes": "read:org" }
+        : undefined;
     const listOpts = {
       withTeamFields: hasReadOrg,
-      // List page loads counts progressively via GET /api/rfcs/comment-counts.
       deferInlineCommentCounts: true,
     };
     const rfcs =
       !owner || !repo
-        ? await listAllRFCs(accessToken, currentUserLogin, listOpts)
-        : await listRFCs(accessToken, owner, repo, currentUserLogin, listOpts);
+        ? await listAllRFCs(readToken, currentUserLogin, listOpts)
+        : await listRFCs(readToken, owner, repo, currentUserLogin, listOpts);
     // Hide other people's drafts; keep the viewer's own so they can resume.
     const visibleRfcs = rfcs.filter(
       (rfc) => !rfc.isDraft || rfc.author === currentUserLogin,

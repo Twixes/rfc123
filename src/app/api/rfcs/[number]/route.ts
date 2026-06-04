@@ -1,56 +1,44 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { auth, getAccessToken } from "@/auth";
 import { getCurrentUserLogin, getRFCDetail } from "@/lib/github";
+import { getReadToken } from "@/lib/public-access";
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ number: string }> },
 ) {
-  const t0 = performance.now();
   const session = await auth();
-  console.log(
-    `[API /rfcs/[number]] auth() took ${(performance.now() - t0).toFixed(0)}ms`,
-  );
   const { number } = await params;
-
-  if (!(session as { accessToken?: string })?.accessToken) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const accessToken = (session as unknown as { accessToken: string })
-    .accessToken;
-
-  const t1 = performance.now();
-  const currentUserLogin = await getCurrentUserLogin(accessToken);
-  console.log(
-    `[API /rfcs/[number]] getCurrentUserLogin() took ${(performance.now() - t1).toFixed(0)}ms`,
-  );
-
   const { searchParams } = new URL(request.url);
   const owner = searchParams.get("owner");
   const repo = searchParams.get("repo");
 
-  if (!owner || !repo || !currentUserLogin) {
+  if (!owner || !repo) {
     return NextResponse.json(
-      { error: "Missing owner or repo or currentUserLogin parameter" },
+      { error: "Missing owner or repo parameter" },
       { status: 400 },
     );
   }
 
+  const readToken = await getReadToken(session, owner, repo);
+  if (!readToken) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // currentUserLogin is only used to derive `reviewRequested` for the viewer.
+  // For anonymous (public-token) reads there's no viewer, so leave it empty.
+  const sessionToken = getAccessToken(session);
+  const currentUserLogin = sessionToken
+    ? await getCurrentUserLogin(sessionToken)
+    : "";
+
   try {
-    const t2 = performance.now();
     const rfc = await getRFCDetail(
-      (session as unknown as { accessToken: string }).accessToken,
+      readToken,
       owner,
       repo,
       Number(number),
       currentUserLogin,
-    );
-    console.log(
-      `[API /rfcs/[number]] getRFCDetail() took ${(performance.now() - t2).toFixed(0)}ms`,
-    );
-    console.log(
-      `[API /rfcs/[number]] total took ${(performance.now() - t0).toFixed(0)}ms`,
     );
     return NextResponse.json(rfc);
   } catch (error) {

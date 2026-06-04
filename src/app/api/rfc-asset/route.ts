@@ -2,6 +2,7 @@ import { auth } from "@/auth";
 import { contentTypeForAsset } from "@/lib/asset-mime";
 import { getOctokit } from "@/lib/github";
 import { normalizeRepoPath } from "@/lib/markdown-assets";
+import { getReadToken } from "@/lib/public-access";
 
 // MIME types browsers execute scripts in when opened as a top-level document.
 // Anything matching gets a `Content-Disposition: attachment` so a malicious
@@ -19,11 +20,6 @@ function isExecutableMime(mime: string): boolean {
 
 export async function GET(request: Request) {
   const session = await auth();
-  const accessToken = (session as { accessToken?: string })?.accessToken;
-
-  if (!accessToken) {
-    return new Response("Unauthorized", { status: 401 });
-  }
 
   const { searchParams } = new URL(request.url);
   const owner = searchParams.get("owner");
@@ -35,13 +31,18 @@ export async function GET(request: Request) {
     return new Response("Missing owner, repo, ref, or path", { status: 400 });
   }
 
+  const readToken = await getReadToken(session, owner, repo);
+  if (!readToken) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
   const path = normalizeRepoPath(pathParam);
   if (!path) {
     return new Response("Invalid path", { status: 400 });
   }
 
   try {
-    const octokit = await getOctokit(accessToken);
+    const octokit = await getOctokit(readToken);
     const fileResp = await octokit.request(
       "GET /repos/{owner}/{repo}/contents/{path}",
       {

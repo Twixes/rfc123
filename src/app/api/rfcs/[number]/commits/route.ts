@@ -1,16 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { auth, getAccessToken } from "@/auth";
+import { auth } from "@/auth";
 import { listRFCCommits } from "@/lib/github";
+import { getReadToken } from "@/lib/public-access";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ number: string }> },
 ) {
   const session = await auth();
-  const accessToken = getAccessToken(session);
-  if (!accessToken) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
   const { number } = await params;
   const prNumber = Number.parseInt(number, 10);
   const { searchParams } = new URL(request.url);
@@ -19,8 +16,12 @@ export async function GET(
   if (!owner || !repo || !Number.isFinite(prNumber)) {
     return NextResponse.json({ error: "Missing owner/repo" }, { status: 400 });
   }
+  const readToken = await getReadToken(session, owner, repo);
+  if (!readToken) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
-    const history = await listRFCCommits(accessToken, owner, repo, prNumber);
+    const history = await listRFCCommits(readToken, owner, repo, prNumber);
     return NextResponse.json(history);
   } catch (error) {
     console.error("Error listing RFC commits:", error);

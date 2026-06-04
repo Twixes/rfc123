@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { auth, getAccessToken } from "@/auth";
+import { auth } from "@/auth";
 import { getRFCContentAt } from "@/lib/github";
+import { getReadToken } from "@/lib/public-access";
 
 const SHA_RE = /^[0-9a-f]{7,40}$/i;
 
@@ -9,10 +10,6 @@ export async function GET(
   { params }: { params: Promise<{ number: string }> },
 ) {
   const session = await auth();
-  const accessToken = getAccessToken(session);
-  if (!accessToken) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
   const { number } = await params;
   const prNumber = Number.parseInt(number, 10);
   const { searchParams } = new URL(request.url);
@@ -29,8 +26,12 @@ export async function GET(
   if (!SHA_RE.test(sha)) {
     return NextResponse.json({ error: "Invalid sha" }, { status: 400 });
   }
+  const readToken = await getReadToken(session, owner, repo);
+  if (!readToken) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
-    const content = await getRFCContentAt(accessToken, owner, repo, sha, path);
+    const content = await getRFCContentAt(readToken, owner, repo, sha, path);
     if (content == null) {
       return NextResponse.json(
         { error: "File not found at this commit" },

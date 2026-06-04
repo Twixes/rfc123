@@ -1,4 +1,5 @@
-import { auth } from "@/auth";
+import { auth, getAccessToken } from "@/auth";
+import { getPublicGitHubToken } from "@/lib/public-access";
 
 const ALLOWED_HOSTS = new Set([
   "github.com",
@@ -36,8 +37,9 @@ function isExecutableMime(mime: string): boolean {
 
 export async function GET(request: Request) {
   const session = await auth();
-  const accessToken = (session as { accessToken?: string })?.accessToken;
-
+  // Anonymous viewers fall back to the public token; the host allowlist
+  // below keeps the proxy scoped to GitHub regardless of which token wins.
+  const accessToken = getAccessToken(session) ?? getPublicGitHubToken();
   if (!accessToken) {
     return new Response("Unauthorized", { status: 401 });
   }

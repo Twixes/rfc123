@@ -1,14 +1,10 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { fetchInlineCommentCounts } from "@/lib/github";
+import { getReadToken } from "@/lib/public-access";
 
 export async function GET(request: Request) {
   const session = await auth();
-
-  if (!(session as { accessToken?: string })?.accessToken) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   const { searchParams } = new URL(request.url);
   const owner = searchParams.get("owner");
   const repo = searchParams.get("repo");
@@ -30,11 +26,14 @@ export async function GET(request: Request) {
     return NextResponse.json({});
   }
 
+  const readToken = await getReadToken(session, owner, repo);
+  if (!readToken) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    const accessToken = (session as unknown as { accessToken: string })
-      .accessToken;
     const counts = await fetchInlineCommentCounts(
-      accessToken,
+      readToken,
       owner,
       repo,
       prNumbers,

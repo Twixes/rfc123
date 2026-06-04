@@ -3,6 +3,7 @@ import AccountDropdown from "@/components/AccountDropdown";
 import ConnectAgentButton from "@/components/ConnectAgentButton";
 import Dingbat from "@/components/Dingbat";
 import { GitHubSignInForm } from "@/components/GitHubSignInForm";
+import LandingShowcaseWidget from "@/components/LandingShowcaseWidget";
 import { MarketingButtonLink } from "@/components/MarketingButton";
 import MarketingPage from "@/components/MarketingPage";
 import { NewRfcPlusIcon } from "@/components/RFCsTopBarActions";
@@ -101,7 +102,7 @@ export default async function LandingPage() {
   const session = await auth();
 
   return (
-    <MarketingPage>
+    <MarketingPage below={<LandingShowcaseWidget />}>
       <div className="mb-6 sm:mb-0 grid grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_auto_auto] gap-x-2 gap-y-2 sm:grid-rows-[auto_auto]">
         <h1 className="col-start-1 row-start-1 self-center font-serif text-5xl font-normal text-foreground sm:text-6xl">
           RFC123

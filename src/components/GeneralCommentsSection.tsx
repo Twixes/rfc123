@@ -17,6 +17,9 @@ interface GeneralCommentsSectionProps {
   highlightedCommentId?: number | null;
   onCommentPosted?: (comment: string) => void;
   onToggleReaction?: (commentId: number, content: ReactionContent) => void;
+  /** When set, the composer is replaced with this node (used by the public/
+   *  anonymous render path to surface a "sign in to comment" CTA instead). */
+  readOnlyFooter?: React.ReactNode;
 }
 
 export function GeneralCommentsSection({
@@ -28,6 +31,7 @@ export function GeneralCommentsSection({
   highlightedCommentId,
   onCommentPosted,
   onToggleReaction,
+  readOnlyFooter,
 }: GeneralCommentsSectionProps) {
   return (
     <section className="mt-16">
@@ -148,12 +152,14 @@ export function GeneralCommentsSection({
         )
       )}
 
-      <CommentBox
-        owner={owner}
-        repo={repo}
-        prNumber={prNumber}
-        onCommentPosted={onCommentPosted}
-      />
+      {readOnlyFooter ?? (
+        <CommentBox
+          owner={owner}
+          repo={repo}
+          prNumber={prNumber}
+          onCommentPosted={onCommentPosted}
+        />
+      )}
     </section>
   );
 }

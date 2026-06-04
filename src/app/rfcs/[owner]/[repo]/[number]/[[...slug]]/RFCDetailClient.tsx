@@ -4,6 +4,10 @@ import type { ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import posthog from "posthog-js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  AnonymousSignInButton,
+  AnonymousSignInCTA,
+} from "@/components/AnonymousSignInCTA";
 import Checkbox from "@/components/Checkbox";
 import {
   CommitRangePicker,
@@ -66,6 +70,10 @@ interface RFCDetailClientProps {
   prNumber: number;
   currentUser: string;
   currentUserAvatar: string;
+  /** Public/unauthenticated render path. Comment + reaction affordances are
+   *  swapped out for a sign-in CTA; reads still resolve via the server-side
+   *  public token. */
+  isAnonymous?: boolean;
 }
 
 type DiffState =
@@ -80,6 +88,7 @@ export default function RFCDetailClient({
   prNumber,
   currentUser,
   currentUserAvatar,
+  isAnonymous = false,
 }: RFCDetailClientProps) {
   const [rfc, setRfc] = useState<RFCDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -136,8 +145,24 @@ export default function RFCDetailClient({
   const diffContentCache = useRef<Map<string, string | null>>(new Map());
   const [diffState, setDiffState] = useState<DiffState>({ kind: "idle" });
 
-  const isAuthor = !!rfc && currentUser === rfc.author;
+  const isAuthor = !!rfc && !isAnonymous && currentUser === rfc.author;
   const canEditBody = isAuthor && !!rfc && rfc.status === "open";
+
+  const redirectToSignIn = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const callback = encodeURIComponent(
+      `${window.location.pathname}${window.location.search}${window.location.hash}`,
+    );
+    window.location.href = `/api/auth/signin?callbackUrl=${callback}`;
+  }, []);
+  const anonymousInlineSubmit = useCallback(async () => {
+    redirectToSignIn();
+  }, [redirectToSignIn]);
+  const inlineCommentHandler = isAnonymous
+    ? anonymousInlineSubmit
+    : handleInlineComment;
+  const toggleReactionHandler = isAnonymous ? undefined : handleToggleReaction;
+  const generalCommentHandler = isAnonymous ? undefined : handleGeneralComment;
 
   const draftStorageKey = `rfc123:edit:${owner}/${repo}#${prNumber}`;
   const bodyDraftSnapshot: PersistedBodyDraft | null = useMemo(() => {
@@ -227,6 +252,17 @@ export default function RFCDetailClient({
   useEffect(() => {
     loadRFC();
   }, [loadRFC]);
+
+  // App Router + the Suspense wrapper around this client component means a
+  // navigation here (e.g. clicking an RFC from the landing showcase) often
+  // doesn't reset the browser's scroll position. Force it to the top on the
+  // first mount of a given PR – unless the URL targets a specific comment via
+  // `#comment-NNN`, in which case the existing hash-scroll effect should win.
+  useEffect(() => {
+    if (parseCommentIdFromHash(window.location.hash) == null) {
+      window.scrollTo(0, 0);
+    }
+  }, []);
 
   useEffect(() => {
     if (rfc?.headSha && typeof rfc.markdownContent === "string") {
@@ -740,10 +776,23 @@ export default function RFCDetailClient({
     }
   }
 
+  const topBarUser = isAnonymous
+    ? null
+    : { name: currentUser, image: currentUserAvatar };
+  const topBarHomeHref = isAnonymous ? "/" : "/rfcs";
+  const topBarSecondaryActions = isAnonymous ? null : (
+    <RFCsTopBarSecondaryActions />
+  );
+  const topBarPrimaryActions = isAnonymous ? (
+    <AnonymousSignInButton />
+  ) : (
+    <RFCsTopBarPrimaryAction repo={{ owner, name: repo }} />
+  );
+
   if (isLoading) {
     return (
       <RFCDetailLoadingSkeleton
-        user={{ name: currentUser, image: currentUserAvatar }}
+        user={topBarUser}
         repo={{ owner, name: repo }}
       />
     );
@@ -753,11 +802,10 @@ export default function RFCDetailClient({
     return (
       <div className="mx-auto max-w-360 min-h-screen px-4 sm:px-8 py-6 sm:py-12">
         <RFCsTopBar
-          user={{ name: currentUser, image: currentUserAvatar }}
-          secondaryActions={<RFCsTopBarSecondaryActions />}
-          primaryActions={
-            <RFCsTopBarPrimaryAction repo={{ owner, name: repo }} />
-          }
+          user={topBarUser}
+          homeHref={topBarHomeHref}
+          secondaryActions={topBarSecondaryActions}
+          primaryActions={topBarPrimaryActions}
         />
         <div className="py-12 text-center text-sm text-magenta">
           {error || "Failed to load RFC"}
@@ -774,12 +822,17 @@ export default function RFCDetailClient({
   return (
     <div className="mx-auto max-w-360 min-h-screen px-4 sm:px-8 py-6 sm:py-12">
       <RFCsTopBar
-        user={{ name: currentUser, image: currentUserAvatar }}
-        secondaryActions={<RFCsTopBarSecondaryActions />}
-        primaryActions={
-          <RFCsTopBarPrimaryAction repo={{ owner, name: repo }} />
-        }
+        user={topBarUser}
+        homeHref={topBarHomeHref}
+        secondaryActions={topBarSecondaryActions}
+        primaryActions={topBarPrimaryActions}
       />
+
+      {isAnonymous && (
+        <div className="mb-3">
+          <AnonymousSignInCTA message="You're viewing this RFC publicly, but PostHog's team members see it the same way. Sign up with GitHub to get started yourself." />
+        </div>
+      )}
 
       {mutationError && (
         <div className="mb-4 flex items-start gap-3 border border-magenta bg-magenta-light text-foreground rounded-sm px-3 py-2 text-sm">
@@ -998,8 +1051,9 @@ export default function RFCDetailClient({
             comments={lineComments}
             commentsLoading={commentsLoading}
             highlightedCommentId={highlightedCommentId}
-            onCommentSubmit={handleInlineComment}
-            onToggleReaction={handleToggleReaction}
+            onCommentSubmit={inlineCommentHandler}
+            onToggleReaction={toggleReactionHandler}
+            disableNewComments={isAnonymous}
           />
         ) : (
           <MarkdownRawView content={rfc.markdownContent} />
@@ -1013,8 +1067,9 @@ export default function RFCDetailClient({
         commentsLoading={commentsLoading}
         prNumber={rfc.number}
         highlightedCommentId={highlightedCommentId}
-        onCommentPosted={handleGeneralComment}
-        onToggleReaction={handleToggleReaction}
+        onCommentPosted={generalCommentHandler}
+        onToggleReaction={toggleReactionHandler}
+        readOnlyFooter={isAnonymous ? <AnonymousSignInCTA /> : undefined}
       />
     </div>
   );

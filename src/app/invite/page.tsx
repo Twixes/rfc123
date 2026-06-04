@@ -69,7 +69,7 @@ export default async function InvitePage({ searchParams }: InvitePageProps) {
               action={async () => {
                 "use server";
                 await signIn("github", {
-                  callbackUrl: isValidCallback ? callbackUrl : "/rfcs",
+                  redirectTo: isValidCallback ? callbackUrl : "/rfcs",
                 });
               }}
             >

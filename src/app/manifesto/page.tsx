@@ -17,8 +17,11 @@ export default function ManifestoPage() {
         <MarkdownRenderer content={manifestoMarkdown} />
 
         <div className="flex flex-col items-end pr-4 mt-6">
-          <p
-            className="font-serif italic text-foreground"
+          <a
+            href="https://matloka.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-serif italic text-foreground hover:underline decoration-gray-30 underline-offset-4"
             style={{
               fontSize: "2.25rem",
               lineHeight: 1,
@@ -29,7 +32,7 @@ export default function ManifestoPage() {
             }}
           >
             Michael Matloka
-          </p>
+          </a>
           <p className="mt-5 border-t border-gray-30 pt-2 font-mono text-[11px] uppercase tracking-[0.18em] text-gray-50">
             Creator of RFC123
           </p>

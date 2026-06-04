@@ -12,10 +12,7 @@
     }
   },
   "oauth_config": {
-    "redirect_urls": [
-      "https://rfc123.com/api/slack/oauth/callback",
-      "https://rfc123.ngrok.dev/api/slack/oauth/callback"
-    ],
+    "redirect_urls": ["${NEXTAUTH_URL}/api/slack/oauth/callback"],
     "scopes": {
       "user": ["openid", "email", "profile"],
       "bot": [

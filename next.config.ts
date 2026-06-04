@@ -1,9 +1,21 @@
 import { withPostHogConfig } from "@posthog/nextjs-config";
 import type { NextConfig } from "next";
 
+// Rewrite to the assets host matching NEXT_PUBLIC_POSTHOG_HOST so a US
+// self-hoster doesn't silently proxy through eu.i.posthog.com.
+const POSTHOG_HOST =
+  process.env.NEXT_PUBLIC_POSTHOG_HOST ?? "https://us.i.posthog.com";
+const POSTHOG_ASSETS_HOST = POSTHOG_HOST.startsWith("https://eu.")
+  ? "https://eu-assets.i.posthog.com"
+  : "https://us-assets.i.posthog.com";
+
 const nextConfig: NextConfig = {
   /* config options here */
   reactCompiler: true,
+
+  // Required for the Docker image: emits a self-contained `.next/standalone`
+  // bundle that runs without node_modules in the runtime layer.
+  output: "standalone",
 
   // Map GitHub-style PR URLs (/:owner/:repo/pull/:number) to our RFC routes
   // so people can swap github.com for rfc123.com and land on the right page.
@@ -27,15 +39,15 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/ingest/static/:path*",
-        destination: "https://eu-assets.i.posthog.com/static/:path*",
+        destination: `${POSTHOG_ASSETS_HOST}/static/:path*`,
       },
       {
         source: "/ingest/array/:path*",
-        destination: "https://eu-assets.i.posthog.com/array/:path*",
+        destination: `${POSTHOG_ASSETS_HOST}/array/:path*`,
       },
       {
         source: "/ingest/:path*",
-        destination: "https://eu.i.posthog.com/:path*",
+        destination: `${POSTHOG_HOST}/:path*`,
       },
     ];
   },
@@ -50,7 +62,7 @@ export default process.env.POSTHOG_PERSONAL_API_KEY
   ? withPostHogConfig(nextConfig, {
       personalApiKey: process.env.POSTHOG_PERSONAL_API_KEY,
       projectId: process.env.POSTHOG_PROJECT_ID ?? "",
-      host: process.env.NEXT_PUBLIC_POSTHOG_HOST ?? "https://us.posthog.com",
+      host: POSTHOG_HOST,
       sourcemaps: {
         enabled: true,
         deleteAfterUpload: true,

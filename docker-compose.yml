@@ -1,0 +1,136 @@
+# RFC123 self-hosted stack.
+#
+# Bring it up in two phases (Convex requires a one-time admin key handshake):
+#
+#   1. Bring up the backend, generate an admin key, paste it into .env:
+#        cp .env.example .env             # fill GITHUB_*, secrets, NEXTAUTH_URL
+#        docker compose up -d backend dashboard redis srh
+#        docker compose exec backend ./generate_admin_key.sh
+#        # paste the printed key into .env as CONVEX_SELF_HOSTED_ADMIN_KEY
+#
+#   2. Bring up the app (it pushes Convex schema + functions on startup):
+#        docker compose up -d app
+#
+# After step 2, open http://localhost:3000.
+#
+# Required entries in .env (see .env.example for the full list):
+#   GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET
+#   NEXTAUTH_URL            (e.g. http://localhost:3000 for local play)
+#   NEXT_PUBLIC_CONVEX_URL  (e.g. http://localhost:3210 for local play)
+#   AUTH_SECRET, SECRET_KEY, TOKEN_ENCRYPTION_KEY   (openssl rand -base64 32)
+#   CONVEX_INSTANCE_SECRET  (openssl rand -hex 32; stable across restarts)
+#   CONVEX_SELF_HOSTED_ADMIN_KEY  (from step 1)
+#   UPSTASH_REDIS_REST_TOKEN      (any random string; default below works)
+
+services:
+  backend:
+    image: ghcr.io/get-convex/convex-backend:latest
+    stop_grace_period: 10s
+    stop_signal: SIGINT
+    ports:
+      - "${CONVEX_PORT:-3210}:3210"
+      - "${CONVEX_SITE_PORT:-3211}:3211"
+    volumes:
+      - convex_data:/convex/data
+    environment:
+      INSTANCE_NAME: ${CONVEX_INSTANCE_NAME:-rfc123}
+      INSTANCE_SECRET: ${CONVEX_INSTANCE_SECRET}
+      CONVEX_CLOUD_ORIGIN: ${NEXT_PUBLIC_CONVEX_URL:-http://localhost:3210}
+      CONVEX_SITE_ORIGIN: ${NEXT_PUBLIC_CONVEX_URL:-http://localhost:3210}/http
+      DISABLE_BEACON: "true"
+      DO_NOT_REQUIRE_SSL: "true"
+      RUST_LOG: ${RUST_LOG:-info}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3210/version"]
+      interval: 5s
+      start_period: 10s
+      timeout: 5s
+      retries: 10
+
+  dashboard:
+    image: ghcr.io/get-convex/convex-dashboard:latest
+    stop_grace_period: 10s
+    stop_signal: SIGINT
+    ports:
+      - "${CONVEX_DASHBOARD_PORT:-6791}:6791"
+    environment:
+      NEXT_PUBLIC_DEPLOYMENT_URL: ${NEXT_PUBLIC_CONVEX_URL:-http://localhost:3210}
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --save 60 1 --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Upstash-compatible REST shim over Redis. The app uses @upstash/redis, which
+  # speaks an HTTP protocol rather than the native Redis wire protocol; this
+  # container provides that surface so we can keep one code path for both
+  # self-hosted and Upstash Cloud deploys.
+  srh:
+    image: hiett/serverless-redis-http:latest
+    environment:
+      SRH_MODE: env
+      SRH_TOKEN: ${UPSTASH_REDIS_REST_TOKEN:-rfc123-local-dev-token}
+      SRH_CONNECTION_STRING: redis://redis:6379
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:80/"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_CONVEX_URL: ${NEXT_PUBLIC_CONVEX_URL:-http://localhost:3210}
+        NEXT_PUBLIC_POSTHOG_KEY: ${NEXT_PUBLIC_POSTHOG_KEY:-}
+        NEXT_PUBLIC_POSTHOG_HOST: ${NEXT_PUBLIC_POSTHOG_HOST:-https://us.i.posthog.com}
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      # Wiring between services. CONVEX_URL is the *internal* hostname for
+      # server-side Convex calls; NEXT_PUBLIC_CONVEX_URL is the browser URL
+      # and is baked into the client bundle at build time (see build.args above).
+      CONVEX_URL: http://backend:3210
+      CONVEX_SELF_HOSTED_URL: http://backend:3210
+      CONVEX_SELF_HOSTED_ADMIN_KEY: ${CONVEX_SELF_HOSTED_ADMIN_KEY}
+      UPSTASH_REDIS_REST_URL: http://srh:80
+      UPSTASH_REDIS_REST_TOKEN: ${UPSTASH_REDIS_REST_TOKEN:-rfc123-local-dev-token}
+
+      # Pulled straight from .env; the app crashes loud if any required one
+      # is missing rather than silently no-op'ing.
+      NEXTAUTH_URL: ${NEXTAUTH_URL}
+      AUTH_SECRET: ${AUTH_SECRET}
+      SECRET_KEY: ${SECRET_KEY}
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
+
+      # Everything below is optional; the app degrades gracefully without it.
+      PUBLIC_GITHUB_TOKEN: ${PUBLIC_GITHUB_TOKEN:-}
+      SLACK_CLIENT_ID: ${SLACK_CLIENT_ID:-}
+      SLACK_CLIENT_SECRET: ${SLACK_CLIENT_SECRET:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      NEXT_PUBLIC_POSTHOG_KEY: ${NEXT_PUBLIC_POSTHOG_KEY:-}
+      NEXT_PUBLIC_POSTHOG_HOST: ${NEXT_PUBLIC_POSTHOG_HOST:-https://us.i.posthog.com}
+    depends_on:
+      backend:
+        condition: service_healthy
+      srh:
+        condition: service_healthy
+
+volumes:
+  convex_data:
+  redis_data:

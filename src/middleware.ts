@@ -11,10 +11,10 @@ export default auth((req) => {
   const { nextUrl } = req;
   const isAuthenticated = !!(req.auth as { accessToken?: string })?.accessToken;
 
-  // Paths that require authentication
-  const isProtectedPath =
-    nextUrl.pathname.startsWith("/rfcs") ||
-    nextUrl.pathname.startsWith("/onboarding");
+  // /onboarding is intentionally NOT protected: anonymous visitors can
+  // preview the create-repo form and only get bumped to OAuth (in a popup)
+  // when they hit submit.
+  const isProtectedPath = nextUrl.pathname.startsWith("/rfcs");
 
   // Don't redirect if already on auth pages
   const isAuthPage = nextUrl.pathname.startsWith("/api/auth");
@@ -40,5 +40,5 @@ export default auth((req) => {
 });
 
 export const config = {
-  matcher: ["/rfcs/:path*", "/onboarding/:path*"],
+  matcher: ["/rfcs/:path*"],
 };

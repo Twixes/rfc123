@@ -4,8 +4,9 @@ import confetti from "canvas-confetti";
 import { AnimatePresence, motion } from "motion/react";
 import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { AvailableOwner } from "@/lib/github";
+import { openGitHubAuthPopup } from "@/lib/popup-auth";
 import { VALID_GITHUB_REPO_NAME } from "@/lib/rfc-config";
 import ConfigureStep, {
   type NameStatus,
@@ -72,6 +73,8 @@ export default function OnboardingClient() {
 
   const [step, setStep] = useState<Step>("configure");
 
+  const [isAnonymous, setIsAnonymous] = useState(false);
+  const [signingIn, setSigningIn] = useState(false);
   const [owners, setOwners] = useState<AvailableOwner[] | null>(null);
   const [formState, setFormState] = useState<OnboardingFormState>({
     selectedOwner: null,
@@ -87,27 +90,43 @@ export default function OnboardingClient() {
 
   const { selectedOwner, name, visibility, layout, teams } = formState;
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch("/api/onboarding/owners");
-        if (!res.ok) return;
-        const data: AvailableOwner[] = await res.json();
-        if (cancelled) return;
-        setOwners(data);
-        const personal = data.find((o) => o.type === "User");
-        if (personal) {
-          setFormState((prev) => ({ ...prev, selectedOwner: personal }));
-        }
-      } catch (e) {
-        console.error("Failed to load owners", e);
+  const loadOwners = useCallback(async (): Promise<boolean> => {
+    try {
+      const res = await fetch("/api/onboarding/owners");
+      if (res.status === 401) {
+        setIsAnonymous(true);
+        return false;
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
+      if (!res.ok) return false;
+      const data: AvailableOwner[] = await res.json();
+      setOwners(data);
+      setIsAnonymous(false);
+      const personal = data.find((o) => o.type === "User");
+      if (personal) {
+        setFormState((prev) =>
+          prev.selectedOwner ? prev : { ...prev, selectedOwner: personal },
+        );
+      }
+      return true;
+    } catch (e) {
+      console.error("Failed to load owners", e);
+      return false;
+    }
   }, []);
+
+  useEffect(() => {
+    void loadOwners();
+  }, [loadOwners]);
+
+  const handleSignIn = useCallback(async () => {
+    if (signingIn) return;
+    setSigningIn(true);
+    const result = await openGitHubAuthPopup();
+    if (result === "completed") {
+      await loadOwners();
+    }
+    setSigningIn(false);
+  }, [signingIn, loadOwners]);
 
   useEffect(() => {
     if (step !== "configure" || !selectedOwner) return;
@@ -233,6 +252,9 @@ export default function OnboardingClient() {
             setFormState={setFormState}
             nameStatus={nameStatus}
             onCreate={handleCreate}
+            isAnonymous={isAnonymous}
+            onSignIn={handleSignIn}
+            signingIn={signingIn}
           />
         )}
 

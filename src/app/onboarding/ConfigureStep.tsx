@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Checkbox from "@/components/Checkbox";
 import type { AvailableOwner, RfcLayout } from "@/lib/github";
-import { VALID_RFC_TEAM_NAME } from "@/lib/rfc-config";
+import { VALID_GITHUB_REPO_NAME, VALID_RFC_TEAM_NAME } from "@/lib/rfc-config";
 import {
   ArrowRightIcon,
   PrimaryButton,
@@ -34,12 +34,20 @@ export default function ConfigureStep({
   setFormState,
   nameStatus,
   onCreate,
+  isAnonymous = false,
+  onSignIn,
+  signingIn = false,
 }: {
   owners: AvailableOwner[] | null;
   formState: OnboardingFormState;
   setFormState: React.Dispatch<React.SetStateAction<OnboardingFormState>>;
   nameStatus: NameStatus;
   onCreate: () => void;
+  /** No session yet – the owner picker is disabled and the primary CTA
+   *  triggers the popup OAuth flow instead of the create call. */
+  isAnonymous?: boolean;
+  onSignIn?: () => void;
+  signingIn?: boolean;
 }) {
   const { selectedOwner, name, visibility, layout, teams } = formState;
   const [teamDraft, setTeamDraft] = useState("");
@@ -66,12 +74,18 @@ export default function ConfigureStep({
     setTeamDraft("");
   }
 
+  const nameLooksValid = VALID_GITHUB_REPO_NAME.test(name.trim());
   const canCreate = useMemo(() => {
     if (!selectedOwner) return false;
     if (nameStatus !== "available") return false;
     if (layout === "multi-directory" && teams.length === 0) return false;
     return true;
   }, [selectedOwner, nameStatus, layout, teams.length]);
+  // Anonymous viewers can't hit `/api/onboarding/check-name` (it needs auth),
+  // so we gate the "Sign in to continue" button on the cheap local format
+  // check instead of waiting for the server's availability verdict.
+  const canSignInToContinue =
+    nameLooksValid && (layout !== "multi-directory" || teams.length > 0);
 
   return (
     <StepCard>
@@ -80,13 +94,34 @@ export default function ConfigureStep({
         subtext="Once the repo's up, you'll be drafting your first RFC."
       />
       <Field label="Where should your RFCs live in GitHub?">
-        <OwnerPicker
-          owners={owners}
-          selected={selectedOwner}
-          onSelect={(o) =>
-            setFormState((prev) => ({ ...prev, selectedOwner: o }))
-          }
-        />
+        {isAnonymous ? (
+          <div className="border border-dashed border-gray-30 rounded-sm px-4 py-3 text-sm text-gray-50 flex items-center gap-2 cursor-default">
+            <svg
+              aria-hidden
+              viewBox="0 0 16 16"
+              className="h-4 w-4 text-gray-40"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.5}
+            >
+              <title>Sign in</title>
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M10 2.5h2A1.5 1.5 0 0 1 13.5 4v8a1.5 1.5 0 0 1-1.5 1.5h-2M7 11l3-3-3-3M10 8H2"
+              />
+            </svg>
+            Sign in to pick your GitHub account or organization
+          </div>
+        ) : (
+          <OwnerPicker
+            owners={owners}
+            selected={selectedOwner}
+            onSelect={(o) =>
+              setFormState((prev) => ({ ...prev, selectedOwner: o }))
+            }
+          />
+        )}
       </Field>
 
       <Field
@@ -200,12 +235,22 @@ export default function ConfigureStep({
       )}
 
       <StepActions>
-        <PrimaryButton onClick={onCreate} disabled={!canCreate}>
-          {selectedOwner
-            ? `Create RFCs repo for ${selectedOwner.login}`
-            : "Create RFCs repo"}
-          <ArrowRightIcon />
-        </PrimaryButton>
+        {isAnonymous ? (
+          <PrimaryButton
+            onClick={onSignIn}
+            disabled={!canSignInToContinue || signingIn || !onSignIn}
+          >
+            {signingIn ? "Opening GitHub…" : "Sign in to continue"}
+            <ArrowRightIcon />
+          </PrimaryButton>
+        ) : (
+          <PrimaryButton onClick={onCreate} disabled={!canCreate}>
+            {selectedOwner
+              ? `Create RFCs repo for ${selectedOwner.login}`
+              : "Create RFCs repo"}
+            <ArrowRightIcon />
+          </PrimaryButton>
+        )}
       </StepActions>
     </StepCard>
   );

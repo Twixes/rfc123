@@ -291,7 +291,7 @@ export default function ConnectAgentButton({
                   Point your AI agent at RFC123's MCP server.
                   <br />
                   Your agent helps you think and review, but{" "}
-                  <strong>you still write what lands on the RFC</strong>.
+                  <strong>you fully own what lands in the RFC</strong>.
                 </p>
               </div>
               <button

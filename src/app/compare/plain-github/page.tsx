@@ -17,7 +17,7 @@ export default function PlainGitHubComparison() {
         the whole difference.
       </p>
 
-      <div className="space-y-10 sm:space-y-12">
+      <div className="space-y-10">
         <section className="flex flex-col sm:flex-row gap-3 sm:gap-6">
           <GitHubLogo />
           <div className="flex-1 min-w-0">

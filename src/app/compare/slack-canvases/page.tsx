@@ -3,25 +3,25 @@ import Dingbat from "@/components/Dingbat";
 import { SlackLogo } from "@/components/icons/BrandLogos";
 import MarketingDocPage from "@/components/MarketingDocPage";
 
-export const metadata = { title: "vs. Slack Canvases" };
+export const metadata = { title: "vs. Slack canvases" };
 
 export default function SlackCanvasesComparison() {
   return (
-    <MarketingDocPage eyebrow="Compare" title="RFC123 vs. Slack Canvases">
+    <MarketingDocPage eyebrow="Compare" title="RFC123 vs. Slack canvases">
       <p className="mb-10 text-lg font-light leading-tight text-gray-70">
-        Slack Canvases are documents that live inside Slack – in a channel, a
+        Slack canvases are documents that live inside Slack – in a channel, a
         DM, or the workspace at large. They&rsquo;re great when discussion is
         already happening there and you need a shared scratchpad fast. RFC123 is
         for the next step: when the decision matters enough that you&rsquo;ll
         want to find it again in a year.
       </p>
 
-      <div className="space-y-10 sm:space-y-12">
+      <div className="space-y-10">
         <section className="flex flex-col sm:flex-row gap-3 sm:gap-6">
           <SlackLogo />
           <div className="flex-1 min-w-0">
             <h2 className="mb-3 text-2xl font-serif text-foreground leading-none">
-              Where Slack Canvases is better
+              Where Slack canvases are better
             </h2>
             <ul className="space-y-2.5 text-sm text-foreground">
               <li>
@@ -103,7 +103,7 @@ export default function SlackCanvasesComparison() {
             Side-by-side
           </h2>
           <ComparisonTable
-            themLabel="Slack Canvases"
+            themLabel="Slack canvases"
             rows={[
               {
                 feature: "Time to first draft",
@@ -168,7 +168,7 @@ export default function SlackCanvasesComparison() {
             <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
               <div className="rounded-md border border-gray-20 p-5 bg-surface">
                 <h3 className="mb-3 font-serif text-xl text-foreground leading-tight">
-                  Pick Slack Canvases if
+                  Pick Slack canvases if
                 </h3>
                 <ul className="space-y-2 text-sm text-foreground">
                   <li>

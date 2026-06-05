@@ -128,6 +128,12 @@ strong {
 }
 
 /* Editorial typography – Lastik for top-level headings only */
+h1,
+h2,
+h3 {
+  text-wrap: pretty;
+}
+
 h1 {
   font-family: var(--font-l-serif), Georgia, serif;
   font-weight: 400;

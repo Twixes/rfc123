@@ -111,7 +111,7 @@ export default async function LandingPage() {
           <LandingDesktopActions session={session} />
         </div>
         <p className="col-span-2 row-start-2 mb-2 text-lg font-light leading-tight text-gray-70 sm:mb-4 sm:text-xl text-balance">
-          The agent-native{" "}
+          The agent-native & open-source{" "}
           <Tooltip
             content={
               <>
@@ -150,7 +150,7 @@ export default async function LandingPage() {
         </div>
       </div>
 
-      <div className="space-y-10 sm:space-y-12">
+      <div className="space-y-10">
         <section className="flex flex-col sm:flex-row gap-3 sm:gap-6">
           <Dingbat glyph="¶" className="text-cyan" size="xl" />
           <div className="flex-1 min-w-0">
@@ -217,7 +217,13 @@ export default async function LandingPage() {
             <blockquote className="font-serif text-xl leading-snug text-gray-70">
               I think RFC123 might&nbsp;be{" "}
               <strong className="text-foreground">
-                the&nbsp;second-best addition to my professional&nbsp;life
+                the&nbsp;
+                <Tooltip content="We're wondering too.">
+                  <span className="cursor-help underline decoration-dotted underline-offset-4 decoration-gray-40">
+                    second-best
+                  </span>
+                </Tooltip>{" "}
+                addition to my professional&nbsp;life
               </strong>
               ! I&nbsp;love&nbsp;it.
             </blockquote>

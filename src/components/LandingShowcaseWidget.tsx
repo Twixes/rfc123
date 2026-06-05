@@ -171,7 +171,13 @@ export default function LandingShowcaseWidget() {
       >
         <div className="flex items-center gap-3">
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
+            <div className="flex items-baseline gap-2">
+              <h2
+                id="showcase-heading"
+                className="font-serif text-2xl text-foreground leading-tight tracking-tight"
+              >
+                Who's already here? PostHog
+              </h2>
               {/* biome-ignore lint/performance/noImgElement: tiny static brand asset */}
               <img
                 src="/posthog-logomark.svg"
@@ -180,12 +186,6 @@ export default function LandingShowcaseWidget() {
                 height={20}
                 className="h-5 w-auto shrink-0"
               />
-              <h2
-                id="showcase-heading"
-                className="font-serif text-2xl text-foreground leading-tight tracking-tight"
-              >
-                PostHog are already here.
-              </h2>
             </div>
             <div className="mt-1 font-mono text-xs text-gray-50 truncate">
               {owner}/{repo}

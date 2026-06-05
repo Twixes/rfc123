@@ -159,14 +159,13 @@ export default async function LandingPage() {
             </h2>
             <div className="space-y-2.5">
               <p className="text-sm text-foreground">
-                <strong>Markdown in, RFC out.</strong> Pick a repo, write the
-                draft. RFC123 opens the branch, the commit, and the PR.
+                <strong>Just Markdown.</strong> The format you already write in,
+                with no proprietary editor or special syntax.
               </p>
               <p className="text-sm text-foreground">
-                <strong>GitHub all the way down.</strong> Every RFC is a PR in
-                your existing repo – same auth, same permissions, same git
-                history. Markdown PRs from before RFC123 are already here. Walk
-                away tomorrow; the record stays in git.
+                <strong>Git for documents.</strong> Every draft, every open
+                review, every merged decision lives in Git, via GitHub.
+                Versioning is foundational here.
               </p>
             </div>
           </div>
@@ -180,14 +179,14 @@ export default async function LandingPage() {
             </h2>
             <div className="space-y-2.5">
               <p className="text-sm text-foreground">
-                <strong>Comment where the argument is.</strong> Threads attach
-                to lines or selections, right alongside the words they&rsquo;re
-                about.
+                <strong>The best interface to comment on a document.</strong>{" "}
+                Threads attach to any line or selection, in both the rendered
+                view and the raw Markdown editor.
               </p>
               <p className="text-sm text-foreground">
                 <strong>A queue of your own.</strong> Review requests pinned at
-                the top – including ones assigned to your GitHub teams. Filter
-                by author or repo.
+                the top, including ones assigned to your GitHub teams. Filter by
+                author or repo.
               </p>
             </div>
           </div>
@@ -256,15 +255,16 @@ export default async function LandingPage() {
                 <strong>
                   Connect Claude, ChatGPT, or any agent with our MCP server.
                 </strong>{" "}
-                One click to authorize – then it can list, read, and discuss
-                RFCs alongside you. No slop here, as the agent can read, but{" "}
-                <em>not</em> write for you.
+                One click to authorize. Your agent lists, reads, and discusses
+                every RFC alongside you. It can draft for you too, but the MCP
+                server won&rsquo;t let it post comments or replies on your
+                behalf, so no AI slop ever lands on your team.
               </p>
               <p className="text-sm text-foreground">
-                <strong>Instructions for digging deep.</strong> With RFC123
-                skills, your assistant becomes an expert in comparing proposals
-                against codebases, synthesizing discussions, extracting action
-                items, or suggesting reviewers.
+                <strong>Skills for digging deep.</strong> With RFC123 skills,
+                your assistant becomes an expert in comparing proposals against
+                codebases, synthesizing discussions, extracting action items, or
+                suggesting reviewers.
               </p>
             </div>
           </div>

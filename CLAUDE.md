@@ -194,9 +194,10 @@ Two parts:
   now" variant exposed in the settings UI.
 
 Slack OAuth lives at `/api/slack/install` and
-`/api/slack/oauth/callback`. The Slack app manifest is at
-`slack-app-manifest.json` (paste into "Create app from manifest" on
-api.slack.com/apps to bootstrap).
+`/api/slack/oauth/callback`. The Slack app manifest is rendered from
+`slack-app-manifest.template.json` (which uses `${NEXTAUTH_URL}` as a
+placeholder) via `node scripts/render-slack-manifest.mjs`. Pipe that into
+"Create app from manifest" on api.slack.com/apps to bootstrap.
 
 #### TODOs (not done in the initial briefing PR)
 

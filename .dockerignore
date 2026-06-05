@@ -1,0 +1,55 @@
+# Source control + IDE
+.git
+.gitignore
+.github
+.husky
+.vscode
+.idea
+.cursor
+.context
+.agents
+.claude
+.devcontainer
+
+# Dependencies and build output
+node_modules
+.next
+out
+build
+coverage
+*.tsbuildinfo
+next-env.d.ts
+
+# Local env and secrets
+.env
+.env.*
+!.env.example
+
+# Vercel artifacts
+.vercel
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# OS junk
+.DS_Store
+
+# Test fixtures and dev-only data
+posthog/evaluations
+supabase
+file:
+
+# Docker / deploy files do not need to be in the build context
+Dockerfile
+docker-compose.yml
+fly.toml
+railway.json
+DEPLOY.md
+README.md
+
+# Misc
+*.md.bak
+tmp

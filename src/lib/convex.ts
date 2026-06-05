@@ -65,8 +65,11 @@ export async function loadOrCreateViewerUserRow(
 let _client: ConvexHttpClient | null = null;
 export function convexClient(): ConvexHttpClient {
   if (_client) return _client;
-  const url = process.env.NEXT_PUBLIC_CONVEX_URL;
-  if (!url) throw new Error("NEXT_PUBLIC_CONVEX_URL is not set");
+  // CONVEX_URL is an optional server-side override for internal Docker hostnames.
+  const url = process.env.CONVEX_URL ?? process.env.NEXT_PUBLIC_CONVEX_URL;
+  if (!url) {
+    throw new Error("CONVEX_URL or NEXT_PUBLIC_CONVEX_URL must be set");
+  }
   _client = new ConvexHttpClient(url);
   return _client;
 }

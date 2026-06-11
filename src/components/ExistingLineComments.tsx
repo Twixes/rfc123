@@ -3,7 +3,7 @@
 // biome-ignore-all lint/performance/noImgElement: GitHub avatar URLs, served from a CDN; next/image's domain allowlist is heavier than the benefit here
 "use client";
 
-import { memo } from "react";
+import { memo, useEffect, useState } from "react";
 import { CommentMarkdown } from "@/components/CommentMarkdown";
 import { CommentPermalink } from "@/components/CommentPermalink";
 import { CommentReactionsBar } from "@/components/CommentReactions";
@@ -22,6 +22,12 @@ interface ExistingLineCommentsProps {
   replyInitialDraft: string;
   isSubmitting: boolean;
   isCollapsed: boolean;
+  /** Hovering the matching markdown row / gutter button triggers the same
+   *  hover-preview as hovering the box. */
+  subscribeLineHover?: (
+    lineNumber: number,
+    cb: (hovered: boolean) => void,
+  ) => () => void;
   highlightedCommentId?: number | null;
   onStartReply: (threadId: number) => void;
   onStartNewThread: () => void;
@@ -46,6 +52,7 @@ export const ExistingLineComments = memo(function ExistingLineComments({
   replyInitialDraft,
   isSubmitting,
   isCollapsed,
+  subscribeLineHover,
   highlightedCommentId,
   onStartReply,
   onStartNewThread,
@@ -68,19 +75,53 @@ export const ExistingLineComments = memo(function ExistingLineComments({
     ? `${lineNumber}–${endLineNumber}`
     : String(lineNumber);
 
+  // Hover-preview deliberately doesn't touch parent's `collapsedLines`: the
+  // cascade in InlineCommentableMarkdown measures collapsed boxes by header
+  // height regardless of rendered content, so other boxes stay put.
+  const [isBoxHovered, setIsBoxHovered] = useState(false);
+  const [isLineHovered, setIsLineHovered] = useState(false);
+  const isHoverPreview = isCollapsed && (isBoxHovered || isLineHovered);
+  const renderAsExpanded = !isCollapsed || isHoverPreview;
+
+  useEffect(
+    () => subscribeLineHover?.(lineNumber, setIsLineHovered),
+    [lineNumber, subscribeLineHover],
+  );
+
+  const handleMouseEnter = () => {
+    if (isCollapsed) setIsBoxHovered(true);
+    onMouseEnter?.();
+  };
+  const handleMouseLeave = () => {
+    if (isBoxHovered) setIsBoxHovered(false);
+    onMouseLeave?.();
+  };
+  // Committing the expansion when reply opens keeps the form alive once
+  // the cursor leaves the box.
+  const handleStartReply = (threadId: number) => {
+    if (isHoverPreview) onToggleCollapse();
+    onStartReply(threadId);
+  };
+  const handleStartNewThread = () => {
+    if (isHoverPreview) onToggleCollapse();
+    onStartNewThread();
+  };
+
   return (
     <div
       ref={commentBoxRef}
       data-comment-line={lineNumber}
-      className="group/note lg:absolute static lg:top-0 w-full lg:w-[400px] mb-3 lg:mb-0 rounded-md border bg-surface"
+      className={`group/note lg:absolute static lg:top-0 w-full lg:w-[400px] mb-3 lg:mb-0 rounded-md border bg-surface ${
+        isHoverPreview ? "lg:z-20 lg:shadow-md" : ""
+      }`}
       style={{ transform: `translateY(${position}px)` }}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
       onClick={(e) => {
         if (e.target === e.currentTarget) onToggleCollapse();
       }}
     >
-      {isCollapsed ? (
+      {!renderAsExpanded ? (
         <button
           type="button"
           onClick={onToggleCollapse}
@@ -174,7 +215,7 @@ export const ExistingLineComments = memo(function ExistingLineComments({
       {/* Only mount thread bodies when expanded — react-markdown +
           rehypeHighlight per comment is the dominant cost when many
           comments load at once. */}
-      {!isCollapsed && (
+      {renderAsExpanded && (
         <div ref={onContentRef}>
           {threads.map((thread, threadIndex) => (
             <div key={thread.id}>
@@ -264,7 +305,7 @@ export const ExistingLineComments = memo(function ExistingLineComments({
                 <div className="flex items-center gap-1.5 px-3.5 pb-2.5 pt-0.5">
                   <button
                     type="button"
-                    onClick={() => onStartReply(thread.id)}
+                    onClick={() => handleStartReply(thread.id)}
                     className="grow rounded-md border border-gray-20 bg-surface px-2.5 py-1 text-[11px] font-medium text-gray-50 transition-colors hover:bg-gray-5 hover:text-foreground cursor-pointer"
                   >
                     Reply
@@ -273,7 +314,7 @@ export const ExistingLineComments = memo(function ExistingLineComments({
                     replyTarget?.type !== "newThread" && (
                       <button
                         type="button"
-                        onClick={onStartNewThread}
+                        onClick={handleStartNewThread}
                         className="rounded-md border border-dashed border-gray-20 bg-surface px-2.5 py-1 text-[11px] font-medium text-gray-50 transition-colors hover:bg-gray-5 hover:text-foreground hover:border-gray-30 cursor-pointer"
                       >
                         + New thread

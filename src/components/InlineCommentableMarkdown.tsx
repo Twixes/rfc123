@@ -799,6 +799,29 @@ export function InlineCommentableMarkdown({
   const [collapsedLines, setCollapsedLines] = useState<Set<number> | null>(
     null,
   );
+  // Per-line hover pub-sub: only the thread on the hovered line re-renders.
+  // Mirrors the imperative `hoverDispatchRef` pattern so the parent stays put.
+  const hoveredLineRef = useRef<number | null>(null);
+  const lineHoverSubsRef = useRef<Map<number, (hovered: boolean) => void>>(
+    new Map(),
+  );
+  const subscribeLineHover = useCallback(
+    (lineNumber: number, cb: (hovered: boolean) => void) => {
+      lineHoverSubsRef.current.set(lineNumber, cb);
+      if (hoveredLineRef.current === lineNumber) cb(true);
+      return () => {
+        lineHoverSubsRef.current.delete(lineNumber);
+      };
+    },
+    [],
+  );
+  const notifyLineHover = useCallback((lineNumber: number | null) => {
+    const prev = hoveredLineRef.current;
+    if (prev === lineNumber) return;
+    hoveredLineRef.current = lineNumber;
+    if (prev != null) lineHoverSubsRef.current.get(prev)?.(false);
+    if (lineNumber != null) lineHoverSubsRef.current.get(lineNumber)?.(true);
+  }, []);
   const [lineOffsets, setLineOffsets] = useState<Map<number, number>>(
     new Map(),
   );
@@ -996,21 +1019,24 @@ export function InlineCommentableMarkdown({
   // does not re-render when hover state changes.
   const handleMouseEnterLine = useCallback(
     (lineNumber: number, options?: { extra?: boolean }) => {
-      if (options?.extra && commentsByLineRef.current.has(lineNumber)) {
+      const hasComments = commentsByLineRef.current.has(lineNumber);
+      if (options?.extra && hasComments) {
         hoverDispatchRef.current({
           type: "enterComment",
           index: lineNumber - 1,
         });
-        return;
+      } else {
+        hoverDispatchRef.current({ type: "enterLine", index: lineNumber - 1 });
       }
-      hoverDispatchRef.current({ type: "enterLine", index: lineNumber - 1 });
+      notifyLineHover(hasComments ? lineNumber : null);
     },
-    [],
+    [notifyLineHover],
   );
   const handleMouseLeaveLine = useCallback(() => {
     hoverDispatchRef.current({ type: "leaveLine" });
     hoverDispatchRef.current({ type: "leaveComment" });
-  }, []);
+    notifyLineHover(null);
+  }, [notifyLineHover]);
 
   // Render profile pictures for a line if it has comments
   const renderProfilePictures = useCallback((lineNumber?: number) => {
@@ -1496,6 +1522,7 @@ export function InlineCommentableMarkdown({
             replyTarget={replyTarget}
             replyInitialDraft={replyInitialDraft}
             resolvedCollapsedLines={resolvedCollapsedLines}
+            subscribeLineHover={subscribeLineHover}
             highlightedCommentId={highlightedCommentId}
             commentsByLine={layoutCommentsByLine}
             commentsLoading={commentsLoading}
@@ -1578,6 +1605,10 @@ interface CommentsSidebarProps {
   replyTarget: ReplyTarget | null;
   replyInitialDraft: string;
   resolvedCollapsedLines: Set<number>;
+  subscribeLineHover: (
+    lineNumber: number,
+    cb: (hovered: boolean) => void,
+  ) => () => void;
   highlightedCommentId?: number | null;
   commentsByLine: Map<number, Comment[]>;
   commentsLoading?: boolean;
@@ -1610,6 +1641,7 @@ function CommentsSidebar({
   replyTarget,
   replyInitialDraft,
   resolvedCollapsedLines,
+  subscribeLineHover,
   highlightedCommentId,
   commentsByLine,
   commentsLoading,
@@ -1688,6 +1720,7 @@ function CommentsSidebar({
             }
             isSubmitting={isSubmitting}
             isCollapsed={resolvedCollapsedLines.has(lineNumber)}
+            subscribeLineHover={subscribeLineHover}
             highlightedCommentId={highlightedCommentId}
             onStartReply={h.onStartReply}
             onStartNewThread={h.onStartNewThread}

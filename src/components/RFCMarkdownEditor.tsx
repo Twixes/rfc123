@@ -6,7 +6,7 @@ import { EditorView } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import CodeMirror, { type ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import { useTheme } from "next-themes";
-import { type Ref, useMemo } from "react";
+import { type Ref, useEffect, useMemo, useState } from "react";
 import { diffHighlight } from "@/lib/codemirror-diff";
 import { markdownLinkClicks } from "@/lib/codemirror-markdown-links";
 
@@ -52,7 +52,15 @@ export function RFCMarkdownEditor({
   // Drives CodeMirror's base theme. Without it, @uiw defaults to "light" (a
   // white surface), which looks broken in dark mode. The transparent-background
   // override in globals.css then lets the editor sit flush on the card.
+  //
+  // next-themes can't resolve the theme during SSR (resolvedTheme is undefined),
+  // so the server renders light. Match that on the first client render, then
+  // switch after mount — the same guard ThemeToggle uses — to avoid a hydration
+  // mismatch on @uiw's cm-theme-{light,dark} wrapper class for dark-mode users.
   const { resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const editorTheme = mounted && resolvedTheme === "dark" ? "dark" : "light";
   const extensions = useMemo(() => {
     const base = [
       markdown({ base: markdownLanguage }),
@@ -122,7 +130,7 @@ export function RFCMarkdownEditor({
       onChange={onChange}
       extensions={extensions}
       className={className}
-      theme={resolvedTheme === "dark" ? "dark" : "light"}
+      theme={editorTheme}
       height="auto"
       basicSetup={{
         lineNumbers: true,

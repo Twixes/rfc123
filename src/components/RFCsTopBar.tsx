@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import AccountDropdown from "@/components/AccountDropdown";
+import ThemeToggle from "@/components/ThemeToggle";
 
 interface RFCsTopBarProps {
   user?: { name?: string | null; image?: string | null } | null;
@@ -42,19 +43,18 @@ export default function RFCsTopBar({
         </div>
         {subtitle && <div className="mt-3">{subtitle}</div>}
       </div>
-      {(secondaryActions || primaryActions || user) && (
-        <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
-          {secondaryActions}
-          {primaryActions && (
-            <span className="hidden sm:contents">{primaryActions}</span>
-          )}
-          {user && (
-            <span className="hidden sm:contents">
-              <AccountDropdown user={user} />
-            </span>
-          )}
-        </div>
-      )}
+      <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
+        <ThemeToggle />
+        {secondaryActions}
+        {primaryActions && (
+          <span className="hidden sm:contents">{primaryActions}</span>
+        )}
+        {user && (
+          <span className="hidden sm:contents">
+            <AccountDropdown user={user} />
+          </span>
+        )}
+      </div>
     </header>
   );
 }

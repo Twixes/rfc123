@@ -1,4 +1,5 @@
 import Link from "next/link";
+import ThemeToggle from "@/components/ThemeToggle";
 
 const SECTIONS = [
   {
@@ -71,6 +72,9 @@ export default function Footer() {
           </div>
         ))}
       </nav>
+      <div className="mt-8 flex justify-end border-t border-gray-20 pt-6">
+        <ThemeToggle />
+      </div>
     </footer>
   );
 }

@@ -5,6 +5,7 @@ import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { EditorView } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import CodeMirror, { type ReactCodeMirrorRef } from "@uiw/react-codemirror";
+import { useTheme } from "next-themes";
 import { type Ref, useMemo } from "react";
 import { diffHighlight } from "@/lib/codemirror-diff";
 import { markdownLinkClicks } from "@/lib/codemirror-markdown-links";
@@ -48,6 +49,10 @@ export function RFCMarkdownEditor({
   diffAgainst,
   wordWrap = true,
 }: RFCMarkdownEditorProps) {
+  // Drives CodeMirror's base theme. Without it, @uiw defaults to "light" (a
+  // white surface), which looks broken in dark mode. The transparent-background
+  // override in globals.css then lets the editor sit flush on the card.
+  const { resolvedTheme } = useTheme();
   const extensions = useMemo(() => {
     const base = [
       markdown({ base: markdownLanguage }),
@@ -117,6 +122,7 @@ export function RFCMarkdownEditor({
       onChange={onChange}
       extensions={extensions}
       className={className}
+      theme={resolvedTheme === "dark" ? "dark" : "light"}
       height="auto"
       basicSetup={{
         lineNumbers: true,

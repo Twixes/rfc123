@@ -27,7 +27,7 @@ export default function HourSelect({
       </ListboxButton>
       <ListboxOptions
         anchor={{ to: "bottom start", gap: 4, padding: 16 }}
-        className="w-[var(--button-width)] flex flex-col border border-gray-20 rounded-md bg-white shadow-sm z-10 focus:outline-none overflow-clip"
+        className="w-[var(--button-width)] flex flex-col border border-gray-20 rounded-md bg-surface shadow-sm z-10 focus:outline-none overflow-clip"
       >
         <div className="flex-1 min-h-0 overflow-auto overscroll-contain py-1">
           {HOURS.map((h) => (

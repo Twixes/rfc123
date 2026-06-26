@@ -74,6 +74,7 @@ export function MermaidDiagram({ chart }: MermaidDiagramProps) {
     <div
       ref={containerRef}
       className="my-4 overflow-x-auto [&>svg]:max-w-full"
+      // biome-ignore lint/security/noDangerouslySetInnerHtml: mermaid renders SVG it generated from the diagram source, not arbitrary user HTML
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   );

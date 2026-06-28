@@ -39,7 +39,7 @@ export default function ErrorBoundary({
         <button
           type="button"
           onClick={() => reset()}
-          className="w-full rounded-md bg-cyan px-4 py-2 font-medium text-foreground transition-all hover:opacity-80"
+          className="w-full rounded-md bg-cyan px-4 py-2 font-medium text-foreground dark:text-surface transition-all hover:opacity-80"
         >
           Try again
         </button>

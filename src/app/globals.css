@@ -335,6 +335,10 @@ pre code.hljs {
 .dark .hljs-subst {
   color: #c9d1d9;
 }
+.dark .hljs-emphasis,
+.dark .hljs-strong {
+  color: #c9d1d9;
+}
 .dark .hljs-section {
   color: #1f6feb;
   font-weight: bold;

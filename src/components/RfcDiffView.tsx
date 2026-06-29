@@ -51,14 +51,16 @@ export function RfcPrettyDiffView({
             key={idx}
             className={`relative rounded-sm pl-3 pr-2 py-1 before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-0.5 ${
               isAdded
-                ? "bg-green-50 before:bg-green-400"
-                : "bg-red-50 line-through decoration-red-400/70 [&_*]:decoration-red-400/70 before:bg-red-400"
+                ? "bg-green-50 dark:bg-green-950/40 before:bg-green-400 dark:before:bg-green-500"
+                : "bg-red-50 dark:bg-red-950/40 line-through decoration-red-400/70 [&_*]:decoration-red-400/70 before:bg-red-400 dark:before:bg-red-500"
             }`}
           >
             <span
               aria-hidden
               className={`absolute right-2 top-1 font-mono text-[10px] uppercase tracking-[0.12em] no-underline ${
-                isAdded ? "text-green-700" : "text-red-700"
+                isAdded
+                  ? "text-green-700 dark:text-green-400"
+                  : "text-red-700 dark:text-red-400"
               }`}
             >
               {isAdded ? "Added" : "Removed"}
@@ -125,15 +127,15 @@ export function RfcMonoDiffView({ entries }: RfcMonoDiffViewProps) {
       {rows.map((row, idx) => {
         const bg =
           row.kind === "added"
-            ? "bg-green-50"
+            ? "bg-green-50 dark:bg-green-950/40"
             : row.kind === "removed"
-              ? "bg-red-50"
+              ? "bg-red-50 dark:bg-red-950/40"
               : "";
         const accent =
           row.kind === "added"
-            ? "text-green-700"
+            ? "text-green-700 dark:text-green-400"
             : row.kind === "removed"
-              ? "text-red-700"
+              ? "text-red-700 dark:text-red-400"
               : "text-gray-40";
         const symbol =
           row.kind === "added" ? "+" : row.kind === "removed" ? "-" : " ";

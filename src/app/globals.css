@@ -1,6 +1,12 @@
 @import "tailwindcss" important;
 @import "highlight.js/styles/github.css";
 
+/* Class-based dark mode: `dark:` utilities apply under `<html class="dark">`
+   (set by next-themes), not via prefers-color-scheme. Most of the UI flips
+   purely through the CSS variables redefined under `.dark` below; `dark:`
+   utilities are only needed for the handful of hardcoded status colors. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @supports (color: color(display-p3 1 1 1)) {
   :root {
     /* Neutral paper base */
@@ -62,6 +68,53 @@
     --border-thin: 1px;
     --border-color: #b0b0b3;
     --border-light: #e1e1e3;
+  }
+}
+
+/* Dark palette. Because every color utility resolves through these variables
+   (see `@theme inline` below), redefining them under `.dark` flips the whole
+   UI without touching components. The grayscale is *inverted by role*, not by
+   name: --gray-5 stays the "barely off the background" tint (hover/code bg),
+   --gray-90 stays the strongest text — so existing class usage keeps meaning. */
+.dark {
+  color-scheme: dark;
+
+  --background: #0e0e11;
+  --foreground: #ececef;
+  --surface: #17171b;
+
+  --cyan: #6fb3c9;
+  --cyan-light: #16282e;
+  --magenta: #d96f93;
+  --magenta-light: #2b1721;
+  --yellow: #e8c547;
+  --yellow-medium: #322e15;
+  --yellow-light: #2a2710;
+  --key-black: #ececef;
+
+  --gray-5: #161619;
+  --gray-10: #1d1d22;
+  --gray-20: #2a2a31;
+  --gray-30: #3a3a43;
+  --gray-40: #55555f;
+  --gray-50: #8b8b95;
+  --gray-70: #b4b4bd;
+  --gray-90: #e3e3e8;
+
+  --border-color: #3a3a43;
+  --border-light: #2a2a31;
+}
+
+/* Wider-gamut accents on P3 displays, mirroring the light palette's split. */
+@supports (color: color(display-p3 1 1 1)) {
+  .dark {
+    --cyan: color(display-p3 0.435 0.702 0.788);
+    --cyan-light: color(display-p3 0.086 0.157 0.18);
+    --magenta: color(display-p3 0.851 0.435 0.576);
+    --magenta-light: color(display-p3 0.169 0.09 0.129);
+    --yellow: color(display-p3 0.91 0.773 0.278);
+    --yellow-medium: color(display-p3 0.196 0.18 0.082);
+    --yellow-light: color(display-p3 0.165 0.153 0.063);
   }
 }
 
@@ -225,6 +278,83 @@ pre code.hljs {
   padding: 0 0.25rem;
 }
 
+/* Dark syntax tokens (highlight.js github-dark palette). The imported
+   github.css is light-only and an @import can't be scoped, so the token
+   colors are overridden under `.dark`. Code-block background comes from
+   `pre { background: var(--gray-5) }`, which already flips with the theme. */
+.dark .hljs {
+  color: #c9d1d9;
+}
+.dark .hljs-doctag,
+.dark .hljs-keyword,
+.dark .hljs-meta .hljs-keyword,
+.dark .hljs-template-tag,
+.dark .hljs-template-variable,
+.dark .hljs-type,
+.dark .hljs-variable.language_ {
+  color: #ff7b72;
+}
+.dark .hljs-title,
+.dark .hljs-title.class_,
+.dark .hljs-title.class_.inherited__,
+.dark .hljs-title.function_ {
+  color: #d2a8ff;
+}
+.dark .hljs-attr,
+.dark .hljs-attribute,
+.dark .hljs-literal,
+.dark .hljs-meta,
+.dark .hljs-number,
+.dark .hljs-operator,
+.dark .hljs-variable,
+.dark .hljs-selector-attr,
+.dark .hljs-selector-class,
+.dark .hljs-selector-id {
+  color: #79c0ff;
+}
+.dark .hljs-regexp,
+.dark .hljs-string,
+.dark .hljs-meta .hljs-string {
+  color: #a5d6ff;
+}
+.dark .hljs-built_in,
+.dark .hljs-symbol {
+  color: #ffa657;
+}
+.dark .hljs-comment,
+.dark .hljs-code,
+.dark .hljs-formula {
+  color: #8b949e;
+}
+.dark .hljs-name,
+.dark .hljs-quote,
+.dark .hljs-selector-tag,
+.dark .hljs-selector-pseudo {
+  color: #7ee787;
+}
+.dark .hljs-subst {
+  color: #c9d1d9;
+}
+.dark .hljs-emphasis,
+.dark .hljs-strong {
+  color: #c9d1d9;
+}
+.dark .hljs-section {
+  color: #1f6feb;
+  font-weight: bold;
+}
+.dark .hljs-bullet {
+  color: #f2cc60;
+}
+.dark .hljs-addition {
+  color: #aff5b4;
+  background-color: #033a16;
+}
+.dark .hljs-deletion {
+  color: #ffdcd7;
+  background-color: #67060c;
+}
+
 /* Override classes for values previously in style attributes – must win over Tailwind !important */
 .comment-line-badge {
   color: var(--magenta) !important;
@@ -297,6 +427,16 @@ pre code.hljs {
   }
 }
 
+/* @uiw/react-codemirror paints its base theme's background on the editor;
+   force it transparent so the Write tab sits flush on the card surface
+   (bg-surface) in both light and dark, rather than showing CodeMirror's own
+   light panel color (which looked broken on the dark theme). */
+.rfc-markdown-editor .cm-editor,
+.rfc-markdown-editor .cm-scroller,
+.rfc-markdown-editor .cm-gutters {
+  background-color: transparent !important;
+}
+
 @media (min-width: 640px) {
   .rfc-markdown-editor .cm-content {
     padding: 1.5rem;
@@ -319,4 +459,13 @@ pre code.hljs {
   padding: 0 2px;
   margin: 0 1px;
   white-space: pre-wrap;
+}
+
+.dark .cm-diff-added {
+  background-color: rgba(46, 160, 67, 0.25);
+}
+.dark .cm-diff-removed {
+  background-color: rgba(248, 81, 73, 0.2);
+  color: rgb(255 179 179);
+  text-decoration-color: rgba(248, 81, 73, 0.7);
 }

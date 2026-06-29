@@ -3,6 +3,7 @@ import { Geist } from "next/font/google";
 import localFont from "next/font/local";
 import { TooltipProvider } from "@/components/Tooltip";
 import { PostHogProvider } from "@/providers/PostHogProvider";
+import { ThemeProvider } from "@/providers/ThemeProvider";
 import "./globals.css";
 
 const geist = Geist({
@@ -48,11 +49,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={`${geist.variable} ${lSerif.variable} antialiased`}>
-        <PostHogProvider>
-          <TooltipProvider>{children}</TooltipProvider>
-        </PostHogProvider>
+        <ThemeProvider>
+          <PostHogProvider>
+            <TooltipProvider>{children}</TooltipProvider>
+          </PostHogProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

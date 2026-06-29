@@ -1,8 +1,7 @@
 "use client";
 
+import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
-
-let mermaidInitialized = false;
 
 interface MermaidDiagramProps {
   chart: string;
@@ -12,6 +11,7 @@ export function MermaidDiagram({ chart }: MermaidDiagramProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [svg, setSvg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { resolvedTheme } = useTheme();
 
   useEffect(() => {
     let cancelled = false;
@@ -19,14 +19,12 @@ export function MermaidDiagram({ chart }: MermaidDiagramProps) {
     async function render() {
       const mermaid = (await import("mermaid")).default;
 
-      if (!mermaidInitialized) {
-        mermaid.initialize({
-          startOnLoad: false,
-          theme: "neutral",
-          fontFamily: "inherit",
-        });
-        mermaidInitialized = true;
-      }
+      // Re-initialize each render so a theme switch re-themes the diagram.
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: resolvedTheme === "dark" ? "dark" : "neutral",
+        fontFamily: "inherit",
+      });
 
       try {
         const id = `mermaid-${Math.random().toString(36).slice(2, 9)}`;
@@ -49,13 +47,15 @@ export function MermaidDiagram({ chart }: MermaidDiagramProps) {
     return () => {
       cancelled = true;
     };
-  }, [chart]);
+  }, [chart, resolvedTheme]);
 
   if (error) {
     return (
-      <div className="my-4 border border-red-300 rounded bg-red-50 p-4">
-        <p className="text-sm text-red-600">Mermaid rendering error: {error}</p>
-        <pre className="mt-2 text-xs text-gray-600 whitespace-pre-wrap">
+      <div className="my-4 border border-red-300 dark:border-red-900/50 rounded bg-red-50 dark:bg-red-950/40 p-4">
+        <p className="text-sm text-red-600 dark:text-red-400">
+          Mermaid rendering error: {error}
+        </p>
+        <pre className="mt-2 text-xs text-gray-50 whitespace-pre-wrap">
           {chart}
         </pre>
       </div>
@@ -74,6 +74,7 @@ export function MermaidDiagram({ chart }: MermaidDiagramProps) {
     <div
       ref={containerRef}
       className="my-4 overflow-x-auto [&>svg]:max-w-full"
+      // biome-ignore lint/security/noDangerouslySetInnerHtml: mermaid renders SVG it generated from the diagram source, not arbitrary user HTML
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   );

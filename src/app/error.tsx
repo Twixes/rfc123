@@ -3,7 +3,7 @@
 import posthog from "posthog-js";
 import { useEffect } from "react";
 
-export default function Error({
+export default function ErrorBoundary({
   error,
   reset,
 }: {
@@ -30,14 +30,16 @@ export default function Error({
           into it.
         </p>
         {error.message && (
-          <div className="border border-red-300 bg-red-50 rounded-sm p-3">
-            <p className="font-mono text-sm text-red-900">{error.message}</p>
+          <div className="border border-red-300 dark:border-red-900/50 bg-red-50 dark:bg-red-950/40 rounded-sm p-3">
+            <p className="font-mono text-sm text-red-900 dark:text-red-200">
+              {error.message}
+            </p>
           </div>
         )}
         <button
           type="button"
           onClick={() => reset()}
-          className="w-full rounded-md bg-cyan px-4 py-2 font-medium text-foreground transition-all hover:opacity-80"
+          className="w-full rounded-md bg-cyan px-4 py-2 font-medium text-foreground dark:text-surface transition-all hover:opacity-80"
         >
           Try again
         </button>

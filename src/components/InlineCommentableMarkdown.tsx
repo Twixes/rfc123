@@ -7,6 +7,7 @@ import {
   useCallback,
   useDeferredValue,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -36,7 +37,9 @@ import {
 import { rehypeLineMarkers } from "@/lib/rehype-line-markers";
 import { usePerLineCommentHandlers } from "@/lib/use-per-line-comment-handlers";
 
-// Pretty-view plugins + line markers for inline comments.
+// Pretty-view plugins + line markers for inline comments. Markers carry
+// `data-line` attributes (not ids), so several documents can render on one
+// page – multi-file RFCs – and every lookup is scoped to its own instance.
 type PluginList = NonNullable<
   React.ComponentProps<typeof ReactMarkdown>["rehypePlugins"]
 >;
@@ -107,7 +110,7 @@ function groupCommentsByLine(comments: Comment[]): Map<number, Comment[]> {
 }
 
 /** Resolve the source line under a pointer event inside a `<pre>`, by
- *  picking the `line-marker-N` whose top is just at-or-above the event Y. */
+ *  picking the `data-line` marker whose top is just at-or-above the event Y. */
 function findSourceLineFromPreEvent(
   pre: HTMLElement,
   clientY: number,
@@ -115,14 +118,12 @@ function findSourceLineFromPreEvent(
 ): number {
   let bestLine = fallback;
   let bestDelta = Number.POSITIVE_INFINITY;
-  for (const marker of pre.querySelectorAll<HTMLElement>(
-    '[id^="line-marker-"]',
-  )) {
+  for (const marker of pre.querySelectorAll<HTMLElement>("[data-line]")) {
     const delta = clientY - marker.getBoundingClientRect().top;
     if (delta >= 0 && delta < bestDelta) {
       bestDelta = delta;
       const parsed = Number.parseInt(
-        marker.id.slice("line-marker-".length),
+        marker.getAttribute("data-line") ?? "",
         10,
       );
       if (!Number.isNaN(parsed)) bestLine = parsed;
@@ -142,6 +143,7 @@ function buildLineHighlightCss(
   hoveredLineIndex: number | null,
   hoveredCommentLineIndex: number | null,
   activeLineIndex: number | null,
+  scopeId: string,
 ): string {
   const resolve = (ln: number) => lineAlias.get(ln) ?? ln;
   const hovered = new Set<number>();
@@ -152,17 +154,20 @@ function buildLineHighlightCss(
   if (activeLineIndex !== null) active.add(resolve(activeLineIndex + 1));
   const all = new Set([...hovered, ...active]);
   if (all.size === 0) return "";
+  // Scoped to this instance's shell – the injected <style> is document-wide,
+  // and line numbers repeat across documents on multi-file RFC pages.
+  const scope = `[data-hover-scope="${scopeId}"]`;
   const proseLineSelector = (ln: number) =>
     [
-      `p[data-line-element="${ln}"]`,
-      `h1[data-line-element="${ln}"]`,
-      `h2[data-line-element="${ln}"]`,
-      `h3[data-line-element="${ln}"]`,
-      `li[data-line-element="${ln}"]`,
-      `tr[data-line-element="${ln}"]`,
-      `blockquote[data-line-element="${ln}"]`,
-      `span.code-line[data-line-element="${ln}"]`,
-      `div.mermaid-block[data-line-element="${ln}"]`,
+      `${scope} p[data-line-element="${ln}"]`,
+      `${scope} h1[data-line-element="${ln}"]`,
+      `${scope} h2[data-line-element="${ln}"]`,
+      `${scope} h3[data-line-element="${ln}"]`,
+      `${scope} li[data-line-element="${ln}"]`,
+      `${scope} tr[data-line-element="${ln}"]`,
+      `${scope} blockquote[data-line-element="${ln}"]`,
+      `${scope} span.code-line[data-line-element="${ln}"]`,
+      `${scope} div.mermaid-block[data-line-element="${ln}"]`,
     ].join(", ");
 
   return Array.from(all)
@@ -176,23 +181,23 @@ function buildLineHighlightCss(
         padding-left: 0.5rem;
         margin-left: -0.5rem;
       }
-      li[data-line-element="${ln}"] {
+      ${scope} li[data-line-element="${ln}"] {
         margin-left: 0;
         padding-left: 0;
       }
-      tr[data-line-element="${ln}"] {
+      ${scope} tr[data-line-element="${ln}"] {
         margin-left: 0;
         padding-left: 0;
       }
-      blockquote[data-line-element="${ln}"] {
+      ${scope} blockquote[data-line-element="${ln}"] {
         border-left-color: var(--yellow) !important;
       }
-      span.code-line[data-line-element="${ln}"] {
+      ${scope} span.code-line[data-line-element="${ln}"] {
         margin-left: 0;
         padding-left: 0;
         border-radius: 0;
       }
-      div.mermaid-block[data-line-element="${ln}"] {
+      ${scope} div.mermaid-block[data-line-element="${ln}"] {
         margin-left: 0;
         padding-left: 0;
       }`;
@@ -237,6 +242,7 @@ function applyHoverToDom(
   lineAlias: Map<number, number>,
   activeLineIndex: number | null,
   hover: HoverState,
+  scopeId: string,
 ) {
   if (styleEl) {
     styleEl.textContent =
@@ -245,6 +251,7 @@ function applyHoverToDom(
         hover.line,
         hover.comment,
         activeLineIndex,
+        scopeId,
       ) + buildCommentAndArrowHoverCss(hover);
   }
   if (!shell) return;
@@ -282,6 +289,10 @@ function LineHoverController({
   markdownColumn: React.ReactNode;
   sidebar: React.ReactNode;
 }) {
+  // Per-instance token: scopes the injected hover CSS and the SVG arrowhead
+  // ids so several documents on one page (multi-file RFCs) don't cross-style
+  // each other. Sanitized because useId values aren't valid url(#…) refs.
+  const scopeId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const shellRef = useRef<HTMLDivElement>(null);
   const styleRef = useRef<HTMLStyleElement>(null);
   const hoverRef = useRef<HoverState>({ line: null, comment: null });
@@ -295,8 +306,9 @@ function LineHoverController({
       lineAlias,
       activeLineIndex,
       hoverRef.current,
+      scopeId,
     );
-  }, [lineAlias, activeLineIndex]);
+  }, [lineAlias, activeLineIndex, scopeId]);
 
   useLayoutEffect(() => {
     dispatchRef.current = (action) => {
@@ -378,7 +390,9 @@ function LineHoverController({
         }
       }
       if (!targetEl)
-        targetEl = document.getElementById(`line-marker-${targetLine}`);
+        targetEl = markdown.querySelector<HTMLElement>(
+          `[data-line="${targetLine}"]`,
+        );
       if (!targetEl) return;
 
       const boxRect = boxRef.getBoundingClientRect();
@@ -481,6 +495,7 @@ function LineHoverController({
       <style ref={styleRef} />
       <div
         ref={shellRef}
+        data-hover-scope={scopeId}
         className="line-hover-shell relative grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-8 lg:gap-12"
       >
         {markdownColumn}
@@ -498,7 +513,7 @@ function LineHoverController({
           <title>Comment threads</title>
           <defs>
             <marker
-              id="arrowhead-magenta"
+              id={`arrowhead-magenta-${scopeId}`}
               markerWidth="6"
               markerHeight="6"
               refX="6"
@@ -512,7 +527,7 @@ function LineHoverController({
               />
             </marker>
             <marker
-              id="arrowhead-cyan"
+              id={`arrowhead-cyan-${scopeId}`}
               markerWidth="6"
               markerHeight="6"
               refX="6"
@@ -535,7 +550,9 @@ function LineHoverController({
                   strokeWidth="1"
                   strokeOpacity={isDraft ? 1 : 0.6}
                   markerEnd={
-                    isDraft ? "url(#arrowhead-cyan)" : "url(#arrowhead-magenta)"
+                    isDraft
+                      ? `url(#arrowhead-cyan-${scopeId})`
+                      : `url(#arrowhead-magenta-${scopeId})`
                   }
                   className="svg-stroke-transition"
                 />
@@ -898,12 +915,10 @@ export function InlineCommentableMarkdown({
     const markdownElement = markdownRef.current;
     const containerRect = markdownElement.getBoundingClientRect();
 
-    // One DOM query for all markers (avoid 250× getElementById per pass).
-    for (const marker of markdownElement.querySelectorAll(
-      '[id^="line-marker-"]',
-    )) {
+    // One DOM query for all markers (avoid 250× lookups per pass).
+    for (const marker of markdownElement.querySelectorAll("[data-line]")) {
       const lineNum = Number.parseInt(
-        marker.id.slice("line-marker-".length),
+        marker.getAttribute("data-line") ?? "",
         10,
       );
       if (Number.isNaN(lineNum)) continue;

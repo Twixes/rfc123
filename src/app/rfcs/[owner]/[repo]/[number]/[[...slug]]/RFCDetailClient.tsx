@@ -13,6 +13,7 @@ import {
   CommitRangePicker,
   type DiffRange,
 } from "@/components/CommitRangePicker";
+import { CopyLinkButton } from "@/components/CopyLinkButton";
 import { DiscussWithAgentButton } from "@/components/DiscussWithAgentButton";
 import type { ReviewerItem } from "@/components/EditableReviewers";
 import { EditModeInlineComments } from "@/components/EditModeInlineComments";
@@ -56,12 +57,23 @@ interface PersistedBodyDraft {
   /** File SHA the draft was started against. If GitHub's current SHA differs
    *  on a later visit, the draft is "stale" and the user is offered a reset. */
   baseFileSha: string;
+  /** Repo-relative path of the file the draft edits. Absent on drafts saved
+   *  before multi-file support – those implicitly edited the only file. */
+  path?: string;
   lastEditedAt: string;
 }
 
 function parseCommentIdFromHash(hash: string): number | null {
   const match = hash.match(/^#comment-(\d+)$/);
   return match ? Number.parseInt(match[1], 10) : null;
+}
+
+/** Query param that deep-links to one file's section on multi-file RFCs. */
+const FILE_PARAM = "file";
+
+/** DOM id of a file's section, so `?file=<path>` deep links can scroll to it. */
+function fileSectionId(path: string): string {
+  return `file-${path.replace(/[^a-zA-Z0-9_.-]+/g, "-")}`;
 }
 
 interface RFCDetailClientProps {
@@ -79,7 +91,11 @@ interface RFCDetailClientProps {
 type DiffState =
   | { kind: "idle" }
   | { kind: "loading" }
-  | { kind: "ready"; base: string | null; compare: string | null }
+  | {
+      kind: "ready";
+      /** Per markdown file path: content at both refs (null = absent at ref). */
+      byPath: Record<string, { base: string | null; compare: string | null }>;
+    }
   | { kind: "error"; message: string };
 
 export default function RFCDetailClient({
@@ -112,10 +128,13 @@ export default function RFCDetailClient({
     message: string;
     teamNoAccess?: { team: string; org: string; repo: string };
   } | null>(null);
-  /** Non-null when the author is editing the body. The string is the working
-   *  copy of the markdown – `rfc.markdownContent` stays the canonical version
-   *  until a successful save. */
-  const [editingBody, setEditingBody] = useState<string | null>(null);
+  /** Non-null while the author edits one file: its path plus the working copy
+   *  of the markdown. The file's content in `rfc.files` stays the canonical
+   *  version until a successful save. */
+  const [editing, setEditing] = useState<{
+    path: string;
+    body: string;
+  } | null>(null);
   const [commitMessage, setCommitMessage] = useState("");
   const [savingBody, setSavingBody] = useState(false);
   const [bodyConflict, setBodyConflict] = useState(false);
@@ -140,8 +159,8 @@ export default function RFCDetailClient({
     },
     [router, pathname, searchParams],
   );
-  /** HEAD content is seeded from `rfc.markdownContent` so the common
-   *  "previous → HEAD" compare only fetches the base side. */
+  /** Keyed by `<shortSha>:<path>`. HEAD content is seeded from `rfc.files`
+   *  so the common "previous → HEAD" compare only fetches the base side. */
   const diffContentCache = useRef<Map<string, string | null>>(new Map());
   const [diffState, setDiffState] = useState<DiffState>({ kind: "idle" });
 
@@ -158,37 +177,56 @@ export default function RFCDetailClient({
   const anonymousInlineSubmit = useCallback(async () => {
     redirectToSignIn();
   }, [redirectToSignIn]);
-  const inlineCommentHandler = isAnonymous
-    ? anonymousInlineSubmit
-    : handleInlineComment;
+  /** Per-file inline comment submitter – closes over the file's repo path so
+   *  the review comment lands on the right document. */
+  const inlineCommentHandlerFor = (path: string) =>
+    isAnonymous
+      ? anonymousInlineSubmit
+      : (line: number, body: string, replyToCommentId?: number) =>
+          handleInlineComment(path, line, body, replyToCommentId);
   const toggleReactionHandler = isAnonymous ? undefined : handleToggleReaction;
   const generalCommentHandler = isAnonymous ? undefined : handleGeneralComment;
 
+  /** The canonical (saved) version of the file currently being edited. */
+  const editingFile = useMemo(
+    () =>
+      editing != null
+        ? (rfc?.files.find((file) => file.path === editing.path) ?? null)
+        : null,
+    [rfc?.files, editing],
+  );
+
+  const handleEditingBodyChange = useCallback((next: string) => {
+    setEditing((prev) => (prev ? { ...prev, body: next } : prev));
+  }, []);
+
+  /** The file a persisted draft belongs to. Pre-multi-file drafts have no
+   *  `path` – they implicitly edited the PR's only markdown file. */
+  const resolveDraftFile = (draft: PersistedBodyDraft) =>
+    (draft.path != null
+      ? rfc?.files.find((file) => file.path === draft.path)
+      : rfc?.files[0]) ?? null;
+
   const draftStorageKey = `rfc123:edit:${owner}/${repo}#${prNumber}`;
   const bodyDraftSnapshot: PersistedBodyDraft | null = useMemo(() => {
-    if (editingBody == null) return null;
-    if (!rfc?.markdownFileSha) return null;
-    if (editingBody === rfc.markdownContent) return null;
+    if (editing == null) return null;
+    if (!editingFile?.sha) return null;
+    if (editing.body === editingFile.content) return null;
     return {
-      body: editingBody,
-      baseFileSha: rfc.markdownFileSha,
+      body: editing.body,
+      baseFileSha: editingFile.sha,
+      path: editingFile.path,
       lastEditedAt: new Date().toISOString(),
     };
-  }, [editingBody, rfc?.markdownContent, rfc?.markdownFileSha]);
+  }, [editing, editingFile]);
 
-  const editPreviewAssets = useMemo((): RfcMarkdownAssets | undefined => {
-    if (!rfc?.headSha || !rfc.markdownFilePath) return undefined;
-    return {
-      owner,
-      repo,
-      headRef: rfc.headSha,
-      markdownFilePath: rfc.markdownFilePath,
-    };
-  }, [owner, repo, rfc?.headSha, rfc?.markdownFilePath]);
-
-  const viewDiffEntries = useMemo(() => {
+  const viewDiffEntriesByPath = useMemo(() => {
     if (diffState.kind !== "ready") return null;
-    return lineDiff(diffState.base ?? "", diffState.compare ?? "");
+    const out = new Map<string, ReturnType<typeof lineDiff>>();
+    for (const [path, sides] of Object.entries(diffState.byPath)) {
+      out.set(path, lineDiff(sides.base ?? "", sides.compare ?? ""));
+    }
+    return out;
   }, [diffState]);
 
   const {
@@ -257,51 +295,88 @@ export default function RFCDetailClient({
   // navigation here (e.g. clicking an RFC from the landing showcase) often
   // doesn't reset the browser's scroll position. Force it to the top on the
   // first mount of a given PR – unless the URL targets a specific comment via
-  // `#comment-NNN`, in which case the existing hash-scroll effect should win.
+  // `#comment-NNN` or a file section via `?file=`, in which case the
+  // dedicated scroll effects should win.
   useEffect(() => {
-    if (parseCommentIdFromHash(window.location.hash) == null) {
+    if (
+      parseCommentIdFromHash(window.location.hash) == null &&
+      !new URLSearchParams(window.location.search).get(FILE_PARAM)
+    ) {
       window.scrollTo(0, 0);
     }
   }, []);
 
+  // Scroll to the file section targeted by `?file=<path>` once content is up.
+  const hasScrolledToFile = useRef(false);
   useEffect(() => {
-    if (rfc?.headSha && typeof rfc.markdownContent === "string") {
-      // Cache keys come from the picker / URL, which use short SHAs.
-      diffContentCache.current.set(shortSha(rfc.headSha), rfc.markdownContent);
+    if (isLoading || !rfc || hasScrolledToFile.current) return;
+    const target = searchParams.get(FILE_PARAM);
+    if (!target || !rfc.files.some((file) => file.path === target)) return;
+    hasScrolledToFile.current = true;
+    // Wait a tick for markdown + comment layout to settle.
+    const timer = setTimeout(() => {
+      document
+        .getElementById(fileSectionId(target))
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [isLoading, rfc, searchParams]);
+
+  useEffect(() => {
+    if (!rfc?.headSha) return;
+    // Cache keys come from the picker / URL, which use short SHAs.
+    for (const file of rfc.files) {
+      diffContentCache.current.set(
+        `${shortSha(rfc.headSha)}:${file.path}`,
+        file.content,
+      );
     }
-  }, [rfc?.headSha, rfc?.markdownContent]);
+  }, [rfc?.headSha, rfc?.files]);
 
   // Out-of-order responses (user flips Base while a previous request is in
   // flight) are dropped with a cancellation token.
   useEffect(() => {
-    if (!diffRange || !rfc?.markdownFilePath) {
+    const paths = rfc?.files.map((file) => file.path) ?? [];
+    if (!diffRange || paths.length === 0) {
       setDiffState({ kind: "idle" });
       return;
     }
     let cancelled = false;
     const cache = diffContentCache.current;
-    const path = rfc.markdownFilePath;
 
-    async function fetchSide(sha: string): Promise<string | null> {
-      if (cache.has(sha)) return cache.get(sha) ?? null;
+    async function fetchSide(
+      sha: string,
+      path: string,
+    ): Promise<string | null> {
+      const cacheKey = `${sha}:${path}`;
+      if (cache.has(cacheKey)) return cache.get(cacheKey) ?? null;
       const res = await fetch(
         `/api/rfcs/${prNumber}/content-at?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}&sha=${encodeURIComponent(sha)}&path=${encodeURIComponent(path)}`,
       );
       if (res.status === 404) {
-        cache.set(sha, null);
+        // File absent at this ref (e.g. added later in the PR) – diff as fully added.
+        cache.set(cacheKey, null);
         return null;
       }
       if (!res.ok) throw new Error("Failed to fetch content");
       const data = (await res.json()) as { content: string };
-      cache.set(sha, data.content);
+      cache.set(cacheKey, data.content);
       return data.content;
     }
 
     setDiffState({ kind: "loading" });
-    Promise.all([fetchSide(diffRange.baseSha), fetchSide(diffRange.compareSha)])
-      .then(([base, compare]) => {
+    Promise.all(
+      paths.map(async (path) => {
+        const [base, compare] = await Promise.all([
+          fetchSide(diffRange.baseSha, path),
+          fetchSide(diffRange.compareSha, path),
+        ]);
+        return [path, { base, compare }] as const;
+      }),
+    )
+      .then((entries) => {
         if (cancelled) return;
-        setDiffState({ kind: "ready", base, compare });
+        setDiffState({ kind: "ready", byPath: Object.fromEntries(entries) });
       })
       .catch((e: Error) => {
         if (cancelled) return;
@@ -313,7 +388,7 @@ export default function RFCDetailClient({
     return () => {
       cancelled = true;
     };
-  }, [diffRange, rfc?.markdownFilePath, owner, repo, prNumber]);
+  }, [diffRange, rfc?.files, owner, repo, prNumber]);
 
   // Scroll to and highlight the comment referenced in the URL hash
   useEffect(() => {
@@ -364,11 +439,12 @@ export default function RFCDetailClient({
   }, []);
 
   async function handleInlineComment(
+    path: string,
     line: number,
     body: string,
     replyToCommentId?: number,
   ) {
-    if (!rfc?.markdownFilePath) return;
+    if (!rfc) return;
 
     const optimisticComment: Comment = {
       id: Date.now(),
@@ -376,7 +452,7 @@ export default function RFCDetailClient({
       userAvatar: currentUserAvatar,
       body,
       createdAt: new Date().toISOString(),
-      path: rfc.markdownFilePath,
+      path,
       line,
       inReplyToId: replyToCommentId,
     };
@@ -392,7 +468,7 @@ export default function RFCDetailClient({
           repo,
           prNumber: rfc.number,
           body,
-          path: rfc.markdownFilePath,
+          path,
           line,
           replyToCommentId,
         }),
@@ -584,9 +660,10 @@ export default function RFCDetailClient({
     );
   }
 
-  function enterBodyEdit() {
-    if (!rfc) return;
-    setEditingBody(rfc.markdownContent);
+  function enterBodyEdit(path: string) {
+    const file = rfc?.files.find((f) => f.path === path);
+    if (!file) return;
+    setEditing({ path: file.path, body: file.content });
     setEditTab("write");
     setCommitMessage("");
     setBodyConflict(false);
@@ -595,7 +672,7 @@ export default function RFCDetailClient({
   }
 
   function exitBodyEdit(opts: { clearDraft?: boolean } = {}) {
-    setEditingBody(null);
+    setEditing(null);
     setBodyConflict(false);
     setBodySaveError(null);
     if (opts.clearDraft) clearBodyDraft();
@@ -603,7 +680,9 @@ export default function RFCDetailClient({
 
   function resumeBodyDraft() {
     if (!pendingBodyDraft || !rfc) return;
-    setEditingBody(pendingBodyDraft.body);
+    const draftFile = resolveDraftFile(pendingBodyDraft);
+    if (!draftFile) return;
+    setEditing({ path: draftFile.path, body: pendingBodyDraft.body });
     setCommitMessage("");
     setBodyConflict(false);
     setBodySaveError(null);
@@ -612,8 +691,8 @@ export default function RFCDetailClient({
   }
 
   function handleDiscardEdit() {
-    if (editingBody == null || !rfc) return;
-    const dirty = editingBody !== rfc.markdownContent;
+    if (editing == null || !rfc) return;
+    const dirty = editing.body !== editingFile?.content;
     if (dirty && !window.confirm("Discard your unsaved edits to this RFC?")) {
       return;
     }
@@ -621,16 +700,13 @@ export default function RFCDetailClient({
   }
 
   async function resetAndRefresh() {
-    clearBodyDraft();
-    setEditingBody(null);
-    setBodyConflict(false);
-    setBodySaveError(null);
+    exitBodyEdit({ clearDraft: true });
     await loadRFC({ silent: true });
   }
 
   async function handleSaveBody() {
-    if (editingBody == null || !rfc?.markdownFileSha) return;
-    if (editingBody === rfc.markdownContent) {
+    if (editing == null || !editingFile?.sha) return;
+    if (editing.body === editingFile.content) {
       // Nothing changed – just exit. Save shouldn't be reachable here, but
       // belt + suspenders.
       exitBodyEdit({ clearDraft: true });
@@ -649,10 +725,10 @@ export default function RFCDetailClient({
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            body: editingBody,
+            body: editing.body,
             commitMessage: trimmedMessage,
-            baseFileSha: rfc.markdownFileSha,
-            markdownFilePath: rfc.markdownFilePath,
+            baseFileSha: editingFile.sha,
+            markdownFilePath: editingFile.path,
           }),
         },
       );
@@ -675,8 +751,11 @@ export default function RFCDetailClient({
         prev
           ? {
               ...prev,
-              markdownContent: editingBody,
-              markdownFileSha: saved.fileSha,
+              files: prev.files.map((file) =>
+                file.path === editingFile.path
+                  ? { ...file, content: editing.body, sha: saved.fileSha }
+                  : file,
+              ),
               headSha: saved.commitSha,
               updatedAt: new Date().toISOString(),
             }
@@ -814,10 +893,27 @@ export default function RFCDetailClient({
     );
   }
 
-  // Merge actual comments with optimistic comments
+  // Merge actual comments with optimistic comments. Inline comments anchor to
+  // one of the PR's markdown files; inline comments on any *other* changed
+  // file (images, code riding along in the PR) surface with the general
+  // discussion instead of being dropped.
   const allComments = [...comments, ...optimisticComments];
-  const generalComments = allComments.filter((c) => !c.line);
-  const lineComments = allComments.filter((c) => c.line);
+  const markdownPaths = new Set(rfc.files.map((file) => file.path));
+  const isAnchoredToFile = (c: Comment) =>
+    !!c.line && c.path != null && markdownPaths.has(c.path);
+  const lineCommentsByPath = new Map<string, Comment[]>();
+  for (const c of allComments.filter(isAnchoredToFile)) {
+    const path = c.path as string;
+    const group = lineCommentsByPath.get(path);
+    if (group) group.push(c);
+    else lineCommentsByPath.set(path, [c]);
+  }
+  const generalComments = allComments.filter((c) => !isAnchoredToFile(c));
+
+  const multiFile = rfc.files.length > 1;
+  const pendingDraftFile = pendingBodyDraft
+    ? resolveDraftFile(pendingBodyDraft)
+    : null;
 
   return (
     <div className="mx-auto max-w-360 min-h-screen px-4 sm:px-8 py-6 sm:py-12">
@@ -876,7 +972,7 @@ export default function RFCDetailClient({
                 // body isn't already being edited – the two modes are
                 // mutually exclusive per spec.
                 onTitleSave:
-                  rfc.status === "open" && editingBody == null
+                  rfc.status === "open" && editing == null
                     ? handleTitleSave
                     : undefined,
               }
@@ -884,7 +980,7 @@ export default function RFCDetailClient({
         }
         actions={
           <div className="flex items-center gap-2">
-            {editingBody == null && (
+            {editing == null && (
               <DiscussWithAgentButton
                 owner={owner}
                 repo={repo}
@@ -893,17 +989,20 @@ export default function RFCDetailClient({
                 author={rfc.author}
               />
             )}
-            {canEditBody && editingBody == null && (
+            {/* With several files the per-section pencil disambiguates which
+                one is being edited; the header button covers the common
+                single-document RFC. */}
+            {canEditBody && editing == null && !multiFile && (
               <button
                 type="button"
-                onClick={enterBodyEdit}
+                onClick={() => enterBodyEdit(rfc.files[0].path)}
                 className="inline-flex items-center gap-1.5 rounded-md border border-gray-30 bg-surface px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-gray-5 cursor-pointer"
               >
                 <PencilIcon className="h-3.5 w-3.5" />
                 Edit
               </button>
             )}
-            {editingBody != null && (
+            {editing != null && (
               <button
                 type="button"
                 onClick={handleDiscardEdit}
@@ -931,7 +1030,7 @@ export default function RFCDetailClient({
           </div>
         }
         bylineActions={
-          editingBody == null && rfc.markdownFilePath ? (
+          editing == null && rfc.files.length > 0 ? (
             <div className="flex items-center gap-2">
               <CommitRangePicker
                 owner={owner}
@@ -949,7 +1048,7 @@ export default function RFCDetailClient({
                 ]}
               />
             </div>
-          ) : editingBody != null ? (
+          ) : editing != null ? (
             <ViewModeToggle
               value={editTab}
               onChange={setEditTab}
@@ -962,12 +1061,12 @@ export default function RFCDetailClient({
         }
       />
 
-      {editingBody == null && canEditBody && pendingBodyDraft && (
+      {editing == null && canEditBody && pendingBodyDraft && (
         <BodyDraftRestoreBanner
           draft={pendingBodyDraft}
           stale={
-            !!rfc.markdownFileSha &&
-            pendingBodyDraft.baseFileSha !== rfc.markdownFileSha
+            !!pendingDraftFile?.sha &&
+            pendingBodyDraft.baseFileSha !== pendingDraftFile.sha
           }
           onResume={resumeBodyDraft}
           onDiscard={discardBodyDraft}
@@ -975,39 +1074,7 @@ export default function RFCDetailClient({
       )}
 
       <div className="relative border-t border-gray-20 pt-4">
-        {editingBody != null ? (
-          <BodyEditMode
-            body={editingBody}
-            originalBody={rfc.markdownContent}
-            owner={owner}
-            repo={repo}
-            markdownFilePath={rfc.markdownFilePath}
-            headRef={rfc.headSha}
-            lineComments={lineComments}
-            highlightedCommentId={highlightedCommentId}
-            onCommentSubmit={handleInlineComment}
-            onToggleReaction={handleToggleReaction}
-            previewAssets={
-              editPreviewAssets ?? {
-                owner,
-                repo,
-                headRef: rfc.headSha,
-                markdownFilePath: rfc.markdownFilePath,
-              }
-            }
-            onBodyChange={setEditingBody}
-            mode={editTab}
-            onModeChange={setEditTab}
-            commitMessage={commitMessage}
-            onCommitMessageChange={setCommitMessage}
-            saving={savingBody}
-            onSave={handleSaveBody}
-            disabled={editingBody === rfc.markdownContent}
-            conflict={bodyConflict}
-            onResetAndRefresh={resetAndRefresh}
-            saveError={bodySaveError}
-          />
-        ) : !rfc.markdownFilePath ? (
+        {rfc.files.length === 0 ? (
           <RfcMarkdownMissing
             attempts={
               rfc.markdownMissingAttempts ?? [
@@ -1016,47 +1083,114 @@ export default function RFCDetailClient({
             }
             githubUrl={rfc.url}
           />
-        ) : diffRange ? (
-          diffState.kind === "error" ? (
-            <div className="rounded-sm border border-magenta bg-magenta-light px-3 py-2 text-sm text-foreground">
-              {diffState.message}
-            </div>
-          ) : !viewDiffEntries ? (
-            <p className="text-sm text-gray-50">
-              Loading diff between {shortSha(diffRange.baseSha)} and{" "}
-              {shortSha(diffRange.compareSha)}…
-            </p>
-          ) : viewMode === "pretty" ? (
-            <RfcPrettyDiffView
-              entries={viewDiffEntries}
-              assets={{
-                owner,
-                repo,
-                // Image proxy points at the "compare" commit so relative
-                // `![](./img.png)` references resolve against that tree.
-                headRef: diffRange.compareSha,
-                markdownFilePath: rfc.markdownFilePath,
-              }}
-            />
-          ) : (
-            <RfcMonoDiffView entries={viewDiffEntries} />
-          )
-        ) : viewMode === "pretty" ? (
-          <InlineCommentableMarkdown
-            content={rfc.markdownContent}
-            owner={owner}
-            repo={repo}
-            markdownFilePath={rfc.markdownFilePath}
-            headRef={rfc.headSha}
-            comments={lineComments}
-            commentsLoading={commentsLoading}
-            highlightedCommentId={highlightedCommentId}
-            onCommentSubmit={inlineCommentHandler}
-            onToggleReaction={toggleReactionHandler}
-            disableNewComments={isAnonymous}
-          />
         ) : (
-          <MarkdownRawView content={rfc.markdownContent} />
+          <>
+            {diffRange && diffState.kind === "error" && (
+              <div className="mb-4 rounded-sm border border-magenta bg-magenta-light px-3 py-2 text-sm text-foreground">
+                {diffState.message}
+              </div>
+            )}
+            <div className="space-y-10">
+              {rfc.files.map((file) => {
+                const isEditingThisFile =
+                  editing != null && editing.path === file.path;
+                const fileLineComments =
+                  lineCommentsByPath.get(file.path) ?? [];
+                const fileDiffEntries =
+                  viewDiffEntriesByPath?.get(file.path) ?? null;
+                const showDiffForFile =
+                  !isEditingThisFile &&
+                  !!diffRange &&
+                  diffState.kind !== "error";
+                return (
+                  <section
+                    key={file.path}
+                    id={fileSectionId(file.path)}
+                    className="scroll-mt-20"
+                  >
+                    {multiFile && (
+                      <FileSectionHeading
+                        path={file.path}
+                        onEdit={
+                          canEditBody && editing == null
+                            ? () => enterBodyEdit(file.path)
+                            : undefined
+                        }
+                      />
+                    )}
+                    {isEditingThisFile ? (
+                      <BodyEditMode
+                        body={editing.body}
+                        originalBody={file.content}
+                        owner={owner}
+                        repo={repo}
+                        markdownFilePath={file.path}
+                        headRef={rfc.headSha}
+                        lineComments={fileLineComments}
+                        highlightedCommentId={highlightedCommentId}
+                        onCommentSubmit={inlineCommentHandlerFor(file.path)}
+                        onToggleReaction={handleToggleReaction}
+                        previewAssets={{
+                          owner,
+                          repo,
+                          headRef: rfc.headSha,
+                          markdownFilePath: file.path,
+                        }}
+                        onBodyChange={handleEditingBodyChange}
+                        mode={editTab}
+                        onModeChange={setEditTab}
+                        commitMessage={commitMessage}
+                        onCommitMessageChange={setCommitMessage}
+                        saving={savingBody}
+                        onSave={handleSaveBody}
+                        disabled={editing.body === file.content}
+                        conflict={bodyConflict}
+                        onResetAndRefresh={resetAndRefresh}
+                        saveError={bodySaveError}
+                      />
+                    ) : showDiffForFile ? (
+                      !fileDiffEntries ? (
+                        <p className="text-sm text-gray-50">
+                          Loading diff between {shortSha(diffRange.baseSha)} and{" "}
+                          {shortSha(diffRange.compareSha)}…
+                        </p>
+                      ) : viewMode === "pretty" ? (
+                        <RfcPrettyDiffView
+                          entries={fileDiffEntries}
+                          assets={{
+                            owner,
+                            repo,
+                            // Image proxy points at the "compare" commit so relative
+                            // `![](./img.png)` references resolve against that tree.
+                            headRef: diffRange.compareSha,
+                            markdownFilePath: file.path,
+                          }}
+                        />
+                      ) : (
+                        <RfcMonoDiffView entries={fileDiffEntries} />
+                      )
+                    ) : viewMode === "pretty" ? (
+                      <InlineCommentableMarkdown
+                        content={file.content}
+                        owner={owner}
+                        repo={repo}
+                        markdownFilePath={file.path}
+                        headRef={rfc.headSha}
+                        comments={fileLineComments}
+                        commentsLoading={commentsLoading}
+                        highlightedCommentId={highlightedCommentId}
+                        onCommentSubmit={inlineCommentHandlerFor(file.path)}
+                        onToggleReaction={toggleReactionHandler}
+                        disableNewComments={isAnonymous}
+                      />
+                    ) : (
+                      <MarkdownRawView content={file.content} />
+                    )}
+                  </section>
+                );
+              })}
+            </div>
+          </>
         )}
       </div>
 
@@ -1071,6 +1205,53 @@ export default function RFCDetailClient({
         onToggleReaction={toggleReactionHandler}
         readOnlyFooter={isAnonymous ? <AnonymousSignInCTA /> : undefined}
       />
+    </div>
+  );
+}
+
+/** Heading above each document on multi-file RFCs: the repo path (styled as
+ *  metadata so it doesn't compete with the markdown's own headings), a
+ *  copy-deep-link affordance, and the per-file edit entry point. */
+function FileSectionHeading({
+  path,
+  onEdit,
+}: {
+  path: string;
+  onEdit?: () => void;
+}) {
+  const mutateUrl = useCallback(
+    (url: URL) => {
+      url.searchParams.set(FILE_PARAM, path);
+      url.hash = "";
+    },
+    [path],
+  );
+
+  return (
+    <div className="mb-4 flex items-center gap-2 border-b border-gray-20 pb-2">
+      <span className="min-w-0 truncate font-mono text-sm text-gray-70">
+        {path}
+      </span>
+      <Tooltip content="Copy link to this document">
+        <CopyLinkButton
+          mutateUrl={mutateUrl}
+          ariaLabel={`Copy link to ${path}`}
+          className="text-gray-50 hover:text-foreground transition-colors cursor-pointer"
+          iconClassName="h-3.5 w-3.5"
+        />
+      </Tooltip>
+      {onEdit && (
+        <Tooltip content="Edit this document">
+          <button
+            type="button"
+            onClick={onEdit}
+            aria-label={`Edit ${path}`}
+            className="text-gray-50 hover:text-foreground transition-colors cursor-pointer"
+          >
+            <PencilIcon className="h-3.5 w-3.5" />
+          </button>
+        </Tooltip>
+      )}
     </div>
   );
 }

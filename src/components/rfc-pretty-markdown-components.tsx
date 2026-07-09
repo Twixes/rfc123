@@ -169,7 +169,6 @@ function commentablePre(ctx: CommentableMarkdownContext) {
         >
           {lineNumber && (
             <span
-              id={`line-marker-${lineNumber}`}
               data-line={lineNumber}
               style={{
                 display: "inline",

@@ -40,7 +40,6 @@ function createLineMarker(lineNum: number): Element {
     type: "element",
     tagName: "span",
     properties: {
-      id: `line-marker-${lineNum}`,
       "data-line": lineNum,
       style:
         "display:inline;width:0;height:0;overflow:hidden;pointer-events:none;",
@@ -113,9 +112,9 @@ function injectLineMarkersPreservingHighlight(
   for (let i = 0; i < lineContents.length; i++) {
     const lineNum = baseLineNumber + 1 + i;
     linesSeen.add(lineNum);
-    // Wrap each line in a block-level span. The line-marker id stays on
-    // this element so position-calc and click routing still find it via
-    // `[id^="line-marker-"]`. `data-line-element` lets the hover-highlight
+    // Wrap each line in a block-level span. The `data-line` marker attribute
+    // stays on this element so position-calc and click routing still find it
+    // via `[data-line]`. `data-line-element` lets the hover-highlight
     // CSS attach to the line. `min-width:100%` makes the highlight stretch
     // to the visible right edge of the code block. Empty source lines get
     // a single space so the block has visible height.
@@ -127,7 +126,6 @@ function injectLineMarkersPreservingHighlight(
       type: "element",
       tagName: "span",
       properties: {
-        id: `line-marker-${lineNum}`,
         "data-line": lineNum,
         "data-line-element": lineNum,
         className: ["code-line"],

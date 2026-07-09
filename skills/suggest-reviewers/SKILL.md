@@ -24,7 +24,7 @@ add reviewers to an existing RFC.
 
 2. **Look for adjacent context.** Call `rfc123_list_rfcs` on the same repo. Scan for
    prior RFCs that:
-   - Touch overlapping file paths (similar `markdownFilePath`).
+   - Touch overlapping file paths (similar paths in `files`).
    - Have the same author or were authored by reviewers already on this RFC.
    - Carry team slugs in `requestedTeamSlugs` that match the topic area.
 

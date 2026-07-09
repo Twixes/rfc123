@@ -24,7 +24,8 @@ or simply "review this RFC." Skip for non-code RFCs (process, org, policy).
 
 1. **Read the RFC.** Call `rfc123_get_rfc`. Note the `headRef` field – that's
    the PR's head branch, the canonical version of the code the proposal
-   refers to. Also note `markdownFilePath` and which repo this RFC lives in.
+   refers to. Also note the `path` of each entry in `files` (a PR can carry
+   several markdown documents) and which repo this RFC lives in.
 
 2. **Read the existing discussion.** Call `rfc123_get_rfc_comments` and
    `rfc123_list_review_threads`. Don't re-raise points already on the table.

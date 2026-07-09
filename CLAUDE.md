@@ -49,13 +49,13 @@ The app uses NextAuth with GitHub OAuth (src/auth.ts):
 The app interacts with GitHub PRs that contain `.md` files (RFC content can live in any directory, e.g. `/engineering/`):
 
 - **`listRFCs()`** - Fetches all PRs from target repo, filters for RFC markdown files, returns list with comment counts
-- **`getRFCDetail()`** - Fetches specific PR with markdown content, comments, and reviewer information
+- **`getRFCDetail()`** - Fetches specific PR with the contents of every markdown file in it, comments, and reviewer information
 - **`postComment()`** - Posts either a review comment (on specific line/path) or general issue comment
 - **Path helpers** (`src/lib/markdown-assets.ts`, re-exported from `github.ts`) - `normalizeRepoPath`, `resolveMarkdownImageRepoPath`, `isRelativeMarkdownAssetSrc` resolve repo-relative image paths the same way GitHub does (relative to the markdown file, or repo root when there is no `.md` file). Kept in a separate module so client components do not import server-only `github.ts`.
 
 Key interfaces:
 - `RFC` - Basic PR metadata with comment counts
-- `RFCDetail` - Extended RFC with markdown content, `markdownFilePath`, `headRef` (PR head branch for fetching repo files), comments, and reviewers
+- `RFCDetail` - Extended RFC with `files` (every markdown document in the PR: `path`, `content`, `sha` – a PR can carry a main RFC plus supporting docs), `headRef` (PR head branch for fetching repo files), comments, and reviewers. The detail page renders one stacked section per file, each showing only the inline comments whose `comment.path` matches; `?file=<path>` deep-links to a section.
 - `Comment` - Individual comment with optional line/path for inline comments
 
 ### Routing Structure
@@ -85,7 +85,7 @@ The core feature is line-by-line commenting on RFC markdown files. This is imple
 - Handles comment positioning to prevent overlaps (cascading push-down algorithm)
 
 **rehypeLineMarkers** (src/lib/rehype-line-markers.ts):
-- Custom rehype plugin that injects `<span id="line-marker-{lineNum}">` elements
+- Custom rehype plugin that injects invisible marker `<span>`s carrying `data-line` attributes (attributes rather than DOM ids, so several documents can render on one page without collisions; all lookups are scoped to their own component instance)
 - Enables accurate line position calculation after markdown rendering
 - Special handling for code blocks (each line gets its own marker)
 - Adds `data-line-element` attributes for hover styling

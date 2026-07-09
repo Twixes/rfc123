@@ -17,6 +17,7 @@ import {
   setCachedJsonDataBatch,
   withCachedJsonData,
 } from "./cache";
+import { isMarkdownPath } from "./markdown-assets";
 import { sha256Hex } from "./mcp-oauth";
 import { captureServerException } from "./posthog-server";
 import { randomSuffix } from "./random-suffix";
@@ -92,6 +93,16 @@ export interface RFC {
   hasDecision: boolean;
 }
 
+/** One markdown document in an RFC PR, in GitHub's file order. */
+export interface RFCMarkdownFile {
+  path: string;
+  content: string;
+  /** Blob SHA of the file on the PR head branch. Required by the in-app
+   *  editor to pass `baseFileSha` so concurrent edits surface as a 409
+   *  instead of silently clobbering newer commits. */
+  sha: string | null;
+}
+
 export interface DecisionBlock {
   date: string;
   decidedBy: string | null;
@@ -109,13 +120,9 @@ export type ReviewerVerdict =
 
 export interface RFCDetail extends RFC {
   body: string;
-  markdownContent: string;
-  markdownFilePath: string | null;
-  /** Blob SHA of the markdown file on the PR head branch. Required by the
-   *  in-app editor to pass `baseFileSha` so concurrent edits surface as a 409
-   *  instead of silently clobbering newer commits. Null when the PR has no
-   *  markdown file. */
-  markdownFileSha: string | null;
+  /** All markdown documents in the PR, in GitHub's file order. Empty when the
+   *  PR has no markdown file (see `markdownMissingAttempts`). */
+  files: RFCMarkdownFile[];
   /** PR head branch ref; used to resolve relative image paths to repo files */
   headRef: string;
   /** Head commit SHA – agents/UI use this for line-anchored review APIs. */
@@ -292,6 +299,7 @@ function tokenKey(accessToken: string): string {
 }
 
 export {
+  isMarkdownPath,
   isRelativeMarkdownAssetSrc,
   normalizeRepoPath,
   resolveMarkdownImageRepoPath,
@@ -937,7 +945,7 @@ export async function listRFCs(
 
     // Filter PRs that have .md files (RFC content can be in any directory)
     const rfcPulls = pulls.filter((pr: any) =>
-      pr.files.nodes.some((file: any) => file.path.endsWith(".md")),
+      pr.files.nodes.some((file: any) => isMarkdownPath(file.path)),
     );
 
     // Inline (review) comment counts: either batch from cache here, or defer to
@@ -1364,15 +1372,13 @@ export async function getRFCDetail(
     // Check cache for RFC content (PR details + markdown + reviewers).
     // The `:v2` suffix invalidates pre-enrichment shapes that lacked
     // per-reviewer state + submittedAt.
-    const contentCacheKey = `rfc:${owner}:${repo}:${prNumber}:content:v5`;
+    // `:v6` invalidates single-markdown-file shapes (pre multi-file support).
+    const contentCacheKey = `rfc:${owner}:${repo}:${prNumber}:content:v6`;
     interface CachedRFCContent {
       pr: any;
       files: any[];
-      markdownContent: string;
-      markdownFilePath: string | null;
-      markdownFileSha: string | null;
+      markdownFiles: RFCMarkdownFile[];
       headRef: string;
-      markdownEtag?: string;
       markdownMissingAttempts?: string[];
       reviewers: RFCDetail["reviewers"];
       /** Logins of users with a pending review request – used to derive `reviewRequested` per-user. */
@@ -1387,59 +1393,24 @@ export async function getRFCDetail(
 
     let pr: any;
     let files: any[] = [];
-    let markdownContent = "";
-    let markdownFilePath: string | null = null;
-    let markdownFileSha: string | null = null;
+    let markdownFiles: RFCMarkdownFile[] = [];
     let markdownMissingAttempts: string[] | undefined;
     let reviewers: RFCDetail["reviewers"] = [];
     let requestedReviewerLogins: string[] = [];
     let cacheValid = false;
 
     // On cache hit: confirm the PR head hasn't moved (new commits – including
-    // in-app body saves – change head.sha), then validate markdown freshness
-    // with a conditional request (304 = free, no rate limit). Pinning the
-    // contents fetch to the *cached* head.sha alone is unsafe: after a save
-    // the blob at that old commit is unchanged, so GitHub returns 304 even
-    // though the PR branch has a newer revision.
-    if (
-      cachedContent &&
-      cachedContent.reviewers !== undefined &&
-      cachedContent.markdownFilePath &&
-      cachedContent.markdownEtag
-    ) {
+    // in-app body saves – change head.sha). Content was fetched pinned to
+    // that commit SHA and blobs at a fixed commit are immutable, so an
+    // unchanged head means the cached markdown is authoritative – no
+    // per-file revalidation needed.
+    if (cachedContent && cachedContent.reviewers !== undefined) {
       const { data: currentPrHead } = await octokit.rest.pulls.get({
         owner,
         repo,
         pull_number: prNumber,
       });
-      const headStillCurrent =
-        currentPrHead.head.sha === cachedContent.pr.head.sha;
-
-      if (headStillCurrent) {
-        try {
-          const conditionalResp = await octokit.request(
-            "GET /repos/{owner}/{repo}/contents/{path}",
-            {
-              owner,
-              repo,
-              path: cachedContent.markdownFilePath,
-              // Head SHA, not branch name – merged PRs often have deleted branches.
-              ref: cachedContent.pr.head.sha,
-              headers: {
-                "If-None-Match": cachedContent.markdownEtag,
-              } as Record<string, string>,
-            },
-          );
-          if ((conditionalResp.status as number) === 304) {
-            cacheValid = true;
-          }
-        } catch (err: unknown) {
-          const reqErr = err as { status?: number };
-          if (reqErr.status === 304) {
-            cacheValid = true;
-          }
-        }
-      }
+      cacheValid = currentPrHead.head.sha === cachedContent.pr.head.sha;
 
       if (cacheValid) {
         // Keep PR metadata (title, state, comment counts) fresh even when
@@ -1447,9 +1418,7 @@ export async function getRFCDetail(
         cachedContent.pr = currentPrHead;
         pr = cachedContent.pr;
         files = cachedContent.files;
-        markdownContent = cachedContent.markdownContent;
-        markdownFilePath = cachedContent.markdownFilePath;
-        markdownFileSha = cachedContent.markdownFileSha ?? null;
+        markdownFiles = cachedContent.markdownFiles;
         markdownMissingAttempts = cachedContent.markdownMissingAttempts;
         reviewers = cachedContent.reviewers;
         requestedReviewerLogins = cachedContent.requestedReviewerLogins ?? [];
@@ -1488,58 +1457,62 @@ export async function getRFCDetail(
       pr = prResponse.data;
       files = filesResponse.data;
 
-      const markdownFile = files.find((file) => file.filename.endsWith(".md"));
+      const markdownFileEntries = files.filter((file) =>
+        isMarkdownPath(file.filename),
+      );
 
-      markdownContent = "";
-      markdownFilePath = markdownFile?.filename || null;
-      if (!markdownFile) {
+      if (markdownFileEntries.length === 0) {
         markdownMissingAttempts = buildMarkdownMissingAttempts(prNumber, files);
       }
 
-      let markdownEtag: string | undefined;
-      if (markdownFile) {
-        // Fetch the actual content of the markdown file (use request to capture ETag)
-        try {
-          const tMd = performance.now();
-          const fileResp = await octokit.request(
-            "GET /repos/{owner}/{repo}/contents/{path}",
-            {
-              owner,
-              repo,
-              path: markdownFile.filename,
-              ref: pr.head.sha,
-            },
-          );
-          console.log(
-            `[getRFCDetail] repos.getContent() for markdown took ${(performance.now() - tMd).toFixed(0)}ms`,
-          );
-
-          const fileContent = fileResp.data as {
-            content?: string;
-            sha?: string;
-          };
-          const rawEtag = fileResp.headers?.["etag"] as string | undefined;
-          if (rawEtag) {
-            markdownEtag = rawEtag;
-          }
-          if (fileContent && "content" in fileContent && fileContent.content) {
-            markdownContent = Buffer.from(
-              fileContent.content,
-              "base64",
-            ).toString("utf-8");
-          }
-          markdownFileSha = fileContent?.sha ?? null;
-        } catch (error) {
-          console.error("Error fetching markdown file:", error);
-          captureServerException(error as Error, undefined, {
-            function: "getRFCDetail",
-            subfunction: "fetch_markdown_content",
-            owner,
-            repo,
-            prNumber,
-            markdownFile: markdownFile.filename,
-          });
-        }
+      // Fetch the actual contents of every markdown file in parallel.
+      const tMd = performance.now();
+      markdownFiles = await Promise.all(
+        markdownFileEntries.map(
+          async (markdownFile): Promise<RFCMarkdownFile> => {
+            try {
+              const fileResp = await octokit.request(
+                "GET /repos/{owner}/{repo}/contents/{path}",
+                {
+                  owner,
+                  repo,
+                  path: markdownFile.filename,
+                  ref: pr.head.sha,
+                },
+              );
+              const fileContent = fileResp.data as {
+                content?: string;
+                sha?: string;
+              };
+              return {
+                path: markdownFile.filename,
+                content:
+                  fileContent && "content" in fileContent && fileContent.content
+                    ? Buffer.from(fileContent.content, "base64").toString(
+                        "utf-8",
+                      )
+                    : "",
+                sha: fileContent?.sha ?? null,
+              };
+            } catch (error) {
+              console.error("Error fetching markdown file:", error);
+              captureServerException(error as Error, undefined, {
+                function: "getRFCDetail",
+                subfunction: "fetch_markdown_content",
+                owner,
+                repo,
+                prNumber,
+                markdownFile: markdownFile.filename,
+              });
+              return { path: markdownFile.filename, content: "", sha: null };
+            }
+          },
+        ),
+      );
+      if (markdownFileEntries.length > 0) {
+        console.log(
+          `[getRFCDetail] repos.getContent() for ${markdownFileEntries.length} markdown file(s) took ${(performance.now() - tMd).toFixed(0)}ms`,
+        );
       }
 
       // Build reviewers list – take the *latest* review state per user so the
@@ -1605,20 +1578,17 @@ export async function getRFCDetail(
       console.log(
         `[getRFCDetail] content fetch (all GH calls) took ${(performance.now() - tFetch).toFixed(0)}ms`,
       );
-      // Cache content + reviewers + ETag for conditional validation
+      // Cache content + reviewers; validated against head.sha on later hits.
       await setCachedJsonData(
         contentCacheKey,
         {
           pr,
           files,
-          markdownContent,
-          markdownFilePath,
-          markdownFileSha,
+          markdownFiles,
           headRef: pr.head.ref,
           markdownMissingAttempts,
           reviewers,
           requestedReviewerLogins,
-          markdownEtag,
         },
         300,
         { name: "getRFCDetail:rfc_content" },
@@ -1630,7 +1600,9 @@ export async function getRFCDetail(
     const labels: string[] = (pr.labels ?? [])
       .map((l: any) => l.name)
       .filter(Boolean);
-    const decisionBlocks = parseDecisionBlocks(markdownContent);
+    const decisionBlocks = markdownFiles.flatMap((file) =>
+      parseDecisionBlocks(file.content),
+    );
 
     console.log(
       `[getRFCDetail] total took ${(performance.now() - t0).toFixed(0)}ms`,
@@ -1652,9 +1624,7 @@ export async function getRFCDetail(
       owner,
       repo,
       body: pr.body || "",
-      markdownContent,
-      markdownFilePath,
-      markdownFileSha,
+      files: markdownFiles,
       markdownMissingAttempts,
       headRef: pr.head.ref,
       headSha: pr.head.sha,
@@ -2041,6 +2011,9 @@ export async function updateRFCContent(
   // concurrently with the author check + file lookup below; it's only awaited
   // just before the write.
   input: {
+    /** Repo-relative path of the markdown file to update. Must be one of the
+     *  `.md` files changed in the PR. */
+    path: string;
     content: string;
     message: string | Promise<string>;
     baseFileSha: string;
@@ -2053,16 +2026,18 @@ export async function updateRFCContent(
     prNumber,
   );
 
-  const filename: string | null = await (async () => {
-    const { data: files } = await octokit.rest.pulls.listFiles({
-      owner,
-      repo,
-      pull_number: prNumber,
-    });
-    return files.find((f) => f.filename.endsWith(".md"))?.filename ?? null;
-  })();
-  if (!filename) {
-    throw new Error("This RFC has no markdown file to edit.");
+  const { data: prFiles } = await octokit.rest.pulls.listFiles({
+    owner,
+    repo,
+    pull_number: prNumber,
+  });
+  if (
+    !isMarkdownPath(input.path) ||
+    !prFiles.some((f) => f.filename === input.path)
+  ) {
+    throw new Error(
+      "The requested path is not a markdown file changed in this PR.",
+    );
   }
 
   try {
@@ -2070,7 +2045,7 @@ export async function updateRFCContent(
       await octokit.rest.repos.createOrUpdateFileContents({
         owner,
         repo,
-        path: filename,
+        path: input.path,
         message: await input.message,
         content: Buffer.from(input.content, "utf-8").toString("base64"),
         branch: pr.head.ref,

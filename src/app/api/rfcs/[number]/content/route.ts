@@ -51,9 +51,9 @@ export async function PATCH(
     typeof payload.markdownFilePath === "string"
       ? payload.markdownFilePath
       : undefined;
-  if (body == null || !baseFileSha) {
+  if (body == null || !baseFileSha || !markdownFilePath) {
     return NextResponse.json(
-      { error: "Missing body or baseFileSha" },
+      { error: "Missing body, baseFileSha or markdownFilePath" },
       { status: 400 },
     );
   }
@@ -90,6 +90,7 @@ export async function PATCH(
 
   try {
     const result = await updateRFCContent(accessToken, owner, repo, prNumber, {
+      path: markdownFilePath,
       content: body,
       message: commitMessage,
       baseFileSha,

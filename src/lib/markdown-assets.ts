@@ -3,6 +3,11 @@
  * (no Octokit / Node-only deps). Re-exported from `github.ts` for server code.
  */
 
+/** The predicate that decides which changed PR paths count as RFC documents. */
+export function isMarkdownPath(path: string): boolean {
+  return path.endsWith(".md");
+}
+
 /** Normalize a repo-relative path; rejects escape above repo root. */
 export function normalizeRepoPath(path: string): string | null {
   const segments = path.split("/").filter(Boolean);

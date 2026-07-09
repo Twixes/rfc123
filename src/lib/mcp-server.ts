@@ -249,11 +249,14 @@ export function registerMcpCapabilities(server: McpServer) {
     {
       title: "Get RFC",
       description:
-        "Fetch the markdown body, reviewers (with per-reviewer state), " +
+        "Fetch the markdown documents, reviewers (with per-reviewer state), " +
         "status, merge-readiness, parsed decision blocks, and metadata for " +
-        "a single RFC. Returns `markdownContentNumbered` – a line-numbered " +
-        "view of the body – so agents can cite specific lines back to the " +
-        "user. Comments are returned separately by rfc123_get_rfc_comments.",
+        "a single RFC. A PR can carry several markdown files (main RFC + " +
+        "supporting docs); each entry in `files` has `path`, `content`, and " +
+        "`contentNumbered` – a line-numbered view – so agents can cite " +
+        "specific lines of a specific file back to the user. Inline comments " +
+        "(from rfc123_get_rfc_comments) anchor to a `path` + `line` in these " +
+        "files.",
       inputSchema: {
         owner: z
           .string()
@@ -282,14 +285,16 @@ export function registerMcpCapabilities(server: McpServer) {
         number,
         me.login,
       );
-      const { comments: _, ...rest } = detail;
-      const numbered = detail.markdownContent
-        .split("\n")
-        .map((line, i) => `${String(i + 1).padStart(4, " ")}  ${line}`)
-        .join("\n");
+      const { comments: _, files, ...rest } = detail;
       return jsonResult({
         ...rest,
-        markdownContentNumbered: numbered,
+        files: files.map((file) => ({
+          ...file,
+          contentNumbered: file.content
+            .split("\n")
+            .map((line, i) => `${String(i + 1).padStart(4, " ")}  ${line}`)
+            .join("\n"),
+        })),
         viewer: { login: me.login, teams: userTeams },
         viewerInvolvement: rfcInvolvement(rest, me.login, teamSet),
       });
@@ -737,12 +742,21 @@ export function registerMcpCapabilities(server: McpServer) {
         `\n*RFC ${owner}/${repo}#${number} – ${detail.status}` +
         (detail.isDraft ? " (draft)" : "") +
         `, by @${detail.author}*\n\n---\n\n`;
+      // Single-file RFCs stay as plain body; multi-file PRs get a
+      // `## File:` separator per document so line/path citations stay
+      // unambiguous.
+      const body =
+        detail.files.length === 1
+          ? detail.files[0].content
+          : detail.files
+              .map((file) => `## File: ${file.path}\n\n${file.content}`)
+              .join("\n\n---\n\n");
       return {
         contents: [
           {
             uri: uri.href,
             mimeType: "text/markdown",
-            text: header + detail.markdownContent,
+            text: header + body,
           },
         ],
       };

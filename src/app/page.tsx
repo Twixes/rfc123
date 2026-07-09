@@ -111,7 +111,7 @@ export default async function LandingPage() {
           <LandingDesktopActions session={session} />
         </div>
         <p className="col-span-2 row-start-2 mb-2 text-lg font-light leading-tight text-gray-70 sm:mb-4 sm:text-xl text-balance">
-          The agent-native & open-source{" "}
+          The agent-native & open-source platform for{" "}
           <Tooltip
             content={
               <>
@@ -125,10 +125,10 @@ export default async function LandingPage() {
             align="start"
           >
             <abbr className="cursor-help underline decoration-dotted underline-offset-4 decoration-gray-40">
-              RFC
+              RFCs
             </abbr>
           </Tooltip>{" "}
-          platform for teams.
+          .
         </p>
         <div className="col-span-2 row-start-3 sm:hidden">
           <LandingMobileActions session={session} />

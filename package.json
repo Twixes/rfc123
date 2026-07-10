@@ -15,7 +15,8 @@
     "eval:commit-message": "RUN_EVALS=1 vitest run src/lib/rfc-commit-message.eval.test.ts",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
-    "prepare": "husky"
+    "prepare": "husky",
+    "chromatic": "chromatic"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

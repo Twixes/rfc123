@@ -23,6 +23,7 @@ RFC123 is a Next.js application for reviewing GitHub pull requests containing RF
 - **Format**: `pnpm format` - Formats code with Biome
 - **Type-check**: `pnpm typecheck` - `tsc --noEmit`
 - **Tests**: `pnpm test` (Vitest, single run) / `pnpm test:watch`. Run a single file with `pnpm test src/lib/foo.test.ts`; tests currently live next to the modules in `src/lib/`.
+- **Storybook**: `pnpm storybook` (dev server on :6006) / `pnpm build-storybook`. See "Storybook & visual regression" below.
 - **Pre-commit**: Husky + `lint-staged` run `biome check --write` on staged JS/TS/JSON/CSS automatically – don't bypass with `--no-verify`.
 
 ## Architecture
@@ -132,6 +133,13 @@ Source maps for Error Tracking are uploaded during the Vercel build via `@postho
 - Typography: serif headings via `--font-l-serif` (a locally hosted Lastik at `src/app/fonts/L-Variable.woff2`, used for `h1`/`h2` and `font-serif` utilities); body and `h3`+ in sans via `--font-geist` (Geist)
 - Accent colors (`--cyan`, `--magenta`, `--yellow` and their `-light` variants) are muted and used sparingly for status, highlights, and focus rings – not as primary surfaces
 - Line hover effect: yellow left border + gray background
+
+### Storybook & visual regression
+
+- **Setup**: Storybook 10 with `@storybook/nextjs-vite` (`.storybook/main.ts` + `preview.tsx`). The preview replicates the app shell from `src/app/layout.tsx`: font variables come from the shared `src/app/fonts.ts` module (imported by both the layout and the preview – keep them in sync by editing `fonts.ts` only) plus `TooltipProvider`.
+- **Scene stories** live next to their route (e.g. `RFCDetailClient.stories.tsx`); network is mocked with MSW (`msw-storybook-addon`, worker in `.storybook/public/`). Fixtures live in `src/stories/fixtures/` and import app types (type-only imports of `@/lib/github` are safe in the browser).
+- **Determinism conventions** (visual regression depends on these): the preview freezes the clock via `MockDate.set(FROZEN_NOW)` so relative timestamps never drift – all fixture dates are pinned ISO strings near `FROZEN_NOW`; avatars are inline SVG data URIs (no network); fixture markdown avoids images and Mermaid; stories use a `play` function that awaits rendered fixture content so Chromatic snapshots after data load.
+- **Visual regression**: Chromatic snapshots every story on pushes to `main` and PRs (`.github/workflows/chromatic.yml`, needs the `CHROMATIC_PROJECT_TOKEN` repo secret). Review and accept visual diffs in the Chromatic UI.
 
 ## Development Notes
 

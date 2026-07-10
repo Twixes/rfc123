@@ -2,6 +2,7 @@
   "name": "rfc-123",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@10.27.0",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -12,7 +13,21 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "eval:commit-message": "RUN_EVALS=1 vitest run src/lib/rfc-commit-message.eval.test.ts",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build",
     "prepare": "husky"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "msw",
+      "sharp"
+    ]
+  },
+  "msw": {
+    "workerDirectory": [
+      ".storybook/public"
+    ]
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx,json,css}": [
@@ -66,6 +81,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.2.0",
+    "@storybook/nextjs-vite": "^10.4.6",
     "@tailwindcss/postcss": "^4",
     "@types/canvas-confetti": "^1.9.0",
     "@types/hast": "^3.0.4",
@@ -74,8 +90,13 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "babel-plugin-react-compiler": "1.0.0",
+    "chromatic": "^18.0.1",
     "husky": "^9.1.7",
     "lint-staged": "^17.0.5",
+    "mockdate": "^3.0.5",
+    "msw": "^2.15.0",
+    "msw-storybook-addon": "^2.0.7",
+    "storybook": "^10.4.6",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.6"

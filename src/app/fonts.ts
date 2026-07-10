@@ -24,3 +24,8 @@ export const lSerif = localFont({
   variable: "--font-l-serif",
   display: "swap",
 });
+
+/** Class list of the app `<body>` – consumed by both the root layout and
+ *  Storybook's preview decorator so scene snapshots can't drift from the
+ *  production shell. */
+export const appBodyClassName = `${geist.variable} ${lSerif.variable} antialiased`;

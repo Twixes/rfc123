@@ -4,6 +4,7 @@ import { within } from "storybook/test";
 import type { Comment, RFCDetail } from "@/lib/github";
 import {
   CURRENT_USER,
+  commitHistoryFor,
   singleFileComments,
   singleFileRfc,
   twoFilesComments,
@@ -20,19 +21,7 @@ function sceneHandlers(rfc: RFCDetail, comments: Comment[]) {
       HttpResponse.json(comments),
     ),
     http.get(`/api/rfcs/${rfc.number}/commits`, () =>
-      HttpResponse.json({
-        base: { sha: "ba5eba5eba5e", ref: "main", label: "main" },
-        commits: [
-          {
-            sha: rfc.headSha,
-            message: "Draft RFC",
-            summary: "Draft RFC",
-            author: rfc.author,
-            authorAvatar: rfc.authorAvatar,
-            authoredDate: rfc.createdAt,
-          },
-        ],
-      }),
+      HttpResponse.json(commitHistoryFor(rfc)),
     ),
   ];
 }
@@ -42,8 +31,9 @@ const meta = {
   component: RFCDetailClient,
   parameters: {
     layout: "fullscreen",
+    // `nextjs.appDirectory` comes from .storybook/preview.tsx (parameters
+    // deep-merge); stories only add what's scene-specific.
     nextjs: {
-      appDirectory: true,
       navigation: {
         pathname: "/rfcs/acme/rfcs/42",
       },

@@ -1,9 +1,9 @@
-import type { Comment, RFCDetail, RFCMarkdownFile } from "@/lib/github";
-
-/** The instant Storybook's clock is frozen at (see .storybook/preview.tsx).
- *  All fixture timestamps are pinned relative to this, so relative times
- *  ("3 days ago") render identically on every visual regression run. */
-export const FROZEN_NOW = "2026-07-01T12:00:00Z";
+import type {
+  Comment,
+  RFCCommitHistory,
+  RFCDetail,
+  RFCMarkdownFile,
+} from "@/lib/github";
 
 /** Deterministic inline-SVG avatar – no network request, no VRT flake. */
 function avatarDataUri(initial: string, background: string): string {
@@ -24,102 +24,69 @@ export const AVATARS = {
 
 export const CURRENT_USER = { login: "casey", avatar: AVATARS.casey };
 
+/** 1-based line number of the (unique) line containing `snippet`, so inline
+ *  comment anchors survive edits to the fixture markdown. */
+function lineOf(markdown: string, snippet: string): number {
+  const index = markdown
+    .split("\n")
+    .findIndex((line) => line.includes(snippet));
+  if (index === -1) {
+    throw new Error(`Fixture snippet not found in markdown: "${snippet}"`);
+  }
+  return index + 1;
+}
+
 const MAIN_RFC_MARKDOWN = [
-  "# Request queue back-pressure", // line 1
-  "", // 2
-  "We drop webhook deliveries when the ingestion queue is saturated. This RFC", // 3
-  "proposes explicit back-pressure so producers slow down instead of us", // 4
-  "silently losing events.", // 5
-  "", // 6
-  "## Problem", // 7
-  "", // 8
-  "- Bursts above 2k req/s overflow the fixed-size buffer.", // 9
-  "- Retries are client-defined, so drops are unrecoverable on our side.", // 10
-  "- We only notice via support tickets, not metrics.", // 11
-  "", // 12
-  "## Proposal", // 13
-  "", // 14
-  "Signal queue depth back to producers with `Retry-After`:", // 15
-  "", // 16
-  "```ts", // 17
-  "if (queue.depth() > HIGH_WATERMARK) {", // 18
-  '  return new Response(null, { status: 429, headers: { "Retry-After": "2" } });', // 19
-  "}", // 20
-  "```", // 21
-  "", // 22
-  "| Watermark | Depth | Behavior |", // 23
-  "| --------- | ----- | -------------------- |", // 24
-  "| High | 80% | 429 + Retry-After |", // 25
-  "| Critical | 95% | Shed non-priority |", // 26
-  "", // 27
-  "## Rollout", // 28
-  "", // 29
-  "Feature-flagged per producer, starting with internal services.", // 30
+  "# Request queue back-pressure",
+  "",
+  "We drop webhook deliveries when the ingestion queue is saturated. This RFC",
+  "proposes explicit back-pressure so producers slow down instead of us",
+  "silently losing events.",
+  "",
+  "## Problem",
+  "",
+  "- Bursts above 2k req/s overflow the fixed-size buffer.",
+  "- Retries are client-defined, so drops are unrecoverable on our side.",
+  "- We only notice via support tickets, not metrics.",
+  "",
+  "## Proposal",
+  "",
+  "Signal queue depth back to producers with `Retry-After`:",
+  "",
+  "```ts",
+  "if (queue.depth() > HIGH_WATERMARK) {",
+  '  return new Response(null, { status: 429, headers: { "Retry-After": "2" } });',
+  "}",
+  "```",
+  "",
+  "| Watermark | Depth | Behavior |",
+  "| --------- | ----- | -------------------- |",
+  "| High | 80% | 429 + Retry-After |",
+  "| Critical | 95% | Shed non-priority |",
+  "",
+  "## Rollout",
+  "",
+  "Feature-flagged per producer, starting with internal services.",
 ].join("\n");
 
 const RESEARCH_MARKDOWN = [
-  "# Back-pressure research notes", // 1
-  "", // 2
-  "Supporting material for the main proposal: what other systems do and what", // 3
-  "we measured on our own queues.", // 4
-  "", // 5
-  "## Prior art", // 6
-  "", // 7
-  "- Kafka producers block on full buffers by default.", // 8
-  "- SQS returns throttling errors and relies on SDK retry policies.", // 9
-  "- NATS applies per-connection flow control at the protocol level.", // 10
-  "", // 11
-  "## Load test findings", // 12
-  "", // 13
-  "At 3k req/s sustained, the buffer saturates in 40 seconds and drop rate", // 14
-  "reaches 12%. With a simulated 429 + retry loop, effective throughput", // 15
-  "stabilizes at 2.4k req/s with zero drops.", // 16
+  "# Back-pressure research notes",
+  "",
+  "Supporting material for the main proposal: what other systems do and what",
+  "we measured on our own queues.",
+  "",
+  "## Prior art",
+  "",
+  "- Kafka producers block on full buffers by default.",
+  "- SQS returns throttling errors and relies on SDK retry policies.",
+  "- NATS applies per-connection flow control at the protocol level.",
+  "",
+  "## Load test findings",
+  "",
+  "At 3k req/s sustained, the buffer saturates in 40 seconds and drop rate",
+  "reaches 12%. With a simulated 429 + retry loop, effective throughput",
+  "stabilizes at 2.4k req/s with zero drops.",
 ].join("\n");
-
-const RFC_BASE = {
-  number: 42,
-  title: "Request queue back-pressure",
-  author: "casey",
-  authorAvatar: AVATARS.casey,
-  status: "open" as const,
-  isDraft: false,
-  createdAt: "2026-06-24T09:00:00Z",
-  updatedAt: "2026-06-29T15:30:00Z",
-  commentCount: 5,
-  inlineCommentCount: 3,
-  regularCommentCount: 2,
-  url: "https://github.com/acme/rfcs/pull/42",
-  owner: "acme",
-  repo: "rfcs",
-  reviewRequested: false,
-  requestedTeamSlugs: [],
-  labels: [],
-  reviewDecision: null,
-  hasDecision: false,
-  body: "RFC for explicit back-pressure on the ingestion queue.",
-  headRef: "rfc/queue-back-pressure",
-  headSha: "f00dfeedf00dfeedf00dfeedf00dfeedf00dfeed",
-  reviewers: [
-    {
-      login: "priya",
-      avatar: AVATARS.priya,
-      yetToReview: false,
-      state: "APPROVED" as const,
-      submittedAt: "2026-06-27T10:00:00Z",
-    },
-    {
-      login: "marek",
-      avatar: AVATARS.marek,
-      yetToReview: true,
-      state: "PENDING" as const,
-      submittedAt: null,
-    },
-  ],
-  decisionBlocks: [],
-  mergeStateStatus: "clean",
-  mergeable: true,
-  comments: [],
-};
 
 const MAIN_FILE: RFCMarkdownFile = {
   path: "queue/2026-06-24-queue-back-pressure.md",
@@ -133,15 +100,16 @@ const RESEARCH_FILE: RFCMarkdownFile = {
   sha: "bbbb222bbbbb222bbbbb222bbbbb222bbbbb222b",
 };
 
-export const singleFileRfc: RFCDetail = {
-  ...RFC_BASE,
-  files: [MAIN_FILE],
-};
-
-export const twoFilesRfc: RFCDetail = {
-  ...RFC_BASE,
-  files: [RESEARCH_FILE, MAIN_FILE],
-};
+/** The TwoFiles scene pins one inline comment per document on the SAME line
+ *  number – the regression class multi-file support fixed: each must render
+ *  in its own file's section, not collide by line number. */
+const MAIN_SAME_LINE = lineOf(MAIN_RFC_MARKDOWN, "Bursts above 2k");
+const RESEARCH_SAME_LINE = lineOf(RESEARCH_MARKDOWN, "SQS returns");
+if (MAIN_SAME_LINE !== RESEARCH_SAME_LINE) {
+  throw new Error(
+    "Fixture invariant broken: both documents must carry an inline comment on the same line number",
+  );
+}
 
 const GENERAL_COMMENTS: Comment[] = [
   {
@@ -179,7 +147,7 @@ export const singleFileComments: Comment[] = [
     body: "Do we have a dashboard for queue depth already, or is that part of this work?",
     createdAt: "2026-06-25T14:00:00Z",
     path: MAIN_FILE.path,
-    line: 11,
+    line: lineOf(MAIN_RFC_MARKDOWN, "support tickets"),
   },
   {
     id: 9102,
@@ -189,7 +157,7 @@ export const singleFileComments: Comment[] = [
     body: "Part of this work – depth and drop-rate gauges land with the flag.",
     createdAt: "2026-06-25T16:20:00Z",
     path: MAIN_FILE.path,
-    line: 11,
+    line: lineOf(MAIN_RFC_MARKDOWN, "support tickets"),
     inReplyToId: 9101,
   },
   {
@@ -200,13 +168,12 @@ export const singleFileComments: Comment[] = [
     body: "Consider jittering Retry-After so producers don't stampede in sync.",
     createdAt: "2026-06-26T08:45:00Z",
     path: MAIN_FILE.path,
-    line: 19,
+    line: lineOf(MAIN_RFC_MARKDOWN, "status: 429"),
   },
 ];
 
-/** Inline comments for the two-file scene. Both documents carry a comment on
- *  the SAME line number (9) – the regression class multi-file support fixed:
- *  each must render in its own file's section, not collide by line number. */
+/** Inline comments for the two-file scene, including the same-line-number
+ *  pair (see MAIN_SAME_LINE / RESEARCH_SAME_LINE above). */
 export const twoFilesComments: Comment[] = [
   ...GENERAL_COMMENTS,
   {
@@ -217,7 +184,7 @@ export const twoFilesComments: Comment[] = [
     body: "Kafka's blocking default is the behavior our SDK users will expect.",
     createdAt: "2026-06-25T13:10:00Z",
     path: RESEARCH_FILE.path,
-    line: 9,
+    line: RESEARCH_SAME_LINE,
   },
   {
     id: 9202,
@@ -227,7 +194,7 @@ export const twoFilesComments: Comment[] = [
     body: "Bursts are spikier than 2k in EU mornings – see the load test doc.",
     createdAt: "2026-06-26T07:55:00Z",
     path: MAIN_FILE.path,
-    line: 9,
+    line: MAIN_SAME_LINE,
   },
   {
     id: 9203,
@@ -237,6 +204,86 @@ export const twoFilesComments: Comment[] = [
     body: "12% drop rate at 3k req/s is worse than I assumed. Good find.",
     createdAt: "2026-06-26T10:15:00Z",
     path: RESEARCH_FILE.path,
-    line: 15,
+    line: lineOf(RESEARCH_MARKDOWN, "effective throughput"),
   },
 ];
+
+/** Comment counts derive from the scene's comment fixture so the header
+ *  numbers can never contradict the visible comments. */
+function buildRfcDetail(
+  files: RFCMarkdownFile[],
+  comments: Comment[],
+): RFCDetail {
+  const inlineCount = comments.filter((c) => c.line != null).length;
+  return {
+    number: 42,
+    title: "Request queue back-pressure",
+    author: "casey",
+    authorAvatar: AVATARS.casey,
+    status: "open",
+    isDraft: false,
+    createdAt: "2026-06-24T09:00:00Z",
+    updatedAt: "2026-06-29T15:30:00Z",
+    commentCount: comments.length,
+    inlineCommentCount: inlineCount,
+    regularCommentCount: comments.length - inlineCount,
+    url: "https://github.com/acme/rfcs/pull/42",
+    owner: "acme",
+    repo: "rfcs",
+    reviewRequested: false,
+    requestedTeamSlugs: [],
+    labels: [],
+    reviewDecision: null,
+    hasDecision: false,
+    body: "RFC for explicit back-pressure on the ingestion queue.",
+    headRef: "rfc/queue-back-pressure",
+    headSha: "f00dfeedf00dfeedf00dfeedf00dfeedf00dfeed",
+    reviewers: [
+      {
+        login: "priya",
+        avatar: AVATARS.priya,
+        yetToReview: false,
+        state: "APPROVED",
+        submittedAt: "2026-06-27T10:00:00Z",
+      },
+      {
+        login: "marek",
+        avatar: AVATARS.marek,
+        yetToReview: true,
+        state: "PENDING",
+        submittedAt: null,
+      },
+    ],
+    decisionBlocks: [],
+    mergeStateStatus: "clean",
+    mergeable: true,
+    comments: [],
+    files,
+  };
+}
+
+export const singleFileRfc = buildRfcDetail([MAIN_FILE], singleFileComments);
+
+export const twoFilesRfc = buildRfcDetail(
+  [RESEARCH_FILE, MAIN_FILE],
+  twoFilesComments,
+);
+
+/** Only fetched when the commit range picker is opened – not exercised by
+ *  snapshots; present so interactive exploration in `storybook dev`
+ *  doesn't 404. */
+export function commitHistoryFor(rfc: RFCDetail): RFCCommitHistory {
+  return {
+    base: { sha: "ba5eba5eba5e", ref: "main", label: "main" },
+    commits: [
+      {
+        sha: rfc.headSha,
+        message: "Draft RFC",
+        summary: "Draft RFC",
+        author: rfc.author,
+        authorAvatar: rfc.authorAvatar,
+        authoredDate: rfc.createdAt,
+      },
+    ],
+  };
+}

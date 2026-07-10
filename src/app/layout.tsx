@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { TooltipProvider } from "@/components/Tooltip";
 import { PostHogProvider } from "@/providers/PostHogProvider";
-import { geist, lSerif } from "./fonts";
+import { appBodyClassName } from "./fonts";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -26,7 +26,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${geist.variable} ${lSerif.variable} antialiased`}>
+      <body className={appBodyClassName}>
         <PostHogProvider>
           <TooltipProvider>{children}</TooltipProvider>
         </PostHogProvider>

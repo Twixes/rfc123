@@ -5,13 +5,20 @@ on:
     branches: [main]
   pull_request:
 
+# Superseded runs waste Actions minutes and Chromatic snapshot quota.
+concurrency:
+  group: chromatic-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   chromatic:
     runs-on: ubuntu-latest
+    # Fork PRs can't read CHROMATIC_PROJECT_TOKEN – skip instead of failing.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@v6
         with:
-          # Full history – Chromatic needs it for baseline detection.
+          # Full history – Chromatic needs it for baselines and TurboSnap.
           fetch-depth: 0
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v6
@@ -19,6 +26,8 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - uses: chromaui/action@latest
+      - uses: chromaui/action@v18
         with:
           projectToken: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+          # TurboSnap: only re-snapshot stories whose dependency graph changed.
+          onlyChanged: true

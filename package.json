@@ -64,7 +64,7 @@
     "mermaid": "^11.12.3",
     "motion": "^12.38.0",
     "next": "16.0.10",
-    "next-auth": "5.0.0-beta.29",
+    "next-auth": "5.0.0-beta.32",
     "octokit": "^5.0.4",
     "posthog-js": "^1.280.1",
     "posthog-node": "^5.10.3",

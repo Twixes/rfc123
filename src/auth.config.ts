@@ -16,6 +16,13 @@ export default {
     GitHub({
       clientId: process.env.GITHUB_CLIENT_ID,
       clientSecret: process.env.GITHUB_CLIENT_SECRET,
+      // GitHub turned on RFC 9207, so its callback now carries
+      // `iss=https://github.com/login/oauth`. Auth.js only defaults the issuer
+      // to the `https://authjs.dev` placeholder, so oauth4webapi rejects the
+      // mismatch and every login dies as `/api/auth/error?error=Configuration`.
+      // @auth/core 0.41.3 sets this itself, but next-auth 5.0.0-beta.29 pins
+      // @auth/core 0.40.0, so we set it here.
+      issuer: "https://github.com/login/oauth",
       authorization: {
         params: {
           scope: "read:user user:email repo read:org",

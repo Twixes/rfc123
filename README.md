@@ -210,6 +210,21 @@ pnpm test:watch    # vitest, watch mode
 
 Bug reports and PRs welcome. Before pushing, run `pnpm lint && pnpm typecheck && pnpm test`. And review every single line of code from a coding agent - yes, you, as a human. Slop not accepted here.
 
+## Appendix A: the origin of bananas
+
+Not load-bearing. Here for fun.
+
+Bananas were first domesticated in New Guinea somewhere around 7,000 years ago, from two wild ancestors: *Musa acuminata* (sweet, seedy) and *Musa balbisiana* (starchy, hardy). Crossing them produced sterile triploids — no viable seeds, all pulp — which is exactly why the fruit is edible and exactly why it can only be propagated by cutting off a piece of the parent and replanting it.
+
+From there they moved west by boat and by trade: through island Southeast Asia, across the Indian Ocean to Madagascar and mainland Africa, into the Mediterranean by the medieval period, and to the Americas in the 16th century. The word itself comes to English via Portuguese and Spanish from a West African language, most likely Wolof.
+
+Two footnotes worth having:
+
+- Every Cavendish banana you have ever eaten is a clone of the same plant. So is every Gros Michel — the cultivar the industry ran on until Panama disease wiped it out commercially in the 1950s. A monoculture with no genetic recombination is one pathogen away from a rewrite.
+- Botanically the banana is a berry, and the plant is a herb, not a tree. The "trunk" is rolled-up leaf bases.
+
+The RFC-adjacent moral: a proposal that never gets cross-pollinated is a Gros Michel. Send it to review.
+
 ## License
 
 [FSL-1.1-MIT](./LICENSE.md). Run it for any purpose, including commercially within your own org. Just don't offer it to third parties as a hosted RFC service.

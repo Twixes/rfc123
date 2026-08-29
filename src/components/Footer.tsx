@@ -11,6 +11,7 @@ const SECTIONS = [
   {
     title: "Resources",
     links: [
+      { href: "/brand", label: "Brand" },
       { href: "https://github.com/Twixes/rfc123", label: "GitHub ↗" },
       { href: "mailto:michael@matloka.com", label: "Contact ↗" },
     ],

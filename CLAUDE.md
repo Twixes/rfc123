@@ -65,6 +65,7 @@ Key interfaces:
 - `/rfcs` - Homepage listing all RFCs (src/app/rfcs/(list)/page.tsx)
 - `/rfcs/[owner]/[repo]/[number]/[[...slug]]` - Individual RFC detail (optional slug segment for readable URLs; src/app/rfcs/[owner]/[repo]/[number]/[[...slug]]/page.tsx)
 - `/invite` - Pre-auth landing for deep links to RFC pages (src/app/invite/page.tsx)
+- `/brand` - Brand guidelines and asset downloads (src/app/brand/page.tsx); the files it links live in `public/brand/`
 - `/api/auth/[...nextauth]` - NextAuth authentication endpoints
 - `/api/rfcs/*` - JSON APIs for RFC list/detail and comments
 - `/api/comment` - POST endpoint for submitting comments
@@ -132,6 +133,7 @@ Source maps for Error Tracking are uploaded during the Vercel build via `@postho
 - Design feel: paper-like – slightly tinted neutral `--background` with `bg-surface` (white) cards sitting on top, 1px hairline borders (`border-gray-20`), `rounded-md` cards
 - Typography: serif headings via `--font-l-serif` (a locally hosted Lastik at `src/app/fonts/L-Variable.woff2`, used for `h1`/`h2` and `font-serif` utilities); body and `h3`+ in sans via `--font-geist` (Geist)
 - Accent colors (`--cyan`, `--magenta`, `--yellow` and their `-light` variants) are muted and used sparingly for status, highlights, and focus rings – not as primary surfaces
+- Logo: the mark is the Lastik pilcrow (cap height 756/1000, descender -224), shipped as `src/components/icons/BrandMark.tsx` for in-app use and as static exports in `public/brand/`. Both are the same outline, so they must be regenerated together if the mark ever changes
 - Line hover effect: yellow left border + gray background
 
 ### Storybook & visual regression

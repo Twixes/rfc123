@@ -61,7 +61,7 @@
     "highlight.js": "^11.11.1",
     "jose": "^6.2.3",
     "mcp-handler": "^1.1.0",
-    "mermaid": "^11.12.3",
+    "mermaid": "^11.16.1",
     "motion": "^12.38.0",
     "next": "16.0.10",
     "next-auth": "5.0.0-beta.29",

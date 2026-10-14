@@ -43,7 +43,7 @@
     "@codemirror/view": "^6.43.0",
     "@headlessui/react": "^2.2.10",
     "@lezer/highlight": "^1.2.3",
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/sdk": "^1.31.0",
     "@octokit/plugin-throttling": "^11.0.3",
     "@opentelemetry/resources": "^2.7.1",
     "@opentelemetry/sdk-node": "^0.218.0",
